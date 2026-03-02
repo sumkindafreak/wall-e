@@ -17,7 +17,11 @@
 #define XPT2046_CLK  25
 #define XPT2046_CS   33
 
+#if CONFIG_IDF_TARGET_ESP32S3
+static SPIClass s_touchSPI(HSPI);  // ESP32-S3 has HSPI, no VSPI
+#else
 static SPIClass s_touchSPI(VSPI);
+#endif
 static XPT2046_Touchscreen s_ts(XPT2046_CS, XPT2046_IRQ);
 
 #define SCREEN_W 320

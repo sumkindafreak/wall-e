@@ -14,7 +14,7 @@ static AnimationTrack s_tracks[MAX_ANIMATION_TRACKS];
 static float s_headPanPos = 90.0f;   // Current pan position (degrees)
 static float s_headTiltPos = 90.0f;  // Current tilt position (degrees)
 
-// Default neutral positions (degrees)
+// Default neutral positions (degrees) — 9 servos
 static uint8_t s_neutralPos[SERVO_COUNT] = {
   90,  // HEAD_PAN
   90,  // HEAD_TILT
@@ -24,8 +24,7 @@ static uint8_t s_neutralPos[SERVO_COUNT] = {
   90,  // NECK_BOTTOM
   90,  // LEFT_ARM
   90,  // RIGHT_ARM
-  90,  // LEFT_TRACK (not used if using motor control)
-  90   // RIGHT_TRACK
+  90   // EYEBROW_RIGHT
 };
 
 // Smoothing parameters
@@ -340,7 +339,7 @@ void motionSetAllNeutral() {
 }
 
 void motionTestPose1() {
-  // Test pose: Head left, arms out
+  // Test pose: Head left, arms out (9 servos)
   motionSetServoDirect(SERVO_HEAD_PAN, 45);
   motionSetServoDirect(SERVO_HEAD_TILT, 90);
   motionSetServoDirect(SERVO_EYE_LEFT, 90);
@@ -350,12 +349,11 @@ void motionTestPose1() {
   motionSetServoDirect(SERVO_LEFT_ARM, 45);
   motionSetServoDirect(SERVO_RIGHT_ARM, 135);
   motionSetServoDirect(SERVO_EYEBROW_RIGHT, 90);
-  motionSetServoDirect(SERVO_EYEBROW_LEFT, 90);
   Serial.println(F("[Motion] Test pose 1 applied"));
 }
 
 void motionTestPose2() {
-  // Test pose: Head right, arms up
+  // Test pose: Head right, arms up (9 servos)
   motionSetServoDirect(SERVO_HEAD_PAN, 135);
   motionSetServoDirect(SERVO_HEAD_TILT, 90);
   motionSetServoDirect(SERVO_EYE_LEFT, 45);
@@ -365,6 +363,5 @@ void motionTestPose2() {
   motionSetServoDirect(SERVO_LEFT_ARM, 135);
   motionSetServoDirect(SERVO_RIGHT_ARM, 45);
   motionSetServoDirect(SERVO_EYEBROW_RIGHT, 135);
-  motionSetServoDirect(SERVO_EYEBROW_LEFT, 45);
   Serial.println(F("[Motion] Test pose 2 applied"));
 }
