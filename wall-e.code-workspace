@@ -1,0 +1,11 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../arduino-littlefs-upload-1.6.3"
+		}
+	],
+	"settings": {}
+}

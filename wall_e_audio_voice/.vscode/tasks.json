@@ -1,0 +1,23 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "WALL-E: Flash full image (includes models)",
+			"type": "shell",
+			"command": "$pioExe = Join-Path $env:USERPROFILE ".platformio\\penv\\Scripts\\platformio.exe"; & $pioExe run -e wall_e_audio_s3 -j 1 -t flash --upload-port COM6",
+			"isBackground": false
+		},
+		{
+			"label": "WALL-E: Upload (clean + safe)",
+			"type": "shell",
+			"command": "$pioExe = Join-Path $env:USERPROFILE ".platformio\\penv\\Scripts\\platformio.exe"; if (Test-Path \".pio\\build\") { cmd /c rmdir /s /q \".pio\\build\" }; & $pioExe run -e wall_e_audio_s3 -j 1 -t flash --upload-port COM6",
+			"isBackground": false
+		},
+		{
+			"label": "WALL-E: Monitor (COM6)",
+			"type": "shell",
+			"command": "$pioExe = Join-Path $env:USERPROFILE ".platformio\\penv\\Scripts\\platformio.exe"; & $pioExe device monitor -p COM6 -b 115200",
+			"isBackground": false
+		}
+	]
+}

@@ -156,13 +156,18 @@ void loop() {
     ds.rightSpeed = 0;
   }
 
-  // Zone actions
+  // Zone actions — E-STOP: tap to trigger, tap again to clear
   if (zone == TOUCH_ZONE_ESTOP) {
-    g_estop = true;
-    ds.leftSpeed = 0;
-    ds.rightSpeed = 0;
-    g_controlAuthority = CTRL_SAFETY;
-    playUISound(SOUND_ESTOP);
+    g_estop = !g_estop;
+    if (g_estop) {
+      ds.leftSpeed = 0;
+      ds.rightSpeed = 0;
+      g_controlAuthority = CTRL_SAFETY;
+      playUISound(SOUND_ESTOP);
+    } else {
+      g_controlAuthority = CTRL_LOCAL;
+      playUISound(SOUND_CLICK);
+    }
   }
   if (zone == TOUCH_ZONE_NAV_BEHAV) {
     g_currentPage = PAGE_BEHAVIOUR;
@@ -369,13 +374,23 @@ void loop() {
   // Button actions (NO DEADMAN REQUIRED - buttons work independently!)
   const ButtonState& btn = getButtonState();
   
-  // Both joystick buttons = E-STOP (stops everything including servos)
+  // Both joystick buttons = E-STOP toggle (tap again to resume)
   if (isBothJoystickButtonsHeld()) {
-    g_estop = true;
-    ds.leftSpeed = 0;
-    ds.rightSpeed = 0;
-    g_controlAuthority = CTRL_SAFETY;
-    motionEmergencyStop();  // Stop all servos too
+    static unsigned long lastBothHeld = 0;
+    if (now - lastBothHeld > 300) {  // Debounce 300ms
+      g_estop = !g_estop;
+      lastBothHeld = now;
+      if (g_estop) {
+        ds.leftSpeed = 0;
+        ds.rightSpeed = 0;
+        g_controlAuthority = CTRL_SAFETY;
+        motionEmergencyStop();
+        playUISound(SOUND_ESTOP);
+      } else {
+        g_controlAuthority = CTRL_LOCAL;
+        playUISound(SOUND_CLICK);
+      }
+    }
   }
   
   // Individual joystick button = Eyebrow raise (NO deadman required)

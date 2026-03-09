@@ -6,6 +6,7 @@
 #include "ui_draw.h"
 #include "animation_system.h"
 #include "espnow_control.h"
+#include "packet_control.h"
 #include "profiles.h"
 #include "motion_engine.h"  // For SERVO_COUNT and motionGetServoTargets
 #include <Arduino.h>
@@ -226,6 +227,17 @@ void uiDrawPhysicalJoystickLayout(void) {
   g_tft->drawRect(8, cTop + 68, 80, 32, C_BORDER);
   g_tft->setTextColor(C_ACCENT, C_BG);
   g_tft->drawString("Behav", 25, cTop + 78);
+
+  // E-STOP button (center bottom) — must be visible in physical joystick mode
+  int ex = SCREEN_W / 2 - 50;
+  int ey = BOTTOM_BAR_Y + 4;
+  int ew = 100, eh = 32;
+  g_tft->fillRoundRect(ex, ey, ew, eh, 4, C_RED);
+  g_tft->drawRoundRect(ex, ey, ew, eh, 4, C_WHITE);
+  g_tft->setTextColor(C_WHITE, C_RED);
+  g_tft->setTextSize(2);
+  g_tft->drawString("E-STOP", ex + 22, ey + 8);
+  g_tft->drawFastHLine(0, BOTTOM_BAR_Y, SCREEN_W, C_BORDER);
 }
 #endif
 

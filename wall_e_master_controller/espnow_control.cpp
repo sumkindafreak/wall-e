@@ -10,25 +10,16 @@
 
 // ============================================================
 //  PEER MAC ADDRESS CONFIGURATION
-//  
-//  Set this to your WALL-E Brain's MAC address.
-//  
-//  How to find it:
-//  1. Upload code to Brain (main.ino)
-//  2. Open Serial Monitor at 115200 baud
-//  3. Look for: "[ESP-NOW] Receiver ready. MAC: XX:XX:XX:XX:XX:XX"
-//  4. Copy that MAC here
 //
-//  Broadcast mode (current): Works with any ESP-NOW device
-//  Specific MAC: More secure, less interference
+//  Broadcast: Works with any Base, AP-only or home WiFi connected
+//  Specific MAC: For lockdown — use Base Serial "Use this MAC for controller"
 // ============================================================
 
-// OPTION 1: Broadcast (default - works immediately, less secure)
-// static uint8_t s_peerMac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+// Broadcast — works even when Base is connected to home WiFi
+static uint8_t s_peerMac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
-// OPTION 2: Specific MAC (recommended - uncomment and set your Brain's MAC)
-// Brain MAC: 20:6E:F1:98:B5:38 (WiFi Station)
-static uint8_t s_peerMac[6] = {0x20, 0x6E, 0xF1, 0x98, 0xB5, 0x38};
+// Specific MAC (uncomment and set from Base Serial output):
+// static uint8_t s_peerMac[6] = {0x22, 0x6E, 0xF1, 0x98, 0xB5, 0x38};  // Base AP MAC
 static TelemetryPacket s_telemetry;
 static unsigned long s_lastSendMs = 0;
 static unsigned long s_lastTelemMs = 0;
@@ -86,7 +77,7 @@ void espnowInit(void) {
   }
   Serial.println();
   if (s_peerMac[0] == 0xFF) {
-    Serial.println("[ESP-NOW] WARNING: Broadcast mode - set specific MAC for production");
+    Serial.println("[ESP-NOW] Broadcast mode — works with Base on AP or home WiFi");
   }
   
   if (esp_now_init() != ESP_OK) {

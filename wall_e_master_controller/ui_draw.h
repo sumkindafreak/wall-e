@@ -77,6 +77,7 @@ void uiDrawAdvancedModeOverlay(void); // Raw motor %, IMU, CPU, latency
 void uiDrawEStopRegion(bool highlighted);
 void uiDrawPageBehaviour(void);
 void uiDrawPageSystem(void);
+void uiDrawPageAutonomy(void);
 void uiDrawStaticDrive(void);  // Touchscreen Drive page static
 void uiDrawStaticBehaviour(void);
 void uiDrawStaticSystem(void);
