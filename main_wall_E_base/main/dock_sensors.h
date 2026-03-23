@@ -19,20 +19,20 @@
  *   Front-L/R: low, near track edges for curb/obstacle detection.
  *   Rear-L/R:  low, near track edges for reversing-into-dock protection.
  *
- * WIRING CHECKLIST:
+ * WIRING CHECKLIST (ESP32-S3: avoid 33/34 — reserved for Octal PSRAM):
  *   [ ] PIN_DOCK_IR_BEAM (18): VCC, GND, OUT -> GPIO 18 (3-pin module)
  *   [ ] PIN_OBS_FRONT_L  (22): VCC, GND, OUT -> GPIO 22
  *   [ ] PIN_OBS_FRONT_R  (23): VCC, GND, OUT -> GPIO 23
- *   [ ] PIN_OBS_REAR_L   (33): VCC, GND, OUT -> GPIO 33
- *   [ ] PIN_OBS_REAR_R   (34): VCC, GND, OUT -> GPIO 34
+ *   [ ] PIN_OBS_REAR_L   (20): VCC, GND, OUT -> GPIO 20 (safe on S3)
+ *   [ ] PIN_OBS_REAR_R   (47): VCC, GND, OUT -> GPIO 47 (safe on S3)
  *   [ ] Set INVERT_* flags if module is active-LOW instead of active-HIGH
  *===========================================================================*/
 
 #define PIN_DOCK_IR_BEAM   18   /* Digital: dock presence / alignment confirm */
 #define PIN_OBS_FRONT_L    22
 #define PIN_OBS_FRONT_R    23
-#define PIN_OBS_REAR_L     33
-#define PIN_OBS_REAR_R     34
+#define PIN_OBS_REAR_L     20   /* Was 33 — S3 Octal PSRAM reserved */
+#define PIN_OBS_REAR_R     47   /* Was 34 — S3 Octal PSRAM reserved */
 /* Optional: PIN_ACS712_ADC = 34 — not used in this module */
 
 /* Invert flags (modules vary: active HIGH vs LOW) */

@@ -1,5 +1,5 @@
 #include "web_server.h"
-#include "web_page.h"
+#include "web_page_lros.h"
 #include "motor_control.h"
 #include "wifi_manager.h"
 #include "display_manager.h"
@@ -13,11 +13,16 @@
 #include "memory_engine.h"
 #include "return_home_engine.h"
 #include "compass_sensor.h"
+#include "vision_behaviour.h"
+#include "audio_espnow.h"
+#include "audio_telem.h"
+#include "audio_protocol.h"
 #include "sonar_sensor.h"
 #include "gps_module.h"
 #include <WebServer.h>
 #include <Arduino.h>
 #include <Preferences.h>
+#include <stdio.h>
 
 // ============================================================
 //  WALL-E Web Server Implementation
@@ -42,7 +47,7 @@ static void addCORS() {
 // --- Drive Route Handlers ---
 
 static void handleRoot() {
-  server.send_P(200, "text/html", WALLE_PAGE);
+  server.send_P(200, "text/html", WALLE_PAGE_LROS);
 }
 
 static void handleForward() {
@@ -99,6 +104,7 @@ static void handleSpeed() {
 }
 
 // Tank drive: left and right in -255..255. Smoother diagonals and curves.
+// When both zero, call motorStop() so robot always stops when joystick/sliders return to centre.
 static void handleDrive() {
   if (!server.hasArg("left") || !server.hasArg("right")) {
     server.send(400, "text/plain", "Missing left or right");
@@ -109,7 +115,12 @@ static void handleDrive() {
   int right = server.arg("right").toInt();
   left  = constrain(left,  -255, 255);
   right = constrain(right, -255, 255);
-  motorSetLeftRight((int16_t)left, (int16_t)right);
+  if (left == 0 && right == 0) {
+    motorStop();
+    displaySetCommand(CMD_STOP);
+  } else {
+    motorSetLeftRight((int16_t)left, (int16_t)right);
+  }
   float jx = (right - left) / 255.0f;
   float jy = -(left + right) / 255.0f;
   jx = constrain(jx, -1.0f, 1.0f);
@@ -292,6 +303,75 @@ static void handleMemorySetHome() {
   server.send(200, "application/json", "{\"ok\":true}");
 }
 
+static void handleVisionStatus() {
+  String json = visionGetStatusJSON();
+  addCORS();
+  server.send(200, "application/json", json);
+}
+
+static void handleVisionSnapshotUrl() {
+  String json = visionGetStatusJSON();
+  int ipIdx = json.indexOf("\"visionNodeIp\":\"");
+  if (ipIdx < 0) {
+    addCORS();
+    server.send(200, "text/plain", "");
+    return;
+  }
+  ipIdx += 15;
+  int end = json.indexOf('"', ipIdx);
+  if (end < 0) {
+    addCORS();
+    server.send(200, "text/plain", "");
+    return;
+  }
+  String ip = json.substring(ipIdx, end);
+  String url = "http://" + ip + "/snapshot";
+  addCORS();
+  server.send(200, "text/plain", url);
+}
+
+static void handleAudioPlay() {
+  if (!server.hasArg("id")) {
+    server.send(400, "text/plain", "Missing id");
+    return;
+  }
+  int id = server.arg("id").toInt();
+  if (id < 1 || id > 255) {
+    server.send(400, "text/plain", "id 1-255");
+    return;
+  }
+  bool ok = audioEspNowPlayTrack((uint8_t)id, WALLE_AUDIO_PRIORITY_WEB);
+  addCORS();
+  server.send(ok ? 200 : 503, "text/plain", ok ? "OK" : "FAIL");
+}
+
+static void handleAudioVolume() {
+  if (!server.hasArg("value")) {
+    server.send(400, "text/plain", "Missing value");
+    return;
+  }
+  int v = server.arg("value").toInt();
+  v = constrain(v, 0, 255);
+  uint8_t df = (uint8_t)((v * 30 + 127) / 255);
+  bool ok = audioEspNowSetVolume(df);
+  addCORS();
+  server.send(ok ? 200 : 503, "text/plain", ok ? "OK" : "FAIL");
+}
+
+static void handleAudioMic() {
+  uint16_t el = 0, er = 0;
+  uint8_t vad = 0;
+  uint32_t age = 0;
+  bool fresh = audioTelemGet(&el, &er, &vad, &age);
+  char buf[160];
+  snprintf(buf, sizeof(buf),
+           "{\"ok\":%s,\"ear_l\":%u,\"ear_r\":%u,\"voice\":%u,\"age_ms\":%lu}",
+           fresh ? "true" : "false", (unsigned)el, (unsigned)er, (unsigned)vad,
+           (unsigned long)age);
+  addCORS();
+  server.send(200, "application/json", buf);
+}
+
 // --- Public Functions ---
 
 void webServerInit() {
@@ -327,12 +407,18 @@ void webServerInit() {
 
   // Sensor endpoints
   server.on("/imu/status",        HTTP_GET, handleImuStatus);
+  server.on("/api/vision/status", HTTP_GET, handleVisionStatus);
+  server.on("/api/vision/snapshot_url", HTTP_GET, handleVisionSnapshotUrl);
   server.on("/imu/recalibrate",  HTTP_GET, handleImuRecalibrate);
   server.on("/battery/status",    HTTP_GET, handleBatteryStatus);
 
   server.on("/api/autonomy",      HTTP_GET, handleAutonomyStatus);
   server.on("/api/autonomy/enable", HTTP_GET, handleAutonomyEnable);
   server.on("/api/autonomy/set_home", HTTP_GET, handleMemorySetHome);
+
+  server.on("/api/audio/play",    HTTP_GET, handleAudioPlay);
+  server.on("/api/audio/volume",  HTTP_GET, handleAudioVolume);
+  server.on("/api/audio/mic",     HTTP_GET, handleAudioMic);
 
   server.onNotFound(handleNotFound);
   server.begin();

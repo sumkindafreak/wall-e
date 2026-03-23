@@ -7,11 +7,13 @@
 #include "dock_config.h"
 #include "dock_state.h"
 #include "dock_protocol.h"
+#include "dock_alignment.h"
 #include <esp_wifi.h>
 #include <Preferences.h>
 #include <time.h>
 #include <sys/time.h>
 #include <string.h>
+#include <esp_idf_version.h>
 #include <esp_now.h>
 #include <WiFi.h>
 #include <Arduino.h>
@@ -22,8 +24,14 @@ static uint32_t g_last_send_ms = 0;
 static bool g_last_ok = false;
 static uint32_t g_send_ok = 0;
 static uint32_t g_send_fail = 0;
+static bool g_wifi_started = false;   /* credentials set, WiFi.begin() called */
+static bool g_espnow_inited = false;  /* ESP-NOW init done (after WiFi connected) */
 
+#if defined(ESP_IDF_VERSION_MAJOR) && (ESP_IDF_VERSION_MAJOR >= 5)
 static void onRecv(const esp_now_recv_info_t *info, const uint8_t *data, int len);
+#else
+static void onRecv(const uint8_t *mac, const uint8_t *data, int len);
+#endif
 
 static void onSendDone(const uint8_t *mac, esp_now_send_status_t status) {
   (void)mac;
@@ -31,11 +39,11 @@ static void onSendDone(const uint8_t *mac, esp_now_send_status_t status) {
   if (g_last_ok) g_send_ok++; else g_send_fail++;
 }
 
+/* Start WiFi in STA mode, non-blocking. Call dockEspNowPoll() in loop to finish init when connected. */
 bool dockEspNowBegin(void) {
   WiFi.mode(WIFI_STA);
-  delay(100);
+  delay(50);
 
-  /* Connect to home WiFi: NVS (from WALL-E) first, else compile-time */
   Preferences prefs;
   prefs.begin("dock_wifi", true);
   String nvsSsid = prefs.getString("sta_ssid", "");
@@ -47,42 +55,35 @@ bool dockEspNowBegin(void) {
   if (nvsSsid.length() > 0) {
     ssid = nvsSsid.c_str();
     pass = nvsPass.c_str();
-    Serial.print(F("[DOCK] Using WiFi from WALL-E: "));
+    Serial.println(F("[DOCK] WiFi: using credentials from WALL-E (connecting in background)"));
   } else if (strlen(WIFI_HOME_SSID) > 0) {
     ssid = WIFI_HOME_SSID;
     pass = WIFI_HOME_PASSWORD;
-    Serial.print(F("[DOCK] Using WiFi from config: "));
+    Serial.println(F("[DOCK] WiFi: using credentials from config (connecting in background)"));
   }
 
   if (ssid && ssid[0] != '\0') {
-    Serial.println(ssid);
     WiFi.begin(ssid, pass);
-    unsigned long start = millis();
-    while (WiFi.status() != WL_CONNECTED && (millis() - start) < 12000) {
-      delay(200);
-      Serial.print('.');
-    }
-    if (WiFi.status() == WL_CONNECTED) {
-      Serial.println();
-      Serial.print(F("[DOCK] Home WiFi OK: "));
-      Serial.println(WiFi.localIP());
-      configTime(TIMEZONE_OFFSET_SEC, 0, "pool.ntp.org", "time.nist.gov");
-      Serial.println(F("[DOCK] NTP configured"));
-    } else {
-      Serial.println(F(" (timeout)"));
-    }
-  } else {
-    WiFi.disconnect();
-    delay(100);
+    g_wifi_started = true;
+    return true;
   }
+  g_wifi_started = false;
+  return false;
+}
 
+/* Call every loop. When WiFi connects, finishes ESP-NOW init once. Returns true when beacon can be sent. */
+bool dockEspNowPoll(void) {
+  if (g_espnow_inited)
+    return true;
+  if (!g_wifi_started || WiFi.status() != WL_CONNECTED)
+    return false;
+
+  /* One-time: WiFi just connected, init ESP-NOW */
   if (esp_now_init() != ESP_OK) {
     return false;
   }
-
   esp_now_register_send_cb(onSendDone);
   esp_now_register_recv_cb(onRecv);
-
   memset(&peer, 0, sizeof(peer));
   memcpy(peer.peer_addr, broadcast_mac, 6);
   peer.channel = 0;
@@ -90,7 +91,11 @@ bool dockEspNowBegin(void) {
   if (esp_now_add_peer(&peer) != ESP_OK) {
     return false;
   }
-
+  g_espnow_inited = true;
+  Serial.print(F("[DOCK] Home WiFi OK: "));
+  Serial.println(WiFi.localIP());
+  configTime(TIMEZONE_OFFSET_SEC, 0, "pool.ntp.org", "time.nist.gov");
+  Serial.println(F("[DOCK] ESP-NOW beacon running"));
   return true;
 }
 
@@ -117,10 +122,17 @@ void dockEspNowGetStats(uint32_t *ok, uint32_t *fail) {
   if (fail) *fail = g_send_fail;
 }
 
+#if defined(ESP_IDF_VERSION_MAJOR) && (ESP_IDF_VERSION_MAJOR >= 5)
 static void onRecv(const esp_now_recv_info_t *info, const uint8_t *data, int len) {
   (void)info;
   dockEspNowHandleRecv(data, len);
 }
+#else
+static void onRecv(const uint8_t *mac, const uint8_t *data, int len) {
+  (void)mac;
+  dockEspNowHandleRecv(data, len);
+}
+#endif
 
 bool dockEspNowHandleRecv(const uint8_t *data, int len) {
   if (len < 4) return false;
@@ -167,6 +179,12 @@ bool dockEspNowHandleRecv(const uint8_t *data, int len) {
   } else if (p->cmd == DOCK_CMD_RESET) {
     dockStateResetFault();
     Serial.println(F("[DOCK] CMD: Reset fault (from WALL-E)"));
+  } else if (p->cmd == DOCK_CMD_REQUEST_CHARGE) {
+    dockStateRequestCharge();
+    Serial.println(F("[DOCK] CMD: Request charge (from WALL-E)"));
+  } else if (p->cmd == DOCK_CMD_APPROACH_STAGE && len >= (int)sizeof(DockApproachStagePacket_t)) {
+    const DockApproachStagePacket_t *ap = (const DockApproachStagePacket_t *)data;
+    dockAlignmentSetStage(ap->stage);
   }
   return true;
 }

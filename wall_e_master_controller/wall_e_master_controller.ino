@@ -194,6 +194,16 @@ void loop() {
     g_needStaticRedraw = true;
     playUISound(SOUND_CLICK);
   }
+  if (zone == TOUCH_ZONE_DOCK_GO) {
+    packetSetPendingAction(ACTION_DOCK_GO);
+    playUISound(SOUND_MODE_CHANGE);
+    Serial.println(F("[Dock] Go to dock"));
+  }
+  if (zone == TOUCH_ZONE_DOCK_CANCEL) {
+    packetSetPendingAction(ACTION_DOCK_CANCEL);
+    playUISound(SOUND_CLICK);
+    Serial.println(F("[Dock] Cancel"));
+  }
   if (zone == TOUCH_ZONE_QUICK_ACTION) {
     g_overlayVisible = !g_overlayVisible;
     g_needStaticRedraw = true;
@@ -355,16 +365,16 @@ void loop() {
     uint8_t animId = zone - (TOUCH_ZONE_ANIM_0 + 100);
     profileToggleFavoriteAnimation(animId);
     playUISound(SOUND_CONFIRM);
-    g_needStaticRedraw = true;  // Redraw to show updated favorites
+    g_needStaticRedraw = true;
     Serial.printf("[Behaviour] Toggled favorite for animation %d\n", animId);
   }
   
-  // Legacy mood zones (from main screen) - now use profile favorites!
+  // Legacy mood zones (from main screen) - use profile favorites
   if (zone >= TOUCH_ZONE_MOOD_CURIOUS && zone <= TOUCH_ZONE_MOOD_EXCITED) {
     Profile* p = profileGet();
     uint8_t moodIndex = zone - TOUCH_ZONE_MOOD_CURIOUS;
     uint8_t animId = p->favoriteAnimations[moodIndex];
-    if (animId < 6) {  // Valid animation
+    if (animId < 6) {
       motionTriggerAnimation(animId);
       playUISound(SOUND_CLICK);
       Serial.printf("[MainScreen] Favorite %d (anim %d) triggered\n", moodIndex, animId);

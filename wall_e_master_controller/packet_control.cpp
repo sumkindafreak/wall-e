@@ -10,6 +10,7 @@
 #include <Arduino.h>
 
 static unsigned long s_lastSendMs = 0;
+static uint8_t s_pendingAction = ACTION_NONE;
 
 void packetInit(void) {
   espnowInit();
@@ -38,10 +39,16 @@ void packetUpdate(unsigned long now, const DriveState* ds, bool estop) {
   motionGetServoTargets(pkt.servoTargets);
   
   pkt.behaviourMode = 0;
-  pkt.action = ACTION_NONE;
+  pkt.action = s_pendingAction;
+  s_pendingAction = ACTION_NONE;
   pkt.systemFlags = estop ? FLAG_ESTOP : 0;
 
   espnowSend(&pkt);
+  espnowBroadcastAudioEstopEdge(estop);
+}
+
+void packetSetPendingAction(uint8_t action) {
+  s_pendingAction = action;
 }
 
 bool packetTelemetryValid(void) {

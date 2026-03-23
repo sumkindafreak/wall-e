@@ -15,6 +15,9 @@
 #include "battery_monitor.h"
 #include "flashlight_control.h"
 #include "espnow_receiver.h"
+#include "vl53l1x_tof.h"
+#include "dock_sensors.h"
+#include "dock_homing.h"
 
 // NEW: Autonomy and behavioral brain includes
 #include "sonar_sensor.h"
@@ -109,6 +112,9 @@ void setup() {
   batteryInit();
   displayUpdateBattery();
 
+  // Dock system: sensors first. ToF lazy-init from loop (can block if sensor absent)
+  dockSensorsBegin();
+
   // WiFi — AP starts immediately
   wifiManagerInit();
   displayUpdateWifi();
@@ -133,6 +139,8 @@ unsigned long lastTelemSendMs = 0;
 #define TELEM_SEND_INTERVAL_MS 100  // 10 Hz telemetry updates
 
 void loop() {
+  delay(1);
+  yield();
   unsigned long now = millis();
   
   // WiFi state polling
@@ -183,6 +191,21 @@ void loop() {
   // Battery polling (rate-limited internally to 10s); refresh TFT when we have a new reading
   if (batteryHandle()) displayUpdateBattery();
 
+  // Dock: ToF lazy-init, sensors, auto-return, homing
+  static bool tofTried = false;
+  if (!tofTried) { tofTried = true; tofInit(); }
+  tofUpdate(now);
+  dockSensorsUpdate();
+  dockHomingCheckAutoReturn(now);
+  dockHomingUpdate(now);
+  if (dockHomingIsActive()) {
+    int16_t left, right;
+    if (dockHomingGetMotorOutput(&left, &right)) {
+      motorSetLeftRight(left, right);
+      lastCommandMillis = now;
+    }
+  }
+
   // LDR: turn flashlight on when dark
   flashlightHandle();
 
@@ -210,4 +233,6 @@ void loop() {
     
     lastCommandMillis = now;
   }
+  delay(1);
+  yield();
 }

@@ -146,23 +146,38 @@ void uiDrawStaticDrive(void) {
   g_tft->drawCircle(JOY_CX, JOY_CY, 30, C_GRID);
   g_tft->drawCircle(JOY_CX, JOY_CY, 2, C_ACCENT);
 
-  int ex = SCREEN_W / 2 - 50;
-  int ey = BOTTOM_BAR_Y + 4;
-  int ew = 100, eh = 32;
-  g_tft->fillRoundRect(ex, ey, ew, eh, 4, C_RED);
-  g_tft->drawRoundRect(ex, ey, ew, eh, 4, C_WHITE);
-  g_tft->setTextColor(C_WHITE, C_RED);
-  g_tft->setTextSize(2);
-  g_tft->drawString("E-STOP", ex + 22, ey + 8);
-
   g_tft->drawFastHLine(0, BOTTOM_BAR_Y, SCREEN_W, C_BORDER);
   g_tft->fillRect(0, BOTTOM_BAR_Y, SCREEN_W, BOTTOM_BAR_H, C_BG_DARK);
-  g_tft->drawRect(SCREEN_W - 70, BOTTOM_BAR_Y + 8, 60, 24, C_BORDER);
-  g_tft->setTextColor(C_ACCENT, C_BG_DARK);
+
+  const int by = BOTTOM_BAR_Y + 4, bh = 32;
+  // Dock | Cancel (left of E-STOP) — 60x32 each for easier touch
+  const int dockX = 8, dockW = 60;
+  const int cancelX = dockX + dockW + 4, cancelW = 60;
+  g_tft->fillRoundRect(dockX, by, dockW, bh, 3, C_ACCENT);
+  g_tft->drawRoundRect(dockX, by, dockW, bh, 3, C_ACCENT_DIM);
+  g_tft->setTextColor(C_BG, C_ACCENT);
   g_tft->setTextSize(1);
-  g_tft->drawString("Behav", SCREEN_W - 62, BOTTOM_BAR_Y + 14);
-  g_tft->drawRect(SCREEN_W - 138, BOTTOM_BAR_Y + 8, 60, 24, C_BORDER);
-  g_tft->drawString("System", SCREEN_W - 130, BOTTOM_BAR_Y + 14);
+  g_tft->drawString("Dock", dockX + 16, by + 10);
+  g_tft->fillRoundRect(cancelX, by, cancelW, bh, 3, C_BG_DARK);
+  g_tft->drawRoundRect(cancelX, by, cancelW, bh, 3, C_BORDER);
+  g_tft->setTextColor(C_ACCENT, C_BG_DARK);
+  g_tft->drawString("Cancel", cancelX + 10, by + 10);
+
+  // E-STOP (right of Dock/Cancel)
+  const int ex = cancelX + cancelW + 4, ew = 100;
+  g_tft->fillRoundRect(ex, by, ew, bh, 4, C_RED);
+  g_tft->drawRoundRect(ex, by, ew, bh, 4, C_WHITE);
+  g_tft->setTextColor(C_WHITE, C_RED);
+  g_tft->setTextSize(2);
+  g_tft->drawString("E-STOP", ex + 22, by + 8);
+
+  // System | Behav (right of E-STOP)
+  const int gridX = ex + ew + 4, cellW = 48, cellH = 16, gap = 4;
+  g_tft->setTextColor(C_ACCENT, C_BG_DARK);
+  g_tft->drawRect(gridX, by, cellW, cellH, C_BORDER);
+  g_tft->drawString("System", gridX + 4, by + 4);
+  g_tft->drawRect(gridX + cellW + gap, by, cellW, cellH, C_BORDER);
+  g_tft->drawString("Behav", gridX + cellW + gap + 8, by + 4);
 }
 
 void uiDrawStaticBehaviour(void) {
@@ -192,51 +207,56 @@ void uiDrawPhysicalJoystickLayout(void) {
   g_tft->drawString("Battery", 8, cTop + 4);
   g_tft->drawString("Behaviour", midX + 8, cTop + 4);
 
-  const char* moods[] = {"Curious", "Happy", "Shy", "Tired", "Excited"};
-  
   // Get animation names based on current profile's favorites
   Profile* p = profileGet();
   const char* allAnimNames[] = {"Reset", "Bootup", "Inquis", "BrowR", "BrowL", "Suprs"};
   const char* displayNames[5];
   
-  // Use favorite animations from profile
   for (int i = 0; i < 5; i++) {
     uint8_t animId = p->favoriteAnimations[i];
     if (animId < 6) {
       displayNames[i] = allAnimNames[animId];
     } else {
-      displayNames[i] = "---";  // Empty slot
+      displayNames[i] = "---";
     }
   }
   
   for (int i = 0; i < 5; i++) {
     int bx = midX + 16 + (i % 2) * 72;
-    int by = cTop + 30 + (i / 2) * 45;
+    int by = cTop + 30 + (i / 2) * 38;
     g_tft->drawRect(bx, by, 64, 32, C_BORDER);
     g_tft->drawString(displayNames[i], bx + 4, by + 10);
   }
   
-  // NAVIGATION BUTTONS (left side under "Battery")
-  // System button
-  g_tft->fillRect(8, cTop + 30, 80, 32, C_ACCENT);
+  g_tft->drawFastHLine(0, BOTTOM_BAR_Y, SCREEN_W, C_BORDER);
+  g_tft->fillRect(0, BOTTOM_BAR_Y, SCREEN_W, BOTTOM_BAR_H, C_BG_DARK);
+  const int by = BOTTOM_BAR_Y + 4, bh = 32;
+  // Dock | Cancel (left of E-STOP) — 60x32 each for easier touch
+  const int dockX = 8, dockW = 60;
+  const int cancelX = dockX + dockW + 4, cancelW = 60;
+  g_tft->fillRoundRect(dockX, by, dockW, bh, 3, C_ACCENT);
+  g_tft->drawRoundRect(dockX, by, dockW, bh, 3, C_ACCENT_DIM);
   g_tft->setTextColor(C_BG, C_ACCENT);
   g_tft->setTextSize(1);
-  g_tft->drawString("System", 22, cTop + 40);
-  
-  // Behaviour button
-  g_tft->drawRect(8, cTop + 68, 80, 32, C_BORDER);
-  g_tft->setTextColor(C_ACCENT, C_BG);
-  g_tft->drawString("Behav", 25, cTop + 78);
-
-  // E-STOP button (center bottom) — must be visible in physical joystick mode
-  int ex = SCREEN_W / 2 - 50;
-  int ey = BOTTOM_BAR_Y + 4;
-  int ew = 100, eh = 32;
-  g_tft->fillRoundRect(ex, ey, ew, eh, 4, C_RED);
-  g_tft->drawRoundRect(ex, ey, ew, eh, 4, C_WHITE);
+  g_tft->drawString("Dock", dockX + 16, by + 10);
+  g_tft->fillRoundRect(cancelX, by, cancelW, bh, 3, C_BG_DARK);
+  g_tft->drawRoundRect(cancelX, by, cancelW, bh, 3, C_BORDER);
+  g_tft->setTextColor(C_ACCENT, C_BG_DARK);
+  g_tft->drawString("Cancel", cancelX + 10, by + 10);
+  // E-STOP (right of Dock/Cancel)
+  const int ex = cancelX + cancelW + 4, ew = 100;
+  g_tft->fillRoundRect(ex, by, ew, bh, 4, C_RED);
+  g_tft->drawRoundRect(ex, by, ew, bh, 4, C_WHITE);
   g_tft->setTextColor(C_WHITE, C_RED);
   g_tft->setTextSize(2);
-  g_tft->drawString("E-STOP", ex + 22, ey + 8);
+  g_tft->drawString("E-STOP", ex + 22, by + 8);
+  // System | Behav (right of E-STOP)
+  const int gridX = ex + ew + 4, cellW = 48, cellH = 16, gap = 4;
+  g_tft->setTextColor(C_ACCENT, C_BG_DARK);
+  g_tft->drawRect(gridX, by, cellW, cellH, C_BORDER);
+  g_tft->drawString("System", gridX + 4, by + 4);
+  g_tft->drawRect(gridX + cellW + gap, by, cellW, cellH, C_BORDER);
+  g_tft->drawString("Behav", gridX + cellW + gap + 8, by + 4);
   g_tft->drawFastHLine(0, BOTTOM_BAR_Y, SCREEN_W, C_BORDER);
 }
 #endif
@@ -364,7 +384,8 @@ void uiDrawUpdateDynamic(const TelemetryStripData* telem, const DriveState* ds,
 
 void uiDrawEStopRegion(bool highlighted) {
   if (!g_tft) return;
-  int ex = SCREEN_W / 2 - 50, ey = BOTTOM_BAR_Y + 4, ew = 100, eh = 32;
+  // Match bottom bar: Dock 8-68, Cancel 72-132, E-STOP 136-236
+  int ex = 136, ey = BOTTOM_BAR_Y + 4, ew = 100, eh = 32;
   g_tft->fillRoundRect(ex, ey, ew, eh, 4, highlighted ? 0xFF00 : C_RED);
   g_tft->drawRoundRect(ex, ey, ew, eh, 4, C_WHITE);
   g_tft->setTextColor(C_WHITE, highlighted ? 0xFF00 : C_RED);
@@ -847,20 +868,18 @@ void uiDrawAdvancedModeOverlay(void) {
 
 // ------------------------------------------------------------
 //  Physical Joystick Visual Indicators
-//  Draw two mini joystick displays at bottom of screen
+//  HEAD and DRIVE mini joysticks in middle-left (left of centre divider)
 // ------------------------------------------------------------
 void uiDrawPhysicalJoystickIndicators(float joy1X, float joy1Y, float joy2X, float joy2Y) {
   if (!g_tft) return;
   
-  // Joy1 (Head control) - Left side
-  const int joy1_cx = 60;
-  const int joy1_cy = 210;
+  // Middle left: HEAD and DRIVE side by side with a gap
+  const int joy1_cx = 25;
+  const int joy1_cy = 120;
+  const int joy2_cx = 115;
+  const int joy2_cy = 120;
   const int joy_radius = 25;
   const int stick_radius = 6;
-  
-  // Joy2 (Tank drive) - Right side - shifted right 20px total
-  const int joy2_cx = 280;  // Was 260, now 280 (+20px)
-  const int joy2_cy = 210;
   
   // Clear previous indicators
   static int lastJoy1X = 0, lastJoy1Y = 0;
@@ -871,13 +890,13 @@ void uiDrawPhysicalJoystickIndicators(float joy1X, float joy1Y, float joy2X, flo
   g_tft->drawCircle(joy1_cx, joy1_cy, 2, C_ACCENT_DIM); // Center dot
   g_tft->setTextColor(C_TEXT_DIM, C_BG);
   g_tft->setTextSize(1);
-  g_tft->drawString("HEAD", joy1_cx - 15, joy1_cy - 40);
+  g_tft->drawString("HEAD", joy1_cx - 15, joy1_cy - 32);
   
-  // Draw Joy2 base (right - tank drive)
+  // Draw Joy2 base (tank drive)
   g_tft->drawCircle(joy2_cx, joy2_cy, joy_radius, C_ACCENT);
   g_tft->drawCircle(joy2_cx, joy2_cy, 2, C_ACCENT); // Center dot
   g_tft->setTextColor(C_ACCENT, C_BG);
-  g_tft->drawString("DRIVE", joy2_cx - 17, joy2_cy - 40);  // Back to left (was -7, now -17)
+  g_tft->drawString("DRIVE", joy2_cx - 17, joy2_cy - 32);
   
   // Erase old Joy1 stick position
   if (lastJoy1X != 0 || lastJoy1Y != 0) {

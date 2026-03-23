@@ -29,7 +29,7 @@ static XPT2046_Touchscreen s_ts(XPT2046_CS, XPT2046_IRQ);
 
 // Single centered joystick
 #define JOY_CX       160  // Center X
-#define JOY_CY       126  // Center Y
+#define JOY_CY       110  // Center Y (match ui_draw.h — clears bottom bar)
 #define JOY_RADIUS   70   // Larger radius
 #define JOY_DEADZONE ((float)(JOY_RADIUS * JOY_DEADZONE_PCT) / 100.0f)
 #define JOY_SMOOTH_PREV (1.0f - JOY_SMOOTH_FACTOR)
@@ -211,8 +211,7 @@ TouchZone touchUpdate(int page) {
           s_animPressStartMs = now;
           s_animLongPressFired = false;
         } else if (!s_animLongPressFired && now - s_animPressStartMs >= 500) {
-          // Long press detected - toggle favorite
-          zone = (TouchZone)(TOUCH_ZONE_ANIM_0 + 100 + (zone - TOUCH_ZONE_ANIM_0));  // Special zone for "long press"
+          zone = (TouchZone)(TOUCH_ZONE_ANIM_0 + 100 + (zone - TOUCH_ZONE_ANIM_0));
           s_animLongPressFired = true;
         }
       } else {
@@ -288,23 +287,20 @@ TouchZone touchGetZone(int screenX, int screenY, int page) {
   if (page == 0) {  // PAGE_DRIVE
     // Single centered joystick zone
     if (inCircle(JOY_CX, JOY_CY, screenX, screenY)) return TOUCH_ZONE_LEFT_JOY;
-    if (screenY >= 204 && screenY <= 236 && screenX >= 110 && screenX <= 210) return TOUCH_ZONE_ESTOP;
-    if (screenY >= 208 && screenY <= 232 && screenX >= 250 && screenX <= 310) return TOUCH_ZONE_NAV_BEHAV;
-    if (screenY >= 208 && screenY <= 232 && screenX >= 182 && screenX <= 242) return TOUCH_ZONE_NAV_SYSTEM;
-    
-    // Physical joystick mode: buttons on left side under "Battery"
-    // cTop = 30 (TOP_BAR_HEIGHT) + 22 (TELEM_STRIP_H) = 52
-    const int cTop = 52;
-    // System button (top) - positioned at cTop + 30
-    if (screenY >= (cTop + 30) && screenY <= (cTop + 62) && screenX >= 8 && screenX <= 88) return TOUCH_ZONE_NAV_SYSTEM;
-    // Behaviour button (below) - positioned at cTop + 68
-    if (screenY >= (cTop + 68) && screenY <= (cTop + 100) && screenX >= 8 && screenX <= 88) return TOUCH_ZONE_NAV_BEHAV;
+    // Dock | Cancel (left of E-STOP) — 60x32 each at y 204-236
+    if (screenY >= 204 && screenY <= 236 && screenX >= 8 && screenX < 68) return TOUCH_ZONE_DOCK_GO;
+    if (screenY >= 204 && screenY <= 236 && screenX >= 72 && screenX < 132) return TOUCH_ZONE_DOCK_CANCEL;
+    if (screenY >= 204 && screenY <= 236 && screenX >= 136 && screenX <= 236) return TOUCH_ZONE_ESTOP;
+    // System | Behav (right of E-STOP)
+    if (screenY >= 204 && screenY <= 220 && screenX >= 240 && screenX <= 288) return TOUCH_ZONE_NAV_SYSTEM;
+    if (screenY >= 204 && screenY <= 220 && screenX >= 292 && screenX <= 320) return TOUCH_ZONE_NAV_BEHAV;
     
     // Mood buttons on right side (physical joystick layout)
+    const int cTop = 52;  // TOP_BAR_HEIGHT + TELEM_STRIP_H
     int midX = 320 / 2;  // 160
     for (int i = 0; i < 5; i++) {
-      int bx = midX + 16 + (i % 2) * 72;  // 176 or 248
-      int by = cTop + 30 + (i / 2) * 45;   // 82, 127, 172
+      int bx = midX + 16 + (i % 2) * 72;
+      int by = cTop + 30 + (i / 2) * 38;
       if (screenX >= bx && screenX < (bx + 64) &&
           screenY >= by && screenY < (by + 32)) {
         return (TouchZone)(TOUCH_ZONE_MOOD_CURIOUS + i);

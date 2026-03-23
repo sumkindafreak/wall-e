@@ -14,6 +14,8 @@
 #define ESPNOW_TELEM_TIMEOUT_MS  3000 // telemetry timeout warning
 
 void espnowInit(void);
+/** Broadcast E-stop sound to audio ESP (edge-triggered). */
+void espnowBroadcastAudioEstopEdge(bool estop_pressed);
 void espnowSend(const ControlPacket* pkt);
 void espnowUpdate(void);
 

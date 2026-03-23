@@ -3,16 +3,18 @@
 // ============================================================
 
 #include "dock_controller.h"
+#include "dock_protocol.h"
 #include <WiFi.h>
 #include <esp_now.h>
 #include <Arduino.h>
 #include <cstring>
 
-#define DOCK_CMD_MAGIC  0x434D444B
-#define DOCK_CMD_FORCE_OFF  1
-#define DOCK_CMD_RESET      2
-#define DOCK_CMD_WIFI_CONFIG 3
-#define DOCK_CMD_TIME 4
+#define DOCK_CMD_MAGIC        0x434D444B
+#define DOCK_CMD_FORCE_OFF    1
+#define DOCK_CMD_RESET        2
+#define DOCK_CMD_WIFI_CONFIG  3
+#define DOCK_CMD_TIME         4
+#define DOCK_CMD_REQUEST_CHARGE 5
 
 typedef struct __attribute__((packed)) {
   uint32_t magic;
@@ -102,4 +104,19 @@ bool dockControllerSendForceOff(uint32_t dock_id) {
 
 bool dockControllerSendReset(uint32_t dock_id) {
   return sendCmd(dock_id, DOCK_CMD_RESET);
+}
+
+bool dockControllerSendRequestCharge(uint32_t dock_id) {
+  return sendCmd(dock_id, DOCK_CMD_REQUEST_CHARGE);
+}
+
+bool dockControllerSendApproachStage(uint8_t stage, uint32_t dock_id) {
+  if (!ensureBroadcastPeer()) return false;
+  DockApproachStagePacket_t pkt = {};
+  pkt.magic = DOCK_CMD_MAGIC;
+  pkt.dock_id = dock_id;
+  pkt.cmd = DOCK_CMD_APPROACH_STAGE;
+  pkt.stage = (stage <= APPROACH_DOCKED) ? stage : APPROACH_FAR;
+  esp_err_t r = esp_now_send(s_broadcast_mac, (uint8_t *)&pkt, sizeof(pkt));
+  return (r == ESP_OK);
 }

@@ -3,6 +3,7 @@
 // ============================================================
 
 #include "espnow_control.h"
+#include "audio_protocol.h"
 #include <WiFi.h>
 #include <esp_now.h>
 #include <esp_wifi.h>
@@ -165,6 +166,23 @@ void espnowGetTelemetry(TelemetryPacket* out) {
 
 void espnowSetPeerMac(const uint8_t mac[6]) {
   if (mac) memcpy(s_peerMac, mac, 6);
+}
+
+void espnowBroadcastAudioEstopEdge(bool estop_pressed)
+{
+  static bool prev = false;
+  if (estop_pressed && !prev) {
+    uint8_t bcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    WalleAudioCommandPacket_t pkt = {
+        .magic = WALLE_AUDIO_MAGIC,
+        .cmd = WALLE_AU_CMD_PLAY_EVENT,
+        .param = WALLE_AUDIO_EVT_ESTOP,
+        .reserved = 0,
+        .priority = WALLE_AUDIO_PRIORITY_ESTOP,
+    };
+    esp_now_send(bcast, (uint8_t *)&pkt, sizeof(pkt));
+  }
+  prev = estop_pressed;
 }
 
 uint16_t espnowGetPacketRate(void) {

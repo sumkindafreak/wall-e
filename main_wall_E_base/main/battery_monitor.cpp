@@ -44,7 +44,10 @@ static float readVoltage() {
   float adcAvg   = (float)sum / (float)BAT_SAMPLES;
   float adcVolt  = (adcAvg / ADC_RESOLUTION) * ADC_REF_V;
   float sensorV  = adcVolt / DIVIDER_RATIO;  // 0–5V at sensor
-  return sensorV * (BATTERY_MAX_V / VOLTAGE_SENSOR_OUTPUT_MAX_V) * BAT_V_CALIB;
+  float v        = sensorV * (BATTERY_MAX_V / VOLTAGE_SENSOR_OUTPUT_MAX_V) * BAT_V_CALIB;
+  Serial.printf("[Battery] raw ADC=%d adcV=%.3f sensorV=%.2f calcV=%.2f\n",
+    (int)(sum / BAT_SAMPLES), adcVolt, sensorV, v);
+  return v;
 }
 
 // Current: ADC voltage → (V - zero) / sensitivity = amps
@@ -69,6 +72,9 @@ bool batteryHandle() {
   float v = readVoltage();
   float a = readCurrent();
 
+  if (v < BATTERY_MIN_V || v > BATTERY_MAX_V) {
+    Serial.printf("[Battery] voltage clamped from %.2fV to %.1f–%.1fV range\n", v, BATTERY_MIN_V, BATTERY_MAX_V);
+  }
   v = constrain(v, BATTERY_MIN_V, BATTERY_MAX_V);
   int pct = (int)(((v - BATTERY_MIN_V) / (BATTERY_MAX_V - BATTERY_MIN_V)) * 100.0f);
   pct = constrain(pct, 0, 100);

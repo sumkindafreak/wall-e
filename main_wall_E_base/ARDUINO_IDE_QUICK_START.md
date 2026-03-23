@@ -16,6 +16,23 @@ The Base has two possible layouts. **Use the one that matches your setup:**
 
 ---
 
+## Docking system (VL53L1X ToF)
+
+If using the dock homing feature, install **VL53L1X** by Pololu via **Sketch → Include Library → Manage Libraries** → search "VL53L1X".
+
+**Note:** Rear obstacle pins use GPIO 20 and 47 (not 33/34 — reserved for Octal PSRAM on ESP32-S3).
+
+---
+
+## TG1WDT_SYS_RST (boot loop)
+
+If the board keeps resetting with `rst:0x8 (TG1WDT_SYS_RST)`:
+1. The sketch includes `delay(1)` and `yield()` in the loop to yield to the RTOS.
+2. ToF init is deferred to the first loop (so setup finishes quickly).
+3. If it persists: **Tools → Loop Task Stack Size** → set to **16384** (if available).
+
+---
+
 ## Upload to Base (WALL-E Brain)
 
 1. Connect the **Base** ESP32-S3 via USB

@@ -68,6 +68,8 @@ typedef struct __attribute__((packed)) {
 #define ACTION_WAKE        5
 #define ACTION_IMU_CAL     6
 #define ACTION_MOTOR_RESET 7
+#define ACTION_DOCK_GO     8
+#define ACTION_DOCK_CANCEL 9
 
 // ------------------------------------------------------------
 //  Mood codes (behaviourMode / moodState)

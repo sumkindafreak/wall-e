@@ -10,6 +10,16 @@
 #include "battery_monitor.h"
 #include "autonomy_engine.h"  // NEW
 #include "waypoint_nav.h"     // NEW
+#include "dock_protocol.h"
+#include "dock_homing.h"
+#include "autonomous_docking.h"
+#include "dock_config.h"
+#include "vision_protocol.h"
+#include "vision_behaviour.h"
+#include "audio_protocol.h"
+#include "audio_espnow.h"
+#include "audio_telem.h"
+#include "audio_esp_status.h"
 #include <WiFi.h>
 #include <esp_now.h>
 #include <esp_wifi.h>
@@ -57,6 +67,8 @@ typedef struct __attribute__((packed)) {
 #define ACTION_WAKE        5
 #define ACTION_IMU_CAL     6
 #define ACTION_MOTOR_RESET 7
+#define ACTION_DOCK_GO     8
+#define ACTION_DOCK_CANCEL 9
 
 // System flags
 #define FLAG_ESTOP      0x0001
@@ -76,6 +88,39 @@ static uint32_t s_lastManualCommandMs = 0;
 
 // ESP-NOW callback (signature for ESP32 Arduino Core 3.x)
 static void onRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len) {
+  audioTelemOnPacket(data, len);
+
+  /* Dock beacon: homing target. Feed RSSI and dock_id to both systems. */
+  if (len >= (int)sizeof(DockBeaconPacket_t)) {
+    const DockBeaconPacket_t* bp = (const DockBeaconPacket_t*)data;
+    if (bp->magic == DOCK_BEACON_MAGIC) {
+      int8_t rssi = -80;
+      if (info && info->rx_ctrl) rssi = (int8_t)info->rx_ctrl->rssi;
+      dockHomingOnBeacon(rssi);
+      autonomousDockingOnBeacon(rssi);
+      autonomousDockingSetLastDockId(bp->dock_id);
+      return;
+    }
+  }
+
+  /* Audio ESP status: mic dir, dock IR, voice cmd, mode, fault */
+  if (len >= (int)sizeof(WalleAudioStatusPacket_t)) {
+    const WalleAudioStatusPacket_t* ap = (const WalleAudioStatusPacket_t*)data;
+    if (ap->magic == WALLE_AUDIO_STATUS_MAGIC) {
+      audioEspStatusOnPacket(data, len);
+      return;
+    }
+  }
+
+  /* Vision packet: motion/centroid from camera node → vision behaviour (servo tracking). */
+  if (len >= (int)VISION_PACKET_SIZE) {
+    const VisionPacket_t* vp = (const VisionPacket_t*)data;
+    if (vp->magic == VISION_MAGIC) {
+      visionBehaviourOnPacket(vp, (size_t)len);
+      return;
+    }
+  }
+
   if (len < (int)sizeof(ControlPacket)) return;
 
   const ControlPacket* p = (const ControlPacket*)data;
@@ -96,7 +141,10 @@ static void onRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len
     motorStop();
     displaySetCommand(CMD_IDLE);
     lastCommandMillis = millis();
-    if (!s_estopLast) Serial.println("[E-STOP]");
+    if (!s_estopLast) {
+      Serial.println("[E-STOP]");
+      audioEspNowSendEvent(WALLE_AUDIO_EVT_ESTOP, WALLE_AUDIO_PRIORITY_ESTOP);
+    }
     s_estopLast = true;
     return;
   }
@@ -106,10 +154,33 @@ static void onRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len
   // bool autoFlagSet = (p->systemFlags & FLAG_AUTONOMOUS);
   // autonomySetEnabled(autoFlagSet);  // Enable/disable autonomy engine
 
-  // Action handling (optional: implement these in your main)
-  if (p->action != ACTION_NONE) {
+  // Action handling (dock, etc.)
+  if (p->action == ACTION_DOCK_GO) {
+#if USE_AUTONOMOUS_DOCKING
+    autonomousDockingSetRequested(true);
+#else
+    dockHomingSetRequested(true);
+#endif
+    displayShowToast("Going to dock...");
+  } else if (p->action == ACTION_DOCK_CANCEL) {
+#if USE_AUTONOMOUS_DOCKING
+    autonomousDockingSetRequested(false);
+#else
+    dockHomingSetRequested(false);
+#endif
+    displayShowToast("Dock cancelled");
+  } else if (p->action != ACTION_NONE) {
     Serial.printf("[Action] %d\n", p->action);
-    // Future: call servoScan(), beep(), etc.
+  }
+
+  /* When dock homing or autonomous docking active, don't apply drive commands */
+#if USE_AUTONOMOUS_DOCKING
+  if (autonomousDockingIsActive()) {
+#else
+  if (dockHomingIsActive()) {
+#endif
+    lastCommandMillis = millis();
+    return;
   }
 
   // Map -100..+100 → -255..+255

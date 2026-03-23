@@ -8,10 +8,13 @@
 
 #include "dock_protocol.h"
 
-/* Call once after WiFi.init(). Initializes ESP-NOW and broadcast peer. */
+/* Call once in setup(). Starts WiFi (non-blocking). Returns true if credentials were set. */
 bool dockEspNowBegin(void);
 
-/* Call every loop. Sends beacon at 10 Hz (internal rate limiting). */
+/* Call every loop. When WiFi connects, finishes ESP-NOW init once. Returns true when beacon can be sent. */
+bool dockEspNowPoll(void);
+
+/* Call every loop when dockEspNowPoll() is true. Sends beacon at 10 Hz (internal rate limiting). */
 void dockEspNowSendBeacon(const DockBeaconPacket_t *pkt);
 
 /* Get last send result: true = success, false = fail */

@@ -24,7 +24,7 @@
 
 // Single centered joystick
 #define JOY_CX          160  // Center X
-#define JOY_CY          126  // Center Y (middle of content area)
+#define JOY_CY          110  // Center Y (kept above bottom bar to avoid arrow overlap)
 #define JOY_RADIUS      70   // Larger radius
 
 #define GRID_SPACING    20

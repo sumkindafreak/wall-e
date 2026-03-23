@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0a0c10">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>WALL-E - LROS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/lros.css">
+</head>
+<body>
+<div id="app">
+  <div id="override-banner" aria-live="polite">Local Control Active - CYD touchscreen has control</div>
+
+  <header id="topbar">
+    <h1 id="topbar-title">WALL-E <span>LROS</span></h1>
+    <div id="conn-badge" onclick="switchTab('network')">
+      <div id="conn-dot" class="ap"></div>
+      <span id="conn-label">AP</span>
+    </div>
+  </header>
+
+  <nav id="tabbar">
+    <div class="tab active" data-tab="home" onclick="switchTab('home')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Home</div>
+    <div class="tab" data-tab="drive" onclick="switchTab('drive')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Drive</div>
+    <div class="tab" data-tab="docking" onclick="switchTab('docking')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>Dock</div>
+    <div class="tab" data-tab="network" onclick="switchTab('network')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1" fill="currentColor"/></svg>Network</div>
+    <div class="tab" data-tab="more" onclick="switchTab('more')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>More</div>
+  </nav>
+
+  <main id="pages">
+    <!-- HOME -->
+    <div class="page active" id="page-home">
+      <div class="face-container">
+        <div class="face" id="walle-face" data-mood="happy" aria-label="WALL-E face">
+          <div class="face-eyes"><div class="face-eye"></div><div class="face-eye"></div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">Quick Status</div>
+        <div class="card-body">
+          <div class="status-row"><span class="label">Battery</span><span class="value" id="home-battery">-</span></div>
+          <div class="progress-bar" style="margin:8px 0"><div class="progress-fill" id="home-battery-bar" style="width:80%"></div></div>
+          <div class="status-row"><span class="label">State</span><span class="value" id="home-state">-</span></div>
+          <div class="status-row"><span class="label">Emotion</span><span class="value" id="home-emotion">-</span></div>
+        </div>
+      </div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <button class="btn" onclick="switchTab('drive')">Drive</button>
+        <button class="btn btn-ghost" onclick="switchTab('docking')">Docking</button>
+        <button class="btn btn-ghost" onclick="switchTab('network')">Network</button>
+      </div>
+    </div>
+
+    <!-- DRIVE -->
+    <div class="page" id="page-drive">
+      <div class="card">
+        <div class="card-header">Control Mode</div>
+        <div class="card-body" style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-small" id="mode-joystick" onclick="setDriveMode('joystick')">Joystick</button>
+          <button class="btn btn-small btn-ghost" id="mode-tank" onclick="setDriveMode('tank')">Tank</button>
+          <button class="btn btn-small btn-ghost" id="mode-ai" onclick="setDriveMode('ai')">AI Assist</button>
+        </div>
+      </div>
+      <div id="drive-joystick" class="joystick-wrap">
+        <div class="joystick-container" id="joystick"><div class="joystick-stick" id="joystick-stick"></div></div>
+      </div>
+      <div id="drive-tank" style="display:none">
+        <div class="tank-row"><div class="tank-col"><label>Left</label><input type="range" id="tank-left" min="-255" max="255" value="0"></div><div class="tank-col"><label>Right</label><input type="range" id="tank-right" min="-255" max="255" value="0"></div></div>
+      </div>
+      <div class="card">
+        <div class="card-body">
+          <div class="status-row"><span class="label">Speed</span><span class="value" id="drive-speed">0 / 255</span></div>
+          <div class="form-group"><label>Speed profile</label><select id="speed-profile" onchange="applySpeedProfile()"><option value="low">Low</option><option value="normal" selected>Normal</option><option value="high">High</option></select></div>
+        </div>
+      </div>
+      <div style="display:flex;gap:12px">
+        <button class="btn" onclick="triggerAutoDock()">Go to Dock</button>
+        <button class="btn btn-ghost" onclick="setHome()">Set Home</button>
+      </div>
+    </div>
+
+    <!-- NAVIGATION -->
+    <div class="page" id="page-navigation">
+      <div class="card">
+        <div class="card-header">Mission Map</div>
+        <div class="card-body" style="padding:8px">
+          <canvas id="map-canvas" width="400" height="220"></canvas>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">Saved Locations</div>
+        <div class="card-body">
+          <div class="status-row"><span class="label">Home</span><span class="value dim" id="nav-home">Not set</span></div>
+          <div class="status-row"><span class="label">Current</span><span class="value" id="nav-current">-</span></div>
+          <button class="btn btn-small" onclick="addWaypoint()" style="margin-top:8px">Add Waypoint</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- DOCKING -->
+    <div class="page" id="page-docking">
+      <div class="card">
+        <div class="card-header">Approach Alignment</div>
+        <div class="card-body" style="text-align:center;padding:24px">
+          <div style="font-size:3rem;margin-bottom:12px">📍</div>
+          <div class="status-row"><span class="label">Stage</span><span class="value" id="dock-stage">-</span></div>
+          <div class="status-row"><span class="label">Beam</span><span class="value" id="dock-beam">-</span></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">Charge Status</div>
+        <div class="card-body">
+          <div class="status-row"><span class="label">Current</span><span class="value" id="dock-current">-</span></div>
+          <div class="progress-bar" style="margin:8px 0"><div class="progress-fill" id="dock-charge-bar" style="width:0%"></div></div>
+        </div>
+      </div>
+      <div style="display:flex;gap:12px">
+        <button class="btn" onclick="triggerAutoDock()">Start Docking</button>
+        <button class="btn btn-ghost" onclick="apiCall('/api/dock/cancel')">Cancel</button>
+      </div>
+    </div>
+
+    <!-- VISION -->
+    <div class="page" id="page-vision">
+      <div class="card">
+        <div class="card-header">Live Feed</div>
+        <div class="card-body" style="padding:8px">
+          <div class="fpv-container">
+            <img id="fpv-img" src="" alt="FPV stream" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+            <div id="fpv-placeholder" style="display:flex;flex-direction:column;align-items:center;color:var(--txt-dim);font-size:0.85rem">
+              <span style="font-size:2rem;margin-bottom:8px">📷</span>No stream available
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-small" onclick="snapshot()">Snapshot</button>
+        <button class="btn btn-small btn-ghost" onclick="toggleNightMode()">Night mode</button>
+      </div>
+      <div class="card">
+        <div class="card-header">AI Scene</div>
+        <div class="card-body"><div id="vision-scene" class="value dim">-</div></div>
+      </div>
+    </div>
+
+    <!-- AUDIO -->
+    <div class="page" id="page-audio">
+      <div class="card">
+        <div class="card-header">Soundboard</div>
+        <div class="card-body" style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-small" onclick="playSound('beep')">Beep</button>
+          <button class="btn btn-small" onclick="playSound('happy')">Happy</button>
+          <button class="btn btn-small" onclick="playSound('sad')">Sad</button>
+          <button class="btn btn-small" onclick="playSound('curious')">Curious</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">Volume</div>
+        <div class="card-body">
+          <input type="range" id="audio-volume" min="0" max="255" value="180" onchange="setVolume(this.value)">
+          <div class="status-row"><span class="label">Level</span><span class="value" id="audio-vol-val">180</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI / PERSONALITY -->
+    <div class="page" id="page-ai">
+      <div class="card">
+        <div class="card-header">Behaviour Mode</div>
+        <div class="card-body">
+          <select id="ai-mode" onchange="setBehaviourMode(this.value)">
+            <option value="curious">Curious</option><option value="happy">Happy</option><option value="shy">Shy</option>
+            <option value="tired">Tired</option><option value="excited">Excited</option>
+          </select>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">Personality</div>
+        <div class="card-body">
+          <div class="form-group"><label>Curiosity</label><input type="range" id="ai-curiosity" min="0" max="100" value="50"></div>
+          <div class="form-group"><label>Energy</label><input type="range" id="ai-energy" min="0" max="100" value="70"></div>
+          <div class="status-row"><span class="label">Learning</span><span class="value"><input type="checkbox" id="ai-learning" checked></span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MISSIONS -->
+    <div class="page" id="page-missions">
+      <div class="card">
+        <div class="card-header">Mission List</div>
+        <div class="card-body">
+          <div id="mission-list">
+            <div class="status-row"><span class="label">Patrol</span><button class="btn btn-small" onclick="runMission('patrol')">Run</button></div>
+            <div class="status-row"><span class="label">Return Home</span><button class="btn btn-small" onclick="runMission('rth')">Run</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TELEMETRY -->
+    <div class="page" id="page-telemetry">
+      <div class="card">
+        <div class="card-header">IMU</div>
+        <div class="card-body">
+          <div class="status-row"><span class="label">Heading</span><span class="value" id="tel-heading">-</span></div>
+          <div class="status-row"><span class="label">Pitch/Roll</span><span class="value" id="tel-orient">-</span></div>
+          <button class="btn btn-small btn-ghost" onclick="apiCall('/imu/recalibrate')">Recalibrate</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">Obstacle Sensors</div>
+        <div class="card-body">
+          <div class="status-row"><span class="label">Sonar</span><span class="value" id="tel-sonar">-</span></div>
+          <div class="progress-bar" style="margin:8px 0"><div class="progress-fill" id="tel-sonar-bar" style="width:100%"></div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">GPS</div>
+        <div class="card-body">
+          <div class="status-row"><span class="label">Fix</span><span class="value" id="tel-gps">-</span></div>
+          <div class="status-row"><span class="label">Satellites</span><span class="value" id="tel-sats">-</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- POWER -->
+    <div class="page" id="page-power">
+      <div class="card">
+        <div class="card-header">Battery</div>
+        <div class="card-body">
+          <div class="status-row"><span class="label">Voltage</span><span class="value" id="pwr-voltage">-</span></div>
+          <div class="status-row"><span class="label">Est. runtime</span><span class="value" id="pwr-runtime">-</span></div>
+          <div class="progress-bar" style="margin:8px 0"><div class="progress-fill" id="pwr-bar" style="width:80%"></div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">Sleep</div>
+        <div class="card-body">
+          <button class="btn btn-ghost" onclick="apiCall('/api/sleep')">Enter Sleep</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- NETWORK -->
+    <div class="page" id="page-network">
+      <div class="card">
+        <div class="card-header">Network Topology</div>
+        <div class="card-body" style="padding:12px">
+          <svg class="topology-svg" id="topology-svg" viewBox="0 0 320 160">
+            <rect width="320" height="160" fill="var(--surface)"/>
+            <circle cx="160" cy="50" r="24" fill="var(--surface2)" stroke="var(--accent)" stroke-width="2"/>
+            <text x="160" y="55" text-anchor="middle" fill="var(--txt)" font-size="10">WALL-E</text>
+            <line x1="120" y1="74" x2="80" y2="120" stroke="var(--border2)" stroke-width="2"/>
+            <line x1="160" y1="74" x2="160" y2="120" stroke="var(--border2)" stroke-width="2"/>
+            <line x1="200" y1="74" x2="240" y2="120" stroke="var(--border2)" stroke-width="2"/>
+            <circle cx="80" cy="130" r="18" fill="var(--surface2)" stroke="var(--ok)" stroke-width="1"/>
+            <text x="80" y="135" text-anchor="middle" fill="var(--txt)" font-size="8">Dock</text>
+            <circle cx="160" cy="130" r="18" fill="var(--surface2)" stroke="var(--ok)" stroke-width="1"/>
+            <text x="160" y="135" text-anchor="middle" fill="var(--txt)" font-size="8">CYD</text>
+            <circle cx="240" cy="130" r="18" fill="var(--surface2)" stroke="var(--txt-dim)" stroke-width="1"/>
+            <text x="240" y="135" text-anchor="middle" fill="var(--txt-dim)" font-size="8">Vision</text>
+          </svg>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">Wi‑Fi Status</div>
+        <div class="card-body">
+          <div class="status-row"><span class="label">AP</span><span class="value" id="net-ap">WALL-E-Control</span></div>
+          <div class="status-row"><span class="label">Home</span><span class="value dim" id="net-sta">Not connected</span></div>
+          <button class="btn btn-small" onclick="showNetworkForm()">Connect to network</button>
+        </div>
+      </div>
+      <div class="card" id="network-form-card" style="display:none">
+        <div class="card-header">Connect</div>
+        <div class="card-body">
+          <div class="form-group"><label>Network</label><input type="text" id="net-ssid" placeholder="SSID"></div>
+          <div class="form-group"><label>Password</label><input type="password" id="net-pass" placeholder="Password"></div>
+          <div id="network-list" class="net-list"></div>
+          <button class="btn btn-small btn-ghost" onclick="doScan()" style="margin-bottom:8px">Scan</button>
+          <button class="btn" onclick="doConnect()">Connect</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- FILES -->
+    <div class="page" id="page-files">
+      <div class="card">
+        <div class="card-header">Storage</div>
+        <div class="card-body">
+          <div id="file-list" class="log-list">
+            <div class="log-item value dim">No file API - use /api/files/list</div>
+          </div>
+          <button class="btn btn-small" onclick="refreshFiles()" style="margin-top:8px">Refresh</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SAFETY -->
+    <div class="page" id="page-safety">
+      <div class="card">
+        <div class="card-header">Emergency</div>
+        <div class="card-body">
+          <button class="btn btn-stop" onclick="doEStop()">Emergency Stop</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">Safety</div>
+        <div class="card-body">
+          <div class="status-row"><span class="label">Child-safe</span><span class="value"><input type="checkbox" id="safety-child"></span></div>
+          <div class="status-row"><span class="label">Geo-fence</span><span class="value dim">-</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LOGS -->
+    <div class="page" id="page-logs">
+      <div class="card">
+        <div class="card-header">Activity Timeline</div>
+        <div class="card-body">
+          <div id="log-list" class="log-list">
+            <div class="log-item"><span class="log-time">--:--</span>System ready</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECURITY -->
+    <div class="page" id="page-security">
+      <div class="card">
+        <div class="card-header">Access</div>
+        <div class="card-body">
+          <div class="status-row"><span class="label">Trusted devices</span><span class="value dim">-</span></div>
+          <button class="btn btn-small btn-ghost">Add device</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- DEVELOPER -->
+    <div class="page" id="page-developer">
+      <div class="card">
+        <div class="card-header">API Endpoints</div>
+        <div class="card-body" style="font-size:0.75rem;font-family:monospace">
+          <div>/drive?left=&right=</div><div>/stop</div><div>/speed?value=</div><div>/wifi/status</div><div>/wifi/scan</div><div>/wifi/connect</div>
+          <div>/api/autonomy</div><div>/api/autonomy/enable</div><div>/api/autonomy/set_home</div>
+          <div>/imu/status</div><div>/battery/status</div><div>/servo/set</div><div>/settings</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">Raw Command</div>
+        <div class="card-body">
+          <input type="text" id="dev-cmd" placeholder="/api/autonomy" style="margin-bottom:8px">
+          <button class="btn btn-small" onclick="devFetch()">GET</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MORE (nav grid) -->
+    <div class="page" id="page-more">
+      <div class="nav-grid">
+        <a class="nav-tile" href="#" onclick="switchTab('navigation');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>Navigation</a>
+        <a class="nav-tile" href="#" onclick="switchTab('vision');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>Vision</a>
+        <a class="nav-tile" href="#" onclick="switchTab('audio');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>Audio</a>
+        <a class="nav-tile" href="#" onclick="switchTab('ai');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 2a10 10 0 0 1 10 10c0 5.5-4.5 10-10 10S2 17.5 2 12 6.5 2 12 2z"/><circle cx="12" cy="12" r="2"/></svg>AI</a>
+        <a class="nav-tile" href="#" onclick="switchTab('missions');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Missions</a>
+        <a class="nav-tile" href="#" onclick="switchTab('telemetry');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>Telemetry</a>
+        <a class="nav-tile" href="#" onclick="switchTab('power');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>Power</a>
+        <a class="nav-tile" href="#" onclick="switchTab('files');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>Files</a>
+        <a class="nav-tile" href="#" onclick="switchTab('safety');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Safety</a>
+        <a class="nav-tile" href="#" onclick="switchTab('logs');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>Logs</a>
+        <a class="nav-tile" href="#" onclick="switchTab('security');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Security</a>
+        <a class="nav-tile" href="#" onclick="switchTab('developer');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>Developer</a>
+      </div>
+    </div>
+  </main>
+
+  <footer id="estop-bar">
+    <button id="estop-btn" type="button" onclick="doEStop()">E-STOP</button>
+  </footer>
+</div>
+
+<div id="toast-stack" aria-live="polite"></div>
+
+<script src="js/lros.js"></script>
+</body>
+</html>

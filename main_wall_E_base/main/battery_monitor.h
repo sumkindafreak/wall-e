@@ -14,7 +14,8 @@
 #include <Arduino.h>
 
 // --- Voltage: 5V rail sensor → divider → ADC ---
-#define BAT_ADC_PIN     1       // GPIO 1
+// 1=U0TXD 4-9=motors 10=used. GPIO 19 free (ADC2).
+#define BAT_ADC_PIN     19
 #define VOLTAGE_SENSOR_OUTPUT_MAX_V  5.0f   // Sensor outputs 5V when 5V rail is 5V
 
 // Divider on voltage sensor (5V max → 3.3V at ADC). R1=10k sensor→ADC, R2=20k ADC→GND
@@ -24,8 +25,8 @@
 // --- 5V rail parameters (what you're measuring) ---
 #define BATTERY_MAX_V   5.2f    // 5V rail healthy (slight headroom)
 #define BATTERY_MIN_V   4.0f    // 5V rail low / regulator dropout
-// Calibrated: display was 4.00V, multimeter 4.91V → BAT_V_CALIB = 4.91/4.0
-#define BAT_V_CALIB     (4.91f/4.0f)
+// Calibration: display showed 4.0V, multimeter 4.92V. Pre-calib value was ~3.26V so scale to 4.92.
+#define BAT_V_CALIB     (4.92f/3.26f)
 
 // --- Current: 12V-line sensor (same battery, measures amps) ---
 #define CUR_ADC_PIN     2       // GPIO 2

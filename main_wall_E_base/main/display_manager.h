@@ -47,3 +47,6 @@ void displaySetStick(float jx, float jy);  // -1..1 tank stick position for smoo
 void displayUpdateWifi();
 void displayUpdateBattery();
 void displayHandle();
+
+/* Toast message (e.g. "Going to dock…", "Dock cancelled") — shown 2s */
+void displayShowToast(const char* msg);

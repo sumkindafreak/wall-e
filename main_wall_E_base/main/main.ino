@@ -15,6 +15,15 @@
 #include "battery_monitor.h"
 #include "flashlight_control.h"
 #include "espnow_receiver.h"
+#include "vl53l1x_tof.h"
+#include "dock_sensors.h"
+#include "dock_homing.h"
+#include "autonomous_docking.h"
+#include "ir_beacon_receivers.h"
+#include "dock_controller.h"
+#include "dock_config.h"
+#include "vision_behaviour.h"
+#include "audio_espnow.h"
 
 // NEW: Autonomy and behavioral brain includes
 #include "sonar_sensor.h"
@@ -107,20 +116,47 @@ void setup() {
 
   // Battery monitor
   batteryInit();
+  Serial.println("[Setup] Post-battery");
   displayUpdateBattery();
+
+  // Dock system: sensors, homing. ToF deferred (can block if sensor absent)
+  dockSensorsBegin();
+  Serial.println("[Setup] Post-dockSensors");
 
   // WiFi — AP starts immediately
   wifiManagerInit();
   displayUpdateWifi();
+  Serial.println("[Setup] Post-wifi");
 
   // Web server
   webServerInit();
+  Serial.println("[Setup] Post-webServer");
 
   // ESP-NOW receiver (CYD controller)
   espnowReceiverInit();
+  Serial.println("[Setup] Post-espnow");
+  audioEspNowInit();
+  Serial.println("[Setup] Post-audioEspNow");
+
+  // Vision behaviour (servo tracking from camera node ESP-NOW packets)
+  visionBehaviourInit();
+  Serial.println("[Setup] Post-visionBehaviour");
+
+  // Dock controller (ESP-NOW commands to dock, e.g. REQUEST_CHARGE)
+  dockControllerInit();
+  Serial.println("[Setup] Post-dockController");
+
+  // IR beacon receivers for dock alignment
+  irBeaconInit();
+  Serial.println("[Setup] Post-irBeacon");
+
+  // Autonomous docking state machine
+  autonomousDockingInit();
+  Serial.println("[Setup] Post-autonomousDocking");
 
   // LDR + MOSFET flashlight (on when dark)
   flashlightInit();
+  Serial.println("[Setup] Post-flashlight");
 
   lastCommandMillis = millis();
   Serial.println("[WALL-E] Ready");
@@ -133,7 +169,9 @@ unsigned long lastTelemSendMs = 0;
 #define TELEM_SEND_INTERVAL_MS 100  // 10 Hz telemetry updates
 
 void loop() {
+  delay(1);  /* Yield first — prevents TG1WDT before any blocking */
   unsigned long now = millis();
+  yield();
   
   // WiFi state polling
   WiFiState prevState = wifiGetState();
@@ -145,6 +183,9 @@ void loop() {
 
   // Servo velocity interpolation
   servoHandle();
+
+  // Vision behaviour (scan/timeouts when no motion; uses packets from ESP-NOW callback)
+  visionBehaviourUpdate(now);
 
   // IMU: update (runs calibration until done, then provides offset-corrected data)
   updateIMU();
@@ -183,6 +224,36 @@ void loop() {
   // Battery polling (rate-limited internally to 10s); refresh TFT when we have a new reading
   if (batteryHandle()) displayUpdateBattery();
 
+  // Dock: ToF (lazy init on first call), sensors
+  static bool tofTried = false;
+  if (!tofTried) { tofTried = true; tofInit(); }
+  tofUpdate(now);
+  dockSensorsUpdate();
+  irBeaconUpdate(now);
+
+#if USE_AUTONOMOUS_DOCKING
+  // Autonomous docking FSM (IDLE→SEARCH→ALIGN→APPROACH→DOCKED→CHARGING)
+  autonomousDockingUpdate(now);
+  if (autonomousDockingIsActive()) {
+    int16_t left, right;
+    if (autonomousDockingGetMotorOutput(&left, &right)) {
+      motorSetLeftRight(left, right);
+      lastCommandMillis = now;
+    }
+  }
+#else
+  // Legacy dock homing (RSSI-based)
+  dockHomingCheckAutoReturn(now);
+  dockHomingUpdate(now);
+  if (dockHomingIsActive()) {
+    int16_t left, right;
+    if (dockHomingGetMotorOutput(&left, &right)) {
+      motorSetLeftRight(left, right);
+      lastCommandMillis = now;
+    }
+  }
+#endif
+
   // LDR: turn flashlight on when dark
   flashlightHandle();
 
@@ -201,4 +272,7 @@ void loop() {
     displaySetCommand(CMD_IDLE);
     lastCommandMillis = now;
   }
+
+  delay(1);  /* Yield — prevents TG1WDT_SYS_RST */
+  yield();
 }

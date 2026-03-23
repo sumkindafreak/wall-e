@@ -20,3 +20,9 @@ bool dockControllerSendWifiConfig(const char* ssid, const char* pass, uint32_t d
 
 /* Share current time with dock (Unix timestamp). Call when NTP synced. */
 bool dockControllerSendTime(uint32_t unix_time, uint32_t dock_id);
+
+/* Request charge — dock enables charging MOSFET when beam broken. */
+bool dockControllerSendRequestCharge(uint32_t dock_id);
+
+/* Approach stage — dock uses for arrow staging (FAR/1m/20cm). */
+bool dockControllerSendApproachStage(uint8_t stage, uint32_t dock_id);

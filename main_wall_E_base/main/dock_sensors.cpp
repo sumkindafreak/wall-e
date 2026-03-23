@@ -7,6 +7,7 @@
 #include <Arduino.h>
 
 bool gDockingEnabled = false;
+static bool s_begun = false;
 
 /*=============================================================================
  * DEBOUNCE STATE
@@ -33,6 +34,8 @@ static bool readWithInvert(int pin, bool invert) {
 }
 
 void dockSensorsBegin(void) {
+  if (s_begun) return;
+#ifndef DISABLE_DOCK_SENSORS
   pinMode(PIN_DOCK_IR_BEAM, INPUT_PULLUP);
   pinMode(PIN_OBS_FRONT_L, INPUT_PULLUP);
   pinMode(PIN_OBS_FRONT_R, INPUT_PULLUP);
@@ -58,6 +61,10 @@ void dockSensorsBegin(void) {
   g_last_front = obstacleFrontBlocked();
   g_last_rear = obstacleRearBlocked();
   g_last_any = anyObstacleBlocked();
+#else
+  /* DISABLE_DOCK_SENSORS: skip GPIO 33/34 (reserved on S3 Octal PSRAM) */
+#endif
+  s_begun = true;
 }
 
 static void applyDebounce(bool raw, bool& stable, uint32_t& since, bool& last_raw, uint32_t now) {
@@ -71,6 +78,8 @@ static void applyDebounce(bool raw, bool& stable, uint32_t& since, bool& last_ra
 }
 
 void dockSensorsUpdate(void) {
+  if (!s_begun) return;
+#ifndef DISABLE_DOCK_SENSORS
   uint32_t now = millis();
 
   g_beam_raw = readWithInvert(PIN_DOCK_IR_BEAM, INVERT_DOCK_IR_BEAM);
@@ -85,27 +94,69 @@ void dockSensorsUpdate(void) {
   applyDebounce(g_fr_raw, g_fr_stable, g_fr_since, g_fr_last, now);
   applyDebounce(g_rl_raw, g_rl_stable, g_rl_since, g_rl_last, now);
   applyDebounce(g_rr_raw, g_rr_stable, g_rr_since, g_rr_last, now);
+#endif
 }
 
 bool dockBeamPresent(void) {
+  if (!s_begun) return false;
+#ifdef DISABLE_DOCK_SENSORS
+  return false;
+#else
   return g_beam_stable;
+#endif
 }
 
 bool obstacleFrontBlocked(void) {
+#ifdef DISABLE_DOCK_SENSORS
+  return false;
+#else
   return g_fl_stable || g_fr_stable;
+#endif
 }
 
-bool dockObstacleFL(void)  { return g_fl_stable; }
-bool dockObstacleFR(void)  { return g_fr_stable; }
-bool dockObstacleRL(void)  { return g_rl_stable; }
-bool dockObstacleRR(void)  { return g_rr_stable; }
+bool dockObstacleFL(void)  {
+#ifdef DISABLE_DOCK_SENSORS
+  return false;
+#else
+  return g_fl_stable;
+#endif
+}
+bool dockObstacleFR(void)  {
+#ifdef DISABLE_DOCK_SENSORS
+  return false;
+#else
+  return g_fr_stable;
+#endif
+}
+bool dockObstacleRL(void)  {
+#ifdef DISABLE_DOCK_SENSORS
+  return false;
+#else
+  return g_rl_stable;
+#endif
+}
+bool dockObstacleRR(void)  {
+#ifdef DISABLE_DOCK_SENSORS
+  return false;
+#else
+  return g_rr_stable;
+#endif
+}
 
 bool obstacleRearBlocked(void) {
+#ifdef DISABLE_DOCK_SENSORS
+  return false;
+#else
   return g_rl_stable || g_rr_stable;
+#endif
 }
 
 bool anyObstacleBlocked(void) {
+#ifdef DISABLE_DOCK_SENSORS
+  return false;
+#else
   return g_fl_stable || g_fr_stable || g_rl_stable || g_rr_stable;
+#endif
 }
 
 void dockSensorsDebugPrint(uint32_t intervalMs) {

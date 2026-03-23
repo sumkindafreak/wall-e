@@ -1,11 +1,11 @@
 /**
  * WALL-E Vision Node - Arduino IDE
- * ESP32-S3-CAM N16R8 + OV2640
+ * ESP32-CAM (AI-Thinker) + OV2640
  * Motion detection, clustering, centroid, ESP-NOW to base brain.
  * SD card (rear slot): optional logging to /motion_log.csv
  *
- * Board: ESP32S3 Dev Module
- * Flash: 16MB, PSRAM: OPI PSRAM
+ * Board: ESP32-CAM (AI-Thinker)
+ * Flash/PSRAM: per module (typ. 4MB flash + PSRAM)
  */
 
 #include "esp_camera.h"
@@ -21,24 +21,24 @@
 #define FRAME_H    120
 #define XCLK_FREQ  20000000
 
-/* ESP32-S3-CAM N16R8 + OV2640 (S3N16R8 pinout) */
+/* ESP32-CAM AI-Thinker + OV2640 (matches Arduino ESP32 CAMERA_MODEL_AI_THINKER) */
 camera_config_t camConfig = {
-  .pin_pwdn = -1,
+  .pin_pwdn = 32,
   .pin_reset = -1,
-  .pin_xclk = 15,
-  .pin_sccb_sda = 4,
-  .pin_sccb_scl = 5,
-  .pin_d7 = 16,
-  .pin_d6 = 17,
-  .pin_d5 = 18,
-  .pin_d4 = 12,
-  .pin_d3 = 10,
-  .pin_d2 = 8,
-  .pin_d1 = 9,
-  .pin_d0 = 11,
-  .pin_vsync = 6,
-  .pin_href = 7,
-  .pin_pclk = 13,
+  .pin_xclk = 0,
+  .pin_sccb_sda = 26,
+  .pin_sccb_scl = 27,
+  .pin_d7 = 35,
+  .pin_d6 = 34,
+  .pin_d5 = 39,
+  .pin_d4 = 36,
+  .pin_d3 = 21,
+  .pin_d2 = 19,
+  .pin_d1 = 18,
+  .pin_d0 = 5,
+  .pin_vsync = 25,
+  .pin_href = 23,
+  .pin_pclk = 22,
   .xclk_freq_hz = XCLK_FREQ,
   .ledc_timer = LEDC_TIMER_0,
   .ledc_channel = LEDC_CHANNEL_0,
@@ -53,11 +53,8 @@ MotionDetect s_motion;
 uint8_t* s_prevFrame = nullptr;
 uint32_t s_frameCount = 0;
 
-/* SD card - rear slot, 1-bit SDMMC. If your board uses different pins, change these. */
+/* SD card - ESP32-CAM on-board µSD (1-bit SDMMC using default pins). */
 #define SD_LOG_ENABLE    1   /* 1 = log motion events to SD */
-#define SD_PIN_CLK       39
-#define SD_PIN_CMD       40
-#define SD_PIN_D0        38
 static bool s_sdOk = false;
 static uint32_t s_sdLogInterval = 0;
 
@@ -67,11 +64,11 @@ static uint32_t s_sdLogInterval = 0;
 static WebServer s_httpServer(80);
 static uint32_t s_visionNodeIp = 0;
 
-/* Onboard standard RGB LED - 3 GPIOs with PWM. (Avoid 1,3 = UART). Adjust for your board. */
+/* Onboard status LED — ESP32-CAM has a single LED on GPIO33. */
 #define LED_ENABLE       1
-#define LED_PIN_R        21
-#define LED_PIN_G        47
-#define LED_PIN_B        48
+#define LED_PIN_R        33
+#define LED_PIN_G        33
+#define LED_PIN_B        33
 #define LED_BRIGHTNESS   128
 #define LEDC_FREQ        5000
 #define LEDC_RES         8
@@ -93,13 +90,9 @@ bool camInit(void) {
 }
 
 bool sdInit(void) {
-  /* 1-bit mode for ESP32-S3-CAM N16R8 rear microSD slot */
-  if (!SD_MMC.setPins(SD_PIN_CLK, SD_PIN_CMD, SD_PIN_D0)) {
-    Serial.println("[SD] setPins failed");
-    return false;
-  }
-  if (!SD_MMC.begin()) {
-    Serial.println("[SD] Mount failed (no card or bad pins)");
+  /* ESP32-CAM on-board SD: use default SD_MMC pins, 1-bit mode. */
+  if (!SD_MMC.begin("/sdcard", true)) {
+    Serial.println("[SD] Mount failed (no card or bad wiring)");
     return false;
   }
   uint8_t cardType = SD_MMC.cardType();
@@ -204,6 +197,9 @@ void setup() {
     Serial.println("[Vision] ESP-NOW failed, continuing...");
   }
   wifiInit();
+
+  s_sdOk = sdInit();
+  if (!s_sdOk) Serial.println("[Vision] SD not available (logging disabled)");
 
   s_prevFrame = (uint8_t*)malloc(FRAME_W * FRAME_H);
   if (!s_prevFrame) {

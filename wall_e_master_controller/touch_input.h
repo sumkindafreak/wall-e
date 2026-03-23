@@ -66,7 +66,9 @@ typedef enum {
   TOUCH_ZONE_ANIM_4,           // Animation 4 (EyebrowLeft)
   TOUCH_ZONE_ANIM_5,           // Animation 5 (Surprised)
   TOUCH_ZONE_NAV_AUTONOMY,     // NEW: Navigate to Autonomy page
-  TOUCH_ZONE_AUTONOMY_TOGGLE   // NEW: Toggle autonomy enable/disable
+  TOUCH_ZONE_AUTONOMY_TOGGLE,  // NEW: Toggle autonomy enable/disable
+  TOUCH_ZONE_DOCK_GO,          // Go to dock (sends ACTION_DOCK_GO)
+  TOUCH_ZONE_DOCK_CANCEL       // Cancel dock homing (sends ACTION_DOCK_CANCEL)
 } TouchZone;
 
 #define LONG_PRESS_MS  2000

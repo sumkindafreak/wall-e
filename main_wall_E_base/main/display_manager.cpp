@@ -62,6 +62,9 @@ static bool         _cmdDirty = true, _spdDirty = true, _batDirty = true, _wifiD
 static unsigned long _lastDraw = 0;
 #define DRAW_INTERVAL_MS  80
 
+static char         _toastBuf[48] = "";
+static unsigned long _toastUntil = 0;
+
 // ============================================================
 //  Helpers — text with datum (Adafruit_GFX has setCursor + print)
 // ============================================================
@@ -309,6 +312,30 @@ void displaySetStick(float jx, float jy) {
 void displayUpdateWifi()  { _wifiDirty = true; }
 void displayUpdateBattery() { _batDirty = true; }
 
+void displayShowToast(const char* msg) {
+  if (!msg) return;
+  strncpy(_toastBuf, msg, sizeof(_toastBuf) - 1);
+  _toastBuf[sizeof(_toastBuf) - 1] = '\0';
+  _toastUntil = millis() + 2000;
+  _cmdDirty = true;  /* Trigger redraw so toast visible */
+}
+
+static void drawToast() {
+  if (_toastUntil == 0 || millis() >= _toastUntil) return;
+  if (_toastBuf[0] == '\0') return;
+  int th = 24;
+  int ty = H - th - 8;
+  tft->fillRoundRect(12, ty, SPR_W, th, 6, C_SURFACE2);
+  tft->drawRoundRect(12, ty, SPR_W, th, 6, C_BORDER);
+  tft->setTextColor(C_TXT, C_SURFACE2);
+  tft->setTextSize(1);
+  int16_t x1, y1;
+  uint16_t tw, th2;
+  tft->getTextBounds(_toastBuf, 0, 0, &x1, &y1, &tw, &th2);
+  tft->setCursor(12 + (SPR_W - tw) / 2, ty + (th - th2) / 2);
+  tft->print(_toastBuf);
+}
+
 void displayHandle() {
   if (!_cmdDirty && !_spdDirty && !_batDirty && !_wifiDirty) return;
   if ((millis() - _lastDraw) < DRAW_INTERVAL_MS) return;
@@ -318,4 +345,5 @@ void displayHandle() {
   if (_spdDirty)  { redrawSpeed();    _spdDirty  = false; }
   if (_batDirty)  { redrawBattery();  _batDirty  = false; }
   if (_wifiDirty) { redrawWifi();     _wifiDirty = false; }
+  drawToast();
 }

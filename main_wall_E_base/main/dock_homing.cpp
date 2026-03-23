@@ -4,6 +4,7 @@
 
 #include "dock_homing.h"
 #include "dock_sensors.h"
+#include "vl53l1x_tof.h"
 #include "motor_control.h"
 #include <Arduino.h>
 
@@ -20,6 +21,8 @@
 #define DRIVE_STRAIGHT_MS   800    /* Drive straight before re-seeking */
 #define DOCK_ARRIVED_RSSI   -55    /* Very close; slow down */
 #define SLOW_SPEED          60
+#define TOF_SLOW_MM         200    /* ToF < 200 mm → slow down */
+#define TOF_STOP_MM         80     /* ToF < 80 mm → stop (dock bay) */
 
 enum HomingState {
   HOMING_IDLE,
@@ -105,12 +108,21 @@ bool dockHomingUpdate(uint32_t now) {
     }
   }
 
-  /* Arrived: dock beam broken (robot sensors detect dock zone) */
+  /* Arrived: dock beam broken or ToF very close */
   if (dockBeamPresent()) {
     s_state = HOMING_ARRIVED;
     s_requested = false;
     motorStop();
     return true;
+  }
+  if (tofIsValid()) {
+    uint16_t d = tofGetDistanceMm();
+    if (d > 0 && d < TOF_STOP_MM) {
+      s_state = HOMING_ARRIVED;
+      s_requested = false;
+      motorStop();
+      return true;
+    }
   }
 
   /* SEEK: spin left then right, pick best RSSI direction */
@@ -137,10 +149,14 @@ bool dockHomingUpdate(uint32_t now) {
     return true;
   }
 
-  /* DRIVE: go toward beacon */
+  /* DRIVE: go toward beacon. ToF: slow < 200 mm, stop handled above. */
   if (s_state == HOMING_DRIVE) {
     uint32_t elapsed = now - s_state_enter_ms;
     int speed = (s_last_rssi >= DOCK_ARRIVED_RSSI) ? SLOW_SPEED : HOMING_SPEED;
+    if (tofIsValid()) {
+      uint16_t d = tofGetDistanceMm();
+      if (d > 0 && d < TOF_SLOW_MM) speed = SLOW_SPEED;
+    }
     if (s_last_rssi < RSSI_THRESHOLD && elapsed > 500) {
       /* Lost signal; re-seek */
       s_state = HOMING_SEEK_LEFT;

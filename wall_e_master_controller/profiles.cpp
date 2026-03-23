@@ -325,7 +325,7 @@ void profileToggleFavoriteAnimation(uint8_t animId) {
   
   // Check if animation is already in favorites
   int existingIndex = -1;
-  for (int i = 0; i < 5; i++) {
+  for (int i = 0; i < 6; i++) {
     if (p->favoriteAnimations[i] == animId) {
       existingIndex = i;
       break;
@@ -353,7 +353,7 @@ void profileToggleFavoriteAnimation(uint8_t animId) {
   // Save to Preferences
   char key[20];
   snprintf(key, sizeof(key), "favs_%d", g_currentProfile);
-  prefs.putBytes(key, p->favoriteAnimations, 5);
+  prefs.putBytes(key, p->favoriteAnimations, 6);
 }
 
 void profileLoadFavoriteAnimations() {
@@ -367,7 +367,6 @@ void profileLoadFavoriteAnimations() {
   size_t len = prefs.getBytes(key, loaded, 5);
   
   if (len == 5) {
-    // Loaded successfully
     for (int i = 0; i < 5; i++) {
       p->favoriteAnimations[i] = loaded[i];
     }

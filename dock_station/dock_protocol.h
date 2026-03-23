@@ -39,6 +39,7 @@ typedef struct {
   uint8_t  beam_present;    /* 1 = robot present (beam broken) */
   uint8_t  mouth_blocked;   /* 1 = obstacle detected */
   uint8_t  charge_enabled;  /* 1 = MOSFET on */
+  uint8_t  callout_active;  /* 1 = dock calling WALL-E (toggle switch) */
   int16_t  current_a_x100;  /* Current in A * 100 (e.g. 125 = 1.25A) */
 } DockBeaconPacket_t;
 
@@ -62,12 +63,32 @@ typedef struct {
 #define DOCK_CMD_SIZE  sizeof(DockCommandPacket_t)
 
 enum DockCommand {
-  DOCK_CMD_NONE        = 0,
-  DOCK_CMD_FORCE_OFF   = 1,   /* Force charging off, enter fault */
-  DOCK_CMD_RESET       = 2,   /* Clear fault, return to state machine */
-  DOCK_CMD_WIFI_CONFIG = 3,   /* WiFi credentials from WALL-E */
-  DOCK_CMD_TIME        = 4    /* Unix timestamp from WALL-E */
+  DOCK_CMD_NONE          = 0,
+  DOCK_CMD_FORCE_OFF     = 1,   /* Force charging off, enter fault */
+  DOCK_CMD_RESET         = 2,   /* Clear fault, return to state machine */
+  DOCK_CMD_WIFI_CONFIG   = 3,   /* WiFi credentials from WALL-E */
+  DOCK_CMD_TIME          = 4,   /* Unix timestamp from WALL-E */
+  DOCK_CMD_REQUEST_CHARGE = 5,  /* WALL-E requests charge when docked */
+  DOCK_CMD_APPROACH_STAGE = 6   /* WALL-E reports approach stage for arrow staging */
 };
+
+/* Approach stages: 5m → ESP-NOW homing, 1m → arrows on, 20cm → precision, beam → lock */
+enum DockApproachStage {
+  APPROACH_FAR      = 0,   /* >1m: arrows off or slow "ready" pulse */
+  APPROACH_1M       = 1,   /* 200mm–1m: arrows activate (guiding) */
+  APPROACH_20CM     = 2,   /* 60–200mm: precision alignment (faster blink) */
+  APPROACH_DOCKED   = 3    /* beam broken: both solid (also set by dock locally) */
+};
+
+typedef struct {
+  uint32_t magic;    /* DOCK_CMD_MAGIC */
+  uint32_t dock_id;  /* Target dock (0 = any) */
+  uint8_t  cmd;      /* DOCK_CMD_APPROACH_STAGE */
+  uint8_t  stage;    /* DockApproachStage */
+  uint8_t  pad[2];
+} DockApproachStagePacket_t;
+
+#define DOCK_APPROACH_STAGE_SIZE  sizeof(DockApproachStagePacket_t)
 
 /* Time packet (cmd = DOCK_CMD_TIME) — sent by WALL-E */
 typedef struct {
