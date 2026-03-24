@@ -1,50 +1,46 @@
-# WALL-E Audio / Voice / Dock Sensor Brain
+# Audio Node (`audio_esp`)
 
-Dedicated ESP32-S3 firmware for the Audio ESP module. This board handles audio playback, microphones, voice commands, and IR dock receivers. It communicates with the main Base ESP32-S3 via **ESP-NOW**.
+Dedicated **ESP32-S3** sketch for the WALL-E **audio** subsystem: playback, voice, and ESP-NOW coordination with the base. Uses **DFRobot DFPlayer Mini** (see `platformio.ini`) and shared headers from **`../wall_e_audio`**.
 
-**Rule:** This board never controls drive motors. It only senses, interprets, plays sound, and reports.
+## Purpose
 
-## Quick Start
+- Offload audio from the base so motor RT and sound do not share one core’s worst-case latency.
+- Emit **audio-related** ESP-NOW packets / status (see `audio_protocol.h`, `espnow_manager`).
 
-### PlatformIO
+## Hardware
+
+- **Board:** `esp32-s3-devkitc-1` (see `platformio.ini`).
+- **Audio:** DFPlayer Mini + SD card, or project-specific wiring documented in `audio_esp.ino`.
+
+## Dependencies
+
+- PlatformIO, `espressif32`, Arduino.
+- **DFRobotDFPlayerMini** library.
+- **Include path:** `-I ../wall_e_audio` for shared protocol headers.
+
+## Build & flash
 
 ```bash
 cd audio_esp
-pio run
-pio run -t upload
+pio run -e esp32-s3-devkitc-1
+pio run -e esp32-s3-devkitc-1 -t upload
 ```
 
-### Arduino IDE
+## Node ID / MAC
 
-1. Install **DFRobotDFPlayerMini** via Library Manager (Sketch → Include Library → Manage Libraries).
-2. Open `audio_esp/audio_esp.ino`.
-3. Select board: **ESP32S3 Dev Module** (or your board).
-4. Ensure `wall_e_audio` folder (sibling to `audio_esp`) contains `audio_protocol.h`.
-5. Verify and upload.
+- **Node health:** `WALLE_NODE_AUDIO` (`2`) — see [node_health_protocol.h](node_health_protocol.h) (copy; keep in sync with base).
 
-## Pin Configuration
+## Communication with master controller
 
-Edit `pins.h` with your final GPIO assignments. Defaults:
+- **Indirect:** Master talks to **base**; base may forward or subscribe to audio node traffic via ESP-NOW.
+- **Channel:** Must match the **base Wi-Fi channel** for reliable ESP-NOW.
 
-| Function        | Pin |
-|-----------------|-----|
-| DFPlayer TX     | 17  |
-| DFPlayer RX     | 18  |
-| Left Mic (ADC)  | 4   |
-| Right Mic (ADC) | 5   |
-| IR Dock Left    | 6   |
-| IR Dock Right   | 7   |
-| Status LED      | 8   |
+## Calibration
 
-**Base link:** ESP-NOW on WiFi channel 11 (no UART pins).
+- **DFPlayer:** UART baud (default 9600), busy pin, volume curve.
+- **SD card:** File naming and folder layout per DFPlayer docs.
 
-## Protocol
+## Related
 
-- **Incoming:** `WalleAudioCommandPacket_t` (play track, volume, stop) from Base.
-- **Outgoing:** `WalleAudioMicTelemPacket_t` (ear levels), `WalleAudioStatusPacket_t` (mic dir, dock IR, mode, fault).
-
-See `ARCHITECTURE.md` and `wall_e_audio/audio_protocol.h` for details.
-
-## SD Card (DFPlayer)
-
-Place MP3 files on the SD card as `001.mp3`, `002.mp3`, etc. Track IDs are defined in `config.h` (e.g. TRACK_STARTUP=1, TRACK_HELLO=2, ...).
+- [../ARCHITECTURE.md](../ARCHITECTURE.md)  
+- [../lib/walle_audio_events/walle_audio_events.h](../lib/walle_audio_events/walle_audio_events.h)  

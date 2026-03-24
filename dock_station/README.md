@@ -1,91 +1,74 @@
-# Smart Charging Crate v1.1
+# Dock Station (Smart Charging Crate)
 
-WALL-E docking station — **permanent connectivity base**. Connects to home WiFi, broadcasts ESP-NOW beacon for homing, detects dock presence via IR beam, controls charging via MOSFET, and drives NeoPixel status LEDs. WALL-E's home = the dock location.
+**ESP32-S3** “home base” for WALL-E: **charging control**, **current sense**, **dock presence** (VL6180 ToF, optional IR beam, obstacles), **IR alignment receivers**, **arrow guides**, **NeoPixel + TFT status**, **ESP-NOW beacon** for homing, optional **home Wi-Fi** and **OTA**.
 
-## Hardware
+## Purpose
 
-| Component        | Pin | Notes                    |
-|------------------|-----|--------------------------|
-| MOSFET gate      | 25  | Charge enable            |
-| ACS712 ADC       | 34  | Current sense (ADC1)     |
-| IR beam sensor   | 27  | Beam broken = present    |
-| Obstacle 1–4     | 14, 13, 33, 32 | Optional  |
-| NeoPixel data    | 2   | WS2812/WS2812B           |
-| **Align left**   | 26  | IR sensor (left side)    |
-| **Align right**  | 35  | IR sensor (right side, input-only) |
-| **Arrow left**   | 19  | MOSFET → LED strip       |
-| **Arrow right**  | 18  | MOSFET → LED strip       |
-| **Internal LED** | 21  | MOSFET → interior light  |
-| **Call switch**  | 15  | Toggle to call WALL-E (LOW = calling) |
-| **OLED SDA**     | 22  | SSD1306 I2C data (when USE_OLED=1)   |
-| **OLED SCL**     | 23  | SSD1306 I2C clock (often labeled SCK)|
+- Safe **MOSFET** charge enable with **ACS712** feedback and state machine (not docked → idle → charging → charged / fault).
+- **Beacon** at ~10 Hz: `DockBeaconPacket_t` including **`ir_align_hint`** when IR guidance is active (see [dock_protocol.h](dock_protocol.h)).
+- **IR alignment:** TSOP-style **receivers** on **`PIN_ALIGN_LEFT` / `PIN_ALIGN_RIGHT`** — **LOW = IR seen**; WALL-E carries **modulated IR TX** on its side.
+- **Approach staging** from WALL-E (`DOCK_CMD_APPROACH_STAGE`) with sensor fallback after timeout.
 
-## OLED Display (optional)
+**Authoritative pins:** [dock_config.h](dock_config.h) (summary comment block at top). Older pin tables in wiki or chat may be **wrong** — trust the header.
 
-Set `USE_OLED 1` in `dock_config.h`. 0.91" SSD1306 128×32 I2C at 0x3C. Shows:
-- State (NOT_DOCKED, CHARGING, FAULT, etc.)
-- Current (A)
-- Beam / Blocked status
-- MOSFET on/off
-- WiFi IP when connected
+## Hardware (summary)
 
-## Call WALL-E Switch
+| Area | Typical |
+|------|---------|
+| MCU | ESP32-S3 (e.g. N16R8) |
+| Charge | N-MOSFET on `PIN_MOSFET_GATE` |
+| Current | ACS712 on `PIN_ACS712_ADC` |
+| ToF | VL6180X I2C — `PIN_VL6180_SDA` / `PIN_VL6180_SCL` |
+| Alignment IR | Left/right digital inputs (TSOP) |
+| Break-beam | Optional `PIN_IR_BEAM` (separate from alignment) |
+| User I/O | Call switch, arrow MOSFETs, NeoPixel data, TFT SPI |
+| Wi-Fi | STA to home AP when configured (`WIFI_HOME_*` or NVS from WALL-E share) |
 
-Flip the toggle to call WALL-E home. When on:
-- Beacon sets `callout_active` → WALL-E starts docking
-- NeoPixels show amber chase (main status)
-- Arrow + internal MOSFETs run a light show (chase pattern)
+## Dependencies
 
-## Libraries
+- PlatformIO env **`dock_esp32`** — [platformio.ini](platformio.ini).
+- **FastLED**, **Adafruit GFX**, **ST7735**, **VL6180X**, **BusIO**.
 
-- **FastLED** (PlatformIO lib_deps, or Library Manager → "FastLED")
+## Build & flash
 
-## Intelligent Fault Indicators (10-pixel strip)
+```bash
+cd dock_station
+pio run -e dock_esp32
+pio run -e dock_esp32 -t upload
+```
 
-When in FAULT, LEDs show:
+**Arduino IDE:** Open `dock_station.ino` from this folder; ensure all `.cpp`/`.h` siblings are included (Arduino 2.x picks them up).
 
-1. **Fault code** — N red blinks:
-   - 1 blink = **Overcurrent** (current > 3 A)
-   - 2 blinks = **Force off** (WALL-E sent DOCK_CMD_FORCE_OFF)
+## Node ID / MAC
 
-2. **Segment display** — sensor snapshot:
-   - Pixels 0–1: **Beam** (green = broken/present, red = clear)
-   - Pixels 2–3: **Mouth** (green = clear, red = blocked)
-   - Pixels 4–9: **Current bar** (yellow = normal, red = overcurrent)
+- **Dock ID:** `DOCK_ID` in `dock_config.h` (default `0x00000001`).
+- **Node health:** `WALLE_NODE_DOCK` (`3`) — [node_health_protocol.h](node_health_protocol.h).
+
+## Communication with master controller
+
+- **Indirect:** Dock ↔ **base** via ESP-NOW beacon and commands; master does not attach to dock directly unless you add a custom path.
+- **Beacon:** Base consumes RSSI + `dock_id` + **`ir_align_hint`** for alignment FSM.
 
 ## Configuration
 
-Edit `dock_config.h`:
+- **`dock_config.h`:** Wi-Fi, thresholds, `ENABLE_WIFI`, `USE_VL6180_TOF`, `DOCK_IR_LOST_TIMEOUT_MS`, NeoPixel layout.
+- **`dock_protocol.h`:** Must match [main_wall_E_base/main/dock_protocol.h](../main_wall_E_base/main/dock_protocol.h) for packet sizes.
 
-- **`WIFI_HOME_SSID`** / **`WIFI_HOME_PASSWORD`** – Home WiFi (dock connects as permanent base). Leave SSID empty (`""`) to skip.
-- `USE_OBSTACLE_SENSORS` – 1 to enable obstacles
-- `ACS712_MV_PER_AMP` – 100 (20A), 185 (5A), 66 (30A)
-- `NEOPIXEL_COUNT` – LED count
+## Calibration
 
-**Time sync**: Dock gets NTP when on WiFi. WALL-E also shares time via ESP-NOW every 60 s when connected (fallback if dock can't reach NTP). Set `TIMEZONE_OFFSET_SEC` in `dock_config.h` for local time.
+- **ACS712:** `ACS712_MV_PER_AMP`, `CURRENT_CALIB_*` in `dock_config.h`.
+- **VL6180:** `VL6180_DOCK_MIN_MM` / `VL6180_DOCK_MAX_MM` for “robot present” band.
+- **IR alignment:** Ensure **38 kHz** IR from robot; adjust debounce in `dock_ir_guidance.cpp` if needed.
 
-**WALL-E home WiFi (single config)**: Configure WiFi on WALL-E only: connect to AP `WALL-E-Control`, open 192.168.4.1 → Settings → WiFi, enter home network and connect. Then tap **Share WiFi with dock** — credentials are sent via ESP-NOW. The dock stores them in NVS and connects. Both will be on the same LAN. No need to edit `dock_config.h` if using Share.
+## OTA
 
-## Approach Mode (Arrow Staging)
+- **ArduinoOTA** hostname `wall-e-dock` when Wi-Fi connected — see [../OTA_README.md](../OTA_README.md).
 
-| Distance   | Stage   | Arrows |
-|------------|---------|--------|
-| >1 m       | FAR     | Off (ESP-NOW homing) |
-| 200 mm–1 m | 1 m     | On, guiding |
-| 60–200 mm  | 20 cm   | Precision (faster blink) |
-| Beam break | Docked  | Both solid |
+## Extra docs
 
-WALL-E sends approach stage via ESP-NOW; dock falls back to align sensors after 2 s timeout.
+- [TOF050C_VL6180.md](TOF050C_VL6180.md) — VL6180 tuning notes.
 
-## States
+## Related
 
-- **BOOT** → **NOT_DOCKED** / **DOCKED_IDLE**
-- **NOT_DOCKED** – Beam not broken, charge off
-- **DOCKED_IDLE** – Beam broken, debounce 1.5 s, mouth must be clear
-- **CHARGING** – MOSFET on, current above 0.2 A
-- **CHARGED** – Current below 0.06 A for 90 s, MOSFET off
-- **FAULT** – Overcurrent or invalid state, MOSFET off
-
-## ESP-NOW Beacon
-
-Sent at 10 Hz to broadcast MAC. Packet: `dock_id`, `uptime_ms`, `state`, `beam_present`, `mouth_blocked`, `charge_enabled`, `current_a_x100`.
+- [../ARCHITECTURE.md](../ARCHITECTURE.md)  
+- [../README.md](../README.md)  

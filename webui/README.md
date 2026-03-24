@@ -1,78 +1,48 @@
-# WALL-E LROS Web Console
+# Web UI (LROS — Lightweight Robot Operator Shell)
 
-Full Living Robot Operating System web interface — 16 screens, emotional presence, network topology, and more.
+Static **HTML / CSS / JS** assets for operating WALL-E from a browser: dashboard-style controls, status, and hooks to the **base** HTTP API when the page is served or proxied from the robot’s network.
 
-## Quick Start
+## Purpose
 
-### 1. Local development
+- **Operator view** without the physical CYD controller (or as a secondary panel).
+- **Prototyping** UI flows before embedding in the base firmware.
 
-Serve the `webui/` folder and open in a browser:
+## Files
 
-```bash
-cd webui
-python -m http.server 8080
-# Open http://localhost:8080
-```
+| File | Role |
+|------|------|
+| `index.html` | Main LROS page |
+| `index-standalone.html` | Offline / demo variant |
+| `css/lros.css` | Theme variables, layout |
+| `js/lros.js` | Control logic, fetch/API helpers |
 
-For live WALL-E data, either:
-- Connect your machine to WALL-E's AP and open `http://192.168.4.1` (if Base serves this UI), or
-- Use a proxy: set `BASE = 'http://192.168.4.1'` in `js/lros.js` and enable CORS.
+## Dependencies
 
-### 2. Standalone (single file, no external deps)
+- Modern browser (ES6+).
+- For **live** control: reachable **base** IP (e.g. `192.168.4.1` on WALL-E AP) and matching **API routes** implemented in `main_wall_E_base/main/web_server.cpp`.
 
-Use `index-standalone.html` — CSS and JS are inlined. Works when:
-- Opened directly from disk
-- Served from any HTTP server
-- Embedded in ESP32 PROGMEM (see below)
+## “Flashing” / deployment
 
-### 3. Deploy to WALL-E Base (ESP32)
+There is **no separate firmware** — deploy by:
 
-**Option A: Replace embedded page**
+1. **Copy** `webui/` to SPIFFS/LittleFS if the base serves static files from flash, **or**
+2. **Open** `index.html` locally and point configuration at the base URL (CORS permitting), **or**
+3. **Embed** minified assets into `web_page_*.h` style headers if used by the project.
 
-1. Run `build-embed.ps1` to generate `web_page_lros.h`
-2. In `main_wall_E_base/main/web_page.h`, replace the `WALLE_PAGE` content with the content from `web_page_lros.h`, or
-3. Include `web_page_lros.h` and change `handleRoot()` to use `WALLE_PAGE_LROS` instead of `WALLE_PAGE`
+## Node ID / MAC
 
-**Option B: LittleFS (future)**
+- N/A — browser client only. **Authentication** is project-dependent (home LAN / AP trust model).
 
-Serve `webui/` from SPIFFS/LittleFS for easier OTA updates.
+## Communication with master controller
 
-## Screens
+- **Parallel path:** Master uses **ESP-NOW**; LROS uses **HTTP** to the **base**. They are not mutually exclusive — avoid conflicting drive commands if both are active.
 
-| Screen      | Features                                              |
-|------------|--------------------------------------------------------|
-| HOME       | Face, battery, quick actions, thought toasts           |
-| DRIVE      | Joystick, tank sliders, speed profile, Go to Dock      |
-| DOCKING    | Approach viz, charge status                            |
-| NETWORK    | Topology map, Wi-Fi wizard                             |
-| NAVIGATION | Map, waypoints (via More)                              |
-| VISION     | FPV placeholder, snapshot (via More)                   |
-| AUDIO      | Soundboard, volume (via More)                          |
-| AI         | Behaviour mode, personality sliders (via More)         |
-| MISSIONS   | Patrol, RTH (via More)                                 |
-| TELEMETRY  | IMU, sonar, GPS (via More)                             |
-| POWER      | Battery, sleep (via More)                              |
-| FILES      | Storage browser (via More)                             |
-| SAFETY     | E-Stop, child mode (via More)                          |
-| LOGS       | Activity timeline (via More)                           |
-| SECURITY   | Trust pairing (via More)                               |
-| DEVELOPER  | API explorer (via More)                                |
+## Extending the UI
 
-## API Compatibility
+- Add panels in `index.html`; use **CSS variables** in `lros.css` for consistent theming.
+- Add API calls in `lros.js`; document new routes in [../main_wall_E_base/README.md](../main_wall_E_base/README.md) and [../CONTRIBUTING.md](../CONTRIBUTING.md).
 
-The UI calls these existing Base endpoints:
+## Related
 
-- `/drive`, `/stop`, `/speed` — drive control
-- `/wifi/status`, `/wifi/scan`, `/wifi/connect`, `/wifi/disconnect`, `/wifi/clear`
-- `/api/autonomy`, `/api/autonomy/enable`, `/api/autonomy/set_home`
-- `/imu/status`, `/imu/recalibrate`
-- `/battery/status`
-- `/settings`, `/settings/set`
-
-Placeholder calls (no backend yet):
-
-- `/api/vision/stream`, `/api/audio/play`, `/api/files/list`, `/api/dock/cancel`, `/api/personality/mode`, `/api/sleep`
-
-## Design
-
-See [WEBCONSOLE_DESIGN.md](../WEBCONSOLE_DESIGN.md) for the full specification.
+- [../CONTRIBUTING.md](../CONTRIBUTING.md) — WebUI extension guidelines  
+- [../README.md](../README.md) — project overview  

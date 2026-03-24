@@ -1,23 +1,23 @@
-# WALL-E Vision Node
+# Vision Node (PlatformIO — ESP32-S3 + Camera)
 
-ESP32-S3 + OV2640 camera. Motion detection, clustering, centroid, object classification. Sends VisionPacket via ESP-NOW to Base Brain.
+**ESP32-S3** with **OV2640** (or compatible) camera: **motion detection**, **clustering**, **centroid**, optional **object class**, and **ESP-NOW** broadcast of **VisionPacket_t** to the base.
+
+## Purpose
+
+- Offload vision from the base; send **target X/Y**, **bbox**, **motion flag**, **frame ID** for head/eye tracking or behaviour.
 
 ## Hardware
 
-- **Board**: ESP32-S3 with PSRAM (e.g. ESP32-S3-DevKitC-1, XIAO ESP32-S3 Sense, Freenove)
-- **Camera**: OV2640 (160×120 grayscale)
+- **MCU:** ESP32-S3 with **PSRAM** recommended.
+- **Sensor:** OV2640; **pin config** is board-specific — edit `src/main.cpp` camera config struct.
 
-## Pin Configuration
+## Dependencies
 
-Camera pins depend on your board. Edit `src/main.cpp` `s_camConfig` for your hardware:
+- PlatformIO (`vision_node/platformio.ini`).
+- ESP32 camera driver (Arduino-esp32 bundled).
+- Same **Wi-Fi channel** as base AP for ESP-NOW.
 
-| Board | Common pin sets |
-|-------|-----------------|
-| Freenove ESP32-S3 | See Freenove docs |
-| XIAO ESP32-S3 Sense | Uses built-in cam, different config |
-| Generic ESP32-S3 | Adjust PWDN, RESET, XCLK, SIOD, SIOC, D0-D7, VSYNC, HREF, PCLK |
-
-## Build & Upload
+## Build & flash
 
 ```bash
 cd vision_node
@@ -25,13 +25,30 @@ pio run
 pio run -t upload
 ```
 
+## Node ID / MAC
+
+- **Node health:** `WALLE_NODE_VISION` (`4`) — base registry merges health from `WalleNodeHealthPacket_t` when vision node also sends health (if implemented).
+
+## Communication with master controller
+
+- **Direct path:** Typically **none** — vision → **base** only.
+- **Indirect:** Base may expose vision-derived state to **telemetry** or **web UI**; master controller reads **base telemetry**.
+
 ## Protocol
 
-Sends `VisionPacket_t` via ESP-NOW broadcast (same channel as Base). Base must be on same WiFi channel.
+- **VisionPacket_t** — [include/vision_protocol.h](include/vision_protocol.h), magic `VISION_MAGIC`.
+- Packet size: `VISION_PACKET_SIZE`.
 
-## Parameters (motion_detect.h)
+## Calibration
 
-- `motionThreshold`: 20-30 (pixel diff)
-- `minMotionPixels`: ~30
-- `smoothFactor`: 0.4 (target smoothing)
-- `occlusionTimeoutMs`: 500
+- **Motion:** `motion_detect.h` — `motionThreshold`, `minMotionPixels`, `smoothFactor`, `occlusionTimeoutMs`.
+- **Camera:** Exposure, resolution, and grayscale path in `main.cpp` for your lighting.
+
+## Alternative sketch
+
+- **Arduino-style** twin: `../vision_node_arduino/` — use **one** canonical build per deployment to avoid confusion.
+
+## Related
+
+- [../ARCHITECTURE.md](../ARCHITECTURE.md)  
+- [../main_wall_E_base/main/vision_behaviour.cpp](../main_wall_E_base/main/vision_behaviour.cpp)  
