@@ -29,6 +29,13 @@ enum DockState {
 
 #define DOCK_BEACON_MAGIC  0x444F434B  /* "DOCK" in ASCII */
 
+/* Byte for DockBeaconPacket_t.ir_align_hint (dock receivers seeing WALL-E IR TX). */
+#define DOCK_IR_ALIGN_LOST    0u
+#define DOCK_IR_ALIGN_LEFT    1u  /* only left receiver -> robot should steer left */
+#define DOCK_IR_ALIGN_RIGHT   2u
+#define DOCK_IR_ALIGN_CENTER  3u  /* both receivers -> centered */
+#define DOCK_IR_ALIGN_PAUSE   4u  /* LOST > timeout; dock paused arrow guidance */
+
 #pragma pack(push, 1)
 
 typedef struct {
@@ -41,6 +48,7 @@ typedef struct {
   uint8_t  charge_enabled;  /* 1 = MOSFET on */
   uint8_t  callout_active;  /* 1 = dock calling WALL-E (toggle switch) */
   int16_t  current_a_x100;  /* Current in A * 100 (e.g. 125 = 1.25A) */
+  uint8_t  ir_align_hint;   /* DOCK_IR_ALIGN_* */
 } DockBeaconPacket_t;
 
 #pragma pack(pop)

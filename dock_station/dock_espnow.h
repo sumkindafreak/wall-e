@@ -17,6 +17,9 @@ bool dockEspNowPoll(void);
 /* Call every loop when dockEspNowPoll() is true. Sends beacon at 10 Hz (internal rate limiting). */
 void dockEspNowSendBeacon(const DockBeaconPacket_t *pkt);
 
+/** Periodic compact node health (same channel as beacon). */
+void dockEspNowSendNodeHealth(void);
+
 /* Get last send result: true = success, false = fail */
 bool dockEspNowLastSendOk(void);
 

@@ -105,6 +105,7 @@ void loop() {
 
   /* Send status (mic dir, dock IR, mode, fault) — rate-limited */
   eventRouterSendStatus();
+  espnowManagerSendNodeHealth();
 
   /* Heartbeat — status packet acts as heartbeat */
   if (now - s_lastHeartbeat >= HEARTBEAT_INTERVAL_MS) {

@@ -27,4 +27,7 @@ void espnowManagerSendMicTelem(uint16_t ear_l, uint16_t ear_r, uint8_t voice_act
 void espnowManagerSendStatus(uint8_t mic_dir, uint8_t dock_ir, uint8_t voice_cmd,
                              uint8_t mode, uint8_t fault, uint8_t audio_busy);
 
+/** Periodic node health (v1 protocol) — rate-limited internally */
+void espnowManagerSendNodeHealth(void);
+
 #endif

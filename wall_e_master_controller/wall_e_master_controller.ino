@@ -31,6 +31,9 @@
 // Motion engine
 #include "motion_engine.h"
 
+// Emotion engine (poses + triggers; no servo output until wired)
+#include "emotion_engine.h"
+
 // Profile system
 #include "profiles.h"
 
@@ -69,7 +72,8 @@ void setup() {
   
   // Initialize motion engine
   motionInit();
-  
+  emotionInit();
+
   // Initialize profile system (loads from Preferences)
   profileInit();
 
@@ -441,6 +445,9 @@ void loop() {
   packetGetTelemetry(&telem);
   bool connected = packetTelemetryValid();
 
+  emotionRefreshFromTelemetry(&telem, connected);
+  emotionApplyPoseToMotionEngine();
+
   TelemetryStripData strip = {};
   strip.batteryV = connected ? telem.batteryVoltage : 0.0f;
   strip.batteryPct = (strip.batteryV > 0) ? (int)((strip.batteryV - 3.0f) / 1.2f * 100.0f) : 0;
@@ -453,6 +460,7 @@ void loop() {
   strip.connected = connected;
   strip.modeStr = g_estop ? "E-STOP" : (g_controlAuthority == CTRL_AUTONOMOUS ? "AUTO" :
                   g_controlAuthority == CTRL_SUPERVISED ? "SUPV" : "MANUAL");
+  strip.emotionStr = emotionGetName();
 
   // Debug telemetry every 5 seconds
   static unsigned long lastTelemDebug = 0;

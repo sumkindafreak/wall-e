@@ -4,6 +4,7 @@
 
 #include "espnow_control.h"
 #include "audio_protocol.h"
+#include "node_health_protocol.h"
 #include <WiFi.h>
 #include <esp_now.h>
 #include <esp_wifi.h>
@@ -30,6 +31,7 @@ static unsigned long s_rateWindowStartMs = 0;
 static uint16_t s_lastRate = 0;
 static uint16_t s_sendFailCount = 0;
 static unsigned long s_lastDiagnosticMs = 0;
+static unsigned long s_lastNodeHealthMs = 0;
 
 static void onSent(const uint8_t* mac, esp_now_send_status_t status) {
   (void)mac;
@@ -149,6 +151,21 @@ void espnowUpdate(void) {
   if (now - s_lastTelemMs > ESPNOW_TELEM_TIMEOUT_MS) {
     s_telemetry.batteryVoltage = 0;
     s_telemetry.safetyState = 0xFF;
+  }
+
+  if (now - s_lastNodeHealthMs >= 1000) {
+    s_lastNodeHealthMs = now;
+    WalleNodeHealthPacket_t h = {};
+    h.magic = WALLE_NODE_HEALTH_MAGIC;
+    h.version = WALLE_NODE_HEALTH_VERSION;
+    h.node_id = WALLE_NODE_MASTER;
+    h.role = WALLE_ROLE_OPERATOR;
+    h.battery_pct = WALLE_NODE_HEALTH_UNKNOWN_BAT;
+    h.temp_c = WALLE_NODE_HEALTH_UNKNOWN_TEMP;
+    h.uptime_ms = (uint32_t)now;
+    h.last_error = 0;
+    h.flags = 0;
+    esp_now_send(s_peerMac, (uint8_t*)&h, sizeof(h));
   }
 }
 

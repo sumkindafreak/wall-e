@@ -61,6 +61,7 @@ typedef struct {
   int8_t  rssi;        // Signal strength (or 0)
   bool   connected;
   const char* modeStr; // MANUAL / AUTO / SUPERVISED
+  const char* emotionStr; /**< Emotion engine label, e.g. "CURIOUS" */
 } TelemetryStripData;
 
 // ------------------------------------------------------------

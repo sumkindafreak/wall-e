@@ -1,10 +1,14 @@
 #include "audio_espnow.h"
 #include "audio_protocol.h"
-#include "audio_hw.h"
 #include <WiFi.h>
 #include <esp_now.h>
 #include <esp_wifi.h>
 #include <cstring>
+
+/* Match audio_esp espnow_manager / CYD — Base AP uses same channel for ESP-NOW */
+#ifndef WALLE_ESPNOW_WIFI_CHANNEL
+#define WALLE_ESPNOW_WIFI_CHANNEL 11
+#endif
 
 static uint8_t s_bcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 static bool s_peer_ok = false;

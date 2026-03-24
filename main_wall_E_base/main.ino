@@ -1,4 +1,8 @@
 // ============================================================
+//  NOTE (Arduino IDE): Open the folder "main_wall_E_base/main" and use
+//  main.ino there — sketch folder name must match the .ino name ("main").
+//  This root main.ino is kept for PlatformIO; see ARDUINO_IDE_QUICK_START.md
+// ============================================================
 //  WALL-E Simple WebUI + Tank Drive Controller
 //  Platform:   ESP32-S3 Dev Module
 //  Motor:      L298N Dual H-Bridge
@@ -18,6 +22,15 @@
 #include "vl53l1x_tof.h"
 #include "dock_sensors.h"
 #include "dock_homing.h"
+#include "autonomous_docking.h"
+#include "dock_config.h"
+#include "dock_controller.h"
+#include "ir_beacon_receivers.h"
+#include "audio_espnow.h"
+#include "node_health_registry.h"
+#include "vision_behaviour.h"
+#include "walle_emotion_pose_bridge.h"
+#include "walle_emotion_pose.h"
 
 // NEW: Autonomy and behavioral brain includes
 #include "sonar_sensor.h"
@@ -124,6 +137,13 @@ void setup() {
 
   // ESP-NOW receiver (CYD controller)
   espnowReceiverInit();
+  audioEspNowInit();
+  nodeHealthInit();
+  walleEmotionPoseBridgeInit();
+  visionBehaviourInit();
+  dockControllerInit();
+  irBeaconInit();
+  autonomousDockingInit();
 
   // LDR + MOSFET flashlight (on when dark)
   flashlightInit();
@@ -153,6 +173,8 @@ void loop() {
 
   // Servo velocity interpolation
   servoHandle();
+
+  visionBehaviourUpdate(now);
 
   // IMU: update (runs calibration until done, then provides offset-corrected data)
   updateIMU();
@@ -196,6 +218,18 @@ void loop() {
   if (!tofTried) { tofTried = true; tofInit(); }
   tofUpdate(now);
   dockSensorsUpdate();
+  irBeaconUpdate(now);
+
+#if USE_AUTONOMOUS_DOCKING
+  autonomousDockingUpdate(now);
+  if (autonomousDockingIsActive()) {
+    int16_t left, right;
+    if (autonomousDockingGetMotorOutput(&left, &right)) {
+      motorSetLeftRight(left, right);
+      lastCommandMillis = now;
+    }
+  }
+#else
   dockHomingCheckAutoReturn(now);
   dockHomingUpdate(now);
   if (dockHomingIsActive()) {
@@ -205,6 +239,7 @@ void loop() {
       lastCommandMillis = now;
     }
   }
+#endif
 
   // LDR: turn flashlight on when dark
   flashlightHandle();
@@ -217,6 +252,10 @@ void loop() {
     espnowSendTelemetry();
     lastTelemSendMs = now;
   }
+
+  nodeHealthTick();
+  walleEmotionPoseBridgeTick();
+  walleEmotionPoseApplyToServosStub();
 
   // Failsafe: stop drive motors if no command received (AUTONOMY TEMPORARILY DISABLED)
   if ((now - lastCommandMillis) > FAILSAFE_TIMEOUT_MS) {

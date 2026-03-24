@@ -15,6 +15,7 @@
 #include <cstring>
 
 #include "audio_protocol.h"
+#include "node_health_protocol.h"
 
 #define WALLE_ESPNOW_WIFI_CHANNEL 11
 
@@ -23,8 +24,10 @@ static bool s_init = false;
 static bool s_peer_ok = false;
 static unsigned long s_lastMicTelemMs = 0;
 static unsigned long s_lastStatusMs = 0;
+static unsigned long s_lastHealthMs = 0;
 #define MIC_TELEM_INTERVAL_MS  100
 #define STATUS_INTERVAL_MS     200
+#define NODE_HEALTH_INTERVAL_MS 900
 
 static bool ensurePeer(void) {
   if (s_peer_ok) return true;
@@ -148,4 +151,22 @@ void espnowManagerSendStatus(uint8_t mic_dir, uint8_t dock_ir, uint8_t voice_cmd
   pkt.fault = fault;
   pkt.audio_busy = audio_busy;
   esp_now_send(s_bcast, (uint8_t*)&pkt, sizeof(pkt));
+}
+
+void espnowManagerSendNodeHealth(void) {
+  if (!s_init || !ensurePeer()) return;
+  unsigned long now = millis();
+  if (now - s_lastHealthMs < NODE_HEALTH_INTERVAL_MS) return;
+  s_lastHealthMs = now;
+  WalleNodeHealthPacket_t h = {};
+  h.magic = WALLE_NODE_HEALTH_MAGIC;
+  h.version = WALLE_NODE_HEALTH_VERSION;
+  h.node_id = WALLE_NODE_AUDIO;
+  h.role = WALLE_ROLE_ACTOR;
+  h.battery_pct = WALLE_NODE_HEALTH_UNKNOWN_BAT;
+  h.temp_c = WALLE_NODE_HEALTH_UNKNOWN_TEMP;
+  h.uptime_ms = (uint32_t)now;
+  h.last_error = 0;
+  h.flags = 0;
+  esp_now_send(s_bcast, (uint8_t*)&h, sizeof(h));
 }

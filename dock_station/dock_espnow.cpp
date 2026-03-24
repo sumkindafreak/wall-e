@@ -7,6 +7,8 @@
 #include "dock_config.h"
 #include "dock_state.h"
 #include "dock_protocol.h"
+#include "dock_state.h"
+#include "node_health_protocol.h"
 #include "dock_alignment.h"
 #include <esp_wifi.h>
 #include <Preferences.h>
@@ -21,6 +23,7 @@
 static uint8_t broadcast_mac[] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
 static esp_now_peer_info_t peer = {};
 static uint32_t g_last_send_ms = 0;
+static uint32_t g_last_health_ms = 0;
 static bool g_last_ok = false;
 static uint32_t g_send_ok = 0;
 static uint32_t g_send_fail = 0;
@@ -97,6 +100,29 @@ bool dockEspNowPoll(void) {
   configTime(TIMEZONE_OFFSET_SEC, 0, "pool.ntp.org", "time.nist.gov");
   Serial.println(F("[DOCK] ESP-NOW beacon running"));
   return true;
+}
+
+void dockEspNowSendNodeHealth(void) {
+  if (!g_espnow_inited) return;
+  uint32_t now = millis();
+  if (now - g_last_health_ms < 1000) return;
+  g_last_health_ms = now;
+  DockState st = dockStateGet();
+  WalleNodeHealthPacket_t h = {};
+  h.magic = WALLE_NODE_HEALTH_MAGIC;
+  h.version = WALLE_NODE_HEALTH_VERSION;
+  h.node_id = WALLE_NODE_DOCK;
+  h.role = WALLE_ROLE_SENSOR;
+  h.battery_pct = WALLE_NODE_HEALTH_UNKNOWN_BAT;
+  h.temp_c = WALLE_NODE_HEALTH_UNKNOWN_TEMP;
+  h.uptime_ms = now;
+  h.last_error = (st == STATE_FAULT) ? 1u : 0u;
+  uint16_t f = 0;
+  if (st == STATE_CHARGING) f |= WALLE_NODE_FLAG_CHARGING;
+  if (st >= STATE_DOCKED_IDLE && st != STATE_NOT_DOCKED && st != STATE_BOOT) f |= WALLE_NODE_FLAG_DOCKED;
+  if (st == STATE_FAULT) f |= WALLE_NODE_FLAG_FAULT;
+  h.flags = f;
+  esp_now_send(broadcast_mac, (uint8_t*)&h, sizeof(h));
 }
 
 void dockEspNowSendBeacon(const DockBeaconPacket_t *pkt) {

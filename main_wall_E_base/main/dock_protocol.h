@@ -11,6 +11,12 @@
 
 #define DOCK_BEACON_MAGIC  0x444F434B  /* "DOCK" in ASCII */
 
+#define DOCK_IR_ALIGN_LOST    0u
+#define DOCK_IR_ALIGN_LEFT    1u
+#define DOCK_IR_ALIGN_RIGHT   2u
+#define DOCK_IR_ALIGN_CENTER  3u
+#define DOCK_IR_ALIGN_PAUSE   4u
+
 #pragma pack(push, 1)
 typedef struct {
   uint32_t magic;
@@ -22,6 +28,7 @@ typedef struct {
   uint8_t  charge_enabled;
   uint8_t  callout_active;  /* 1 = dock calling WALL-E */
   int16_t  current_a_x100;
+  uint8_t  ir_align_hint;
 } DockBeaconPacket_t;
 #pragma pack(pop)
 

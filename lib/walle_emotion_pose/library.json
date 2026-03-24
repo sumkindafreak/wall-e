@@ -1,0 +1,7 @@
+{
+  "name": "walle_emotion_pose",
+  "version": "1.0.0",
+  "description": "Servo-agnostic WALL-E emotional pose state",
+  "frameworks": "arduino",
+  "platforms": "espressif32"
+}

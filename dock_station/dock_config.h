@@ -68,11 +68,11 @@
 /* Call WALL-E push button (INPUT_PULLUP: LOW = pressed). Press to start callout; stops when WALL-E docks or press again. */
 #define PIN_CALL_SWITCH   15   /* avoid GPIO 0 (boot) */
 
-/* Dock alignment sensors (inside entrance — detect which side WALL-E is closer to)
- * This S3 board doesn’t expose GPIO26, so use GPIO10 for the left sensor.
+/* Dock alignment — dual TSOP/VS1838B receivers (WALL-E carries modulated IR TX on GPIO 21+38).
+ *   Receiver output: LOW = IR seen, HIGH = idle. Not mixed with break-beam logic (PIN_IR_BEAM).
  */
-#define PIN_ALIGN_LEFT    10   /* Left alignment IR (GPIO10: ADC-capable, free on this S3 board) */
-#define PIN_ALIGN_RIGHT    5   /* Right alignment IR (GPIO5: input-capable on ESP32-S3) */
+#define PIN_ALIGN_LEFT    10   /* Left side of bay: IR receiver digital OUT */
+#define PIN_ALIGN_RIGHT    5   /* Right side of bay: IR receiver digital OUT */
 
 /* Arrow indicator MOSFET outputs (guide WALL-E left/right) */
 #define PIN_ARROW_LEFT    19   /* 16 not broken out on this module */
@@ -187,6 +187,12 @@
 #define APPROACH_STAGE_TIMEOUT_MS  2000  /* Revert to sensor fallback if no WALL-E update */
 #define ESPNOW_BEACON_INTERVAL_MS  100   /* 10 Hz */
 #define DEBUG_STATS_INTERVAL_MS    3000
+
+/* 1 = pixels 8–9 on status strip show live L/R IR receiver detect (NOT_DOCKED only). */
+#define DOCK_IR_NEOPIXEL_DEBUG  0
+
+/* TSOP lost timer: pause arrow guidance after this many ms with no IR on either receiver. */
+#define DOCK_IR_LOST_TIMEOUT_MS  2000
 
 /*=============================================================================
  * NEOPIXEL

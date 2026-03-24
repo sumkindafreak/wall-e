@@ -5,7 +5,7 @@
  * Full navigation and docking logic for life-size WALL-E:
  * 1. Detect low battery
  * 2. Search for dock (ESP-NOW beacon / IR)
- * 3. Align using left/right IR beacon receivers
+ * 3. Align using dock IR receiver telemetry (ESP-NOW ir_align_hint) + WALL-E IR transmitters
  * 4. Approach using ToF distance (speed ramps down as distance decreases)
  * 5. Enter dock until IR break beam confirms
  * 6. Send REQUEST_CHARGE via ESP-NOW
@@ -56,6 +56,8 @@ void autonomousDockingInit(void);
 /* Feed ESP-NOW beacon RSSI and dock_id (call from recv callback) */
 void autonomousDockingOnBeacon(int8_t rssi);
 void autonomousDockingSetLastDockId(uint32_t dock_id);
+/* Latest DockBeaconPacket_t.ir_align_hint (DOCK_IR_ALIGN_* in dock_protocol.h) */
+void autonomousDockingOnIrAlign(uint8_t ir_align_hint);
 
 /* Call every loop. Returns true if docking is active and producing motor output */
 bool autonomousDockingUpdate(uint32_t now);
@@ -71,5 +73,7 @@ DockState autonomousDockingGetState(void);
 
 /* Manually request dock (e.g. from controller) */
 void autonomousDockingSetRequested(bool requested);
+
+const char* autonomousDockingGetStateName(void);
 
 #endif /* AUTONOMOUS_DOCKING_H */

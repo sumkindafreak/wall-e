@@ -1,7 +1,7 @@
 /*******************************************************************************
  * dock_display.cpp
- * 1.8" TFT SPI 128x160 (ST7735) — CYD-style dock status UI (no touch)
- * Same look as WALL-E Master Controller: industrial graphite + amber, top bar, panel.
+ * Dock TFT status UI — *theme* aligned with wall_e_master_controller (CYD):
+ * graphite background, amber accent, top/bottom bars, grid. No change to panel type.
  ******************************************************************************/
 
 #include "dock_display.h"
@@ -18,24 +18,30 @@
 #define TFT_WIDTH   128
 #define TFT_HEIGHT  160
 
-/* CYD-style colors (match wall_e_master_controller/ui_draw.h) — RGB565 */
-#define C_BG        0x0000
-#define C_BG_DARK   0x18C3
-#define C_BORDER    0x3186
-#define C_ACCENT    0xFD20
+/* CYD colors — same RGB565 as wall_e_master_controller/ui_draw.h */
+#define C_BG         0x0000
+#define C_BG_DARK    0x18C3
+#define C_GRID       0x18C3
+#define C_BORDER     0x3186
+#define C_ACCENT     0xFD20
 #define C_ACCENT_DIM 0xB360
-#define C_RED       0xF800
-#define C_GREEN     0x07E0
-#define C_WHITE     0xFFFF
-#define C_TEXT_DIM  0xAD55
+#define C_RED        0xF800
+#define C_GREEN      0x07E0
+#define C_YELLOW     0xFFE0
+#define C_WHITE      0xFFFF
+#define C_TEXT_DIM   0xAD55
 
-/* Layout — CYD-like top bar + content panel */
-#define TOP_BAR_H     20
-#define TOP_BAR_STATUS_X  74   /* X for "DOCKED" / "IDLE" after "WALL-E Dock " */
-#define PANEL_LEFT    4
-#define PANEL_TOP     22
-#define PANEL_W       (TFT_WIDTH - 2 * PANEL_LEFT)
-#define PANEL_H       (TFT_HEIGHT - PANEL_TOP - 4)
+#define GRID_SPACING  20   /* match CYD ui_draw Static Drive */
+
+/* Layout — CYD: top bar + grid + bordered panel + bottom bar strip */
+#define TOP_BAR_H         20
+#define TOP_BAR_STATUS_X  82   /* after "WALL-E" + " Dock " (~13 chars * 6px + margin) */
+#define BOTTOM_BAR_H      10
+#define BOTTOM_BAR_Y      (TFT_HEIGHT - BOTTOM_BAR_H)
+#define PANEL_LEFT        4
+#define PANEL_TOP         (TOP_BAR_H + 2)
+#define PANEL_W           (TFT_WIDTH - 2 * PANEL_LEFT)
+#define PANEL_H           (BOTTOM_BAR_Y - PANEL_TOP - 2)
 #define LINE_H        10
 #define LINE_W        (PANEL_W - 8)
 #define ROW0_Y        (PANEL_TOP + 4)
@@ -60,6 +66,23 @@ static bool g_last_beam = false;
 static bool g_last_o[4] = {false, false, false, false};  /* FL, FR, BL, BR */
 static bool g_first_draw = true;
 static bool g_last_docked = false;  /* for top bar DOCKED / IDLE */
+
+/** Same idea as CYD uiDrawStaticDrive: graphite grid on black, then chrome layered on top */
+static void drawCydBackgroundGrid(void) {
+  int x, y;
+  for (x = 0; x < TFT_WIDTH; x += GRID_SPACING)
+    tft->drawFastVLine(x, 0, TFT_HEIGHT, C_GRID);
+  for (y = 0; y < TFT_HEIGHT; y += GRID_SPACING)
+    tft->drawFastHLine(0, y, TFT_WIDTH, C_GRID);
+}
+
+static void drawCydBottomBar(void) {
+  tft->fillRect(0, BOTTOM_BAR_Y, TFT_WIDTH, BOTTOM_BAR_H, C_BG_DARK);
+  tft->drawFastHLine(0, BOTTOM_BAR_Y, TFT_WIDTH, C_BORDER);
+  /* Small amber accent — echoes CYD tactile / accent buttons */
+  int cx = TFT_WIDTH / 2 - 12;
+  tft->fillRect(cx, BOTTOM_BAR_Y + 3, 24, 3, C_ACCENT_DIM);
+}
 
 static void drawTopBarStatus(bool docked) {
   tft->fillRect(TOP_BAR_STATUS_X, 2, TFT_WIDTH - TOP_BAR_STATUS_X - 2, TOP_BAR_H - 4, C_BG_DARK);
@@ -168,14 +191,17 @@ void dockDisplayBegin(void) {
   tft->initR(INITR_GREENTAB);
   tft->setRotation(0);
   tft->fillScreen(C_BG);
+  drawCydBackgroundGrid();
 
-  /* CYD-style top bar: "WALL-E Dock" + DOCKED (green) / IDLE (dim when robot left) */
+  /* CYD-style top bar: amber "WALL-E" + white "Dock", status right */
   tft->fillRect(0, 0, TFT_WIDTH, TOP_BAR_H, C_BG_DARK);
   tft->drawFastHLine(0, TOP_BAR_H - 1, TFT_WIDTH, C_BORDER);
-  tft->setTextColor(C_WHITE, C_BG_DARK);
   tft->setTextSize(1);
-  tft->setCursor(6, 6);
-  tft->print(F("WALL-E Dock "));
+  tft->setCursor(4, 6);
+  tft->setTextColor(C_ACCENT, C_BG_DARK);
+  tft->print(F("WALL-E"));
+  tft->setTextColor(C_WHITE, C_BG_DARK);
+  tft->print(F(" Dock "));
   /* Top bar DOCKED = state-based so it stays green for DOCKED_IDLE / CHARGING / CHARGED */
   {
     DockState s0 = dockStateGet();
@@ -183,9 +209,12 @@ void dockDisplayBegin(void) {
   }
   drawTopBarStatus(g_last_docked);
 
-  /* Content panel: bordered area like CYD */
+  /* Content panel: CYD-style dark inset + border */
   tft->fillRect(PANEL_LEFT, PANEL_TOP, PANEL_W, PANEL_H, C_BG_DARK);
   tft->drawRect(PANEL_LEFT, PANEL_TOP, PANEL_W, PANEL_H, C_BORDER);
+
+  drawCydBottomBar();
+
   tft->setTextWrap(false);
   g_first_draw = true;
 }

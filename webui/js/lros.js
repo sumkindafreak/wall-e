@@ -8,6 +8,8 @@ const TOAST_MAX_VISIBLE = 2;
 const FAILSAFE_MS = 440;
 
 let toastId = 0;
+/** Only page-home shows toast popups; updated by switchTab */
+let currentVisiblePage = 'home';
 let tankLeft = 0, tankRight = 0, maxSpeed = 255;
 let driveMode = 'joystick';
 let hbTimer = null;
@@ -20,6 +22,9 @@ const JOY_DEAD = 0.12, JOY_MAX = 40;
 
 // ─── Navigation ─────────────────────────────────────────────
 function switchTab(name) {
+  currentVisiblePage = name;
+  const stack = document.getElementById('toast-stack');
+  if (stack && name !== 'home') stack.innerHTML = '';
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
   document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + name));
   if (name === 'network') { fetchStatus(); showNetworkForm(false); }
@@ -36,6 +41,7 @@ function switchTab(name) {
 
 // ─── Toasts (emotional presence) ────────────────────────────
 function showToast(emoji, text) {
+  if (currentVisiblePage !== 'home') return;
   const stack = document.getElementById('toast-stack');
   if (!stack) return;
   const el = document.createElement('div');
@@ -72,6 +78,42 @@ function setTheme(theme) {
 
 function setOverrideBanner(visible) {
   document.getElementById('override-banner').classList.toggle('visible', !!visible);
+}
+
+let _pillState = {};
+function pollNodeHealth() {
+  fetch(BASE + '/api/system/health').then(r => r.json()).then(s => {
+    if (!s || !s.nodes) return;
+    const map = {};
+    s.nodes.forEach(function(n) { map[n.id] = n; });
+    ['base','master','audio','dock','vision'].forEach(function(id) {
+      const el = document.querySelector('.node-pill[data-pill="' + id + '"]');
+      if (!el) return;
+      const n = map[id];
+      if (!n) return;
+      const on = !!n.online;
+      const prev = _pillState[id];
+      _pillState[id] = on;
+      el.classList.remove('ok','warn','off');
+      if (on) el.classList.add('ok');
+      else el.classList.add('off');
+      if (prev !== undefined && prev !== on) {
+        el.classList.add('edge');
+        setTimeout(function() { el.classList.remove('edge'); }, 500);
+      }
+    });
+    const bfill = document.getElementById('status-batt-fill');
+    const base = map.base;
+    if (bfill && base && base.battery_pct != null && base.battery_pct >= 0) {
+      bfill.style.width = Math.max(0, Math.min(100, base.battery_pct)) + '%';
+      bfill.className = 'status-batt-fill' + (base.battery_pct < 20 ? ' low' : '');
+    }
+    const dockIc = document.getElementById('status-dock-ic');
+    if (dockIc && map.dock) {
+      var chg = (map.dock.flags & 2) !== 0;
+      dockIc.classList.toggle('charging', chg);
+    }
+  }).catch(function() {});
 }
 
 // ─── Drive ──────────────────────────────────────────────────
@@ -408,7 +450,9 @@ function initAll() {
   initJoystick();
   initTankSliders();
   fetchStatus();
+  pollNodeHealth();
   setInterval(fetchStatus, 5000);
+  setInterval(pollNodeHealth, 1500);
   try { fetch(BASE + '/stop'); } catch(_) {}
   setTimeout(() => showToast('\uD83D\uDE0A', "Hi! I'm WALL-E"), 3000);
 }

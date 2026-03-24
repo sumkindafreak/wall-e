@@ -209,11 +209,69 @@ input[type=range]::-webkit-slider-thumb {
 .progress-fill { height: 100%; background: var(--accent); border-radius: 4px; transition: width var(--dur); }
 .progress-fill.low { background: var(--warn); }
 .progress-fill.critical { background: var(--stop); }
+
+/* Operator status strip (node health) */
+#status-strip { flex-shrink: 0; display: flex; align-items: center; gap: 10px; min-height: 44px;
+  padding: 6px 12px; background: linear-gradient(180deg, #12151c 0%, #0d1016 100%);
+  border-bottom: 1px solid var(--border); }
+.status-eye-wrap { flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.status-eye { width: 30px; height: 30px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #2a2f3a 0%, #0a0c10 70%);
+  border: 2px solid var(--border2);
+  box-shadow: 0 0 14px rgba(245,166,35,0.35), inset 0 0 12px rgba(0,0,0,0.6);
+  display: flex; align-items: center; justify-content: center;
+  animation: eye-hb 2.4s cubic-bezier(0.45,0,0.55,1) infinite; }
+.status-eye-lens { width: 10px; height: 12px; border-radius: 50%; background: var(--accent);
+  box-shadow: 0 0 10px var(--accent-glow); opacity: 0.95; }
+@keyframes eye-hb { 0%,100% { transform: scale(1); box-shadow: 0 0 14px rgba(245,166,35,0.35); }
+  50% { transform: scale(1.04); box-shadow: 0 0 22px rgba(245,166,35,0.55); } }
+.node-pills { flex: 1; display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+  gap: 6px; min-width: 0; }
+.node-pill { font-family: 'Orbitron', monospace; font-size: 0.58rem; font-weight: 700; letter-spacing: 0.06em;
+  padding: 4px 8px; border-radius: 999px; border: 1px solid var(--border2); color: var(--txt-dim);
+  background: var(--surface2); transition: color var(--dur), border-color var(--dur), transform 0.35s var(--ease-out), opacity var(--dur); }
+.node-pill.ok { color: var(--ok); border-color: rgba(61,220,132,0.45); background: rgba(61,220,132,0.08); }
+.node-pill.warn { color: var(--warn); border-color: rgba(245,166,35,0.5); }
+.node-pill.off { color: var(--txt-dim); opacity: 0.45; border-color: var(--border); }
+.node-pill.edge { animation: pill-pop 0.45s var(--ease-out); }
+@keyframes pill-pop { from { transform: scale(0.92); opacity: 0.6; } to { transform: scale(1); opacity: 1; } }
+.status-right { flex-shrink: 0; display: flex; align-items: center; gap: 10px; }
+.status-batt { display: flex; align-items: center; gap: 6px; min-width: 72px; }
+.status-batt-icon { font-size: 0.9rem; opacity: 0.9; }
+.status-batt-track { flex: 1; width: 56px; height: 8px; background: var(--border2); border-radius: 4px; overflow: hidden; }
+.status-batt-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--warn), var(--ok));
+  border-radius: 4px; transition: width 0.6s cubic-bezier(0.22,1,0.36,1); }
+.status-batt-fill.low { background: linear-gradient(90deg, var(--stop), var(--warn)); }
+.status-dock-ic { width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--border2);
+  display: flex; align-items: center; justify-content: center; font-size: 0.65rem; color: var(--txt-dim);
+  background: var(--surface2); transition: box-shadow var(--dur), border-color var(--dur), color var(--dur); }
+.status-dock-ic.charging { color: var(--ok); border-color: rgba(61,220,132,0.5);
+  box-shadow: 0 0 16px rgba(61,220,132,0.35); }
 </style>
 </head>
 <body>
 <div id="app">
   <div id="override-banner" aria-live="polite">Local Control Active - CYD touchscreen has control</div>
+
+  <div id="status-strip" role="region" aria-label="Fleet status">
+    <div class="status-eye-wrap" title="Heartbeat">
+      <div id="status-eye" class="status-eye"><span class="status-eye-lens"></span></div>
+    </div>
+    <div class="node-pills" id="node-pills">
+      <span class="node-pill ok" data-pill="base" title="Base">BASE</span>
+      <span class="node-pill off" data-pill="master" title="CYD Master">CYD</span>
+      <span class="node-pill off" data-pill="audio" title="Audio">AUD</span>
+      <span class="node-pill off" data-pill="dock" title="Dock">DOCK</span>
+      <span class="node-pill off" data-pill="vision" title="Vision">VIS</span>
+    </div>
+    <div class="status-right">
+      <div class="status-batt" id="status-batt" title="Battery">
+        <span class="status-batt-icon">&#9889;</span>
+        <div class="status-batt-track"><div class="status-batt-fill" id="status-batt-fill"></div></div>
+      </div>
+      <div class="status-dock-ic" id="status-dock-ic" title="Dock charge">&#9632;</div>
+    </div>
+  </div>
 
   <header id="topbar">
     <h1 id="topbar-title">WALL-E <span>LROS</span></h1>
@@ -592,6 +650,8 @@ const TOAST_DURATION = 6000;
 const FAILSAFE_MS = 440;
 
 let toastId = 0;
+/** Only page-home shows toast popups; updated by switchTab */
+let currentVisiblePage = 'home';
 let tankLeft = 0, tankRight = 0, maxSpeed = 255;
 let driveMode = 'joystick';
 let hbTimer = null;
@@ -602,6 +662,9 @@ const JOY_DEAD = 0.12, JOY_MAX = 40;
 
 // â”€â”€â”€ Navigation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function switchTab(name) {
+  currentVisiblePage = name;
+  const stack = document.getElementById('toast-stack');
+  if (stack && name !== 'home') stack.innerHTML = '';
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
   document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + name));
   if (name === 'network') { fetchStatus(); showNetworkForm(false); }
@@ -613,7 +676,9 @@ function switchTab(name) {
 
 // â”€â”€â”€ Toasts (emotional presence) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function showToast(emoji, text) {
+  if (currentVisiblePage !== 'home') return;
   const stack = document.getElementById('toast-stack');
+  if (!stack) return;
   const el = document.createElement('div');
   el.className = 'toast';
   el.innerHTML = '<span style="margin-right:8px">' + emoji + '</span>' + text;
@@ -643,6 +708,43 @@ function setOverrideBanner(visible) {
 }
 
 // â”€â”€â”€ Drive â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+let _pillState = {};
+function pollNodeHealth() {
+  fetch(BASE + '/api/system/health').then(r => r.json()).then(s => {
+    if (!s || !s.nodes) return;
+    const map = {};
+    s.nodes.forEach(function(n) { map[n.id] = n; });
+    ['base','master','audio','dock','vision'].forEach(function(id) {
+      const el = document.querySelector('.node-pill[data-pill="' + id + '"]');
+      if (!el) return;
+      const n = map[id];
+      if (!n) return;
+      const on = !!n.online;
+      const prev = _pillState[id];
+      _pillState[id] = on;
+      el.classList.remove('ok','warn','off');
+      if (on) el.classList.add('ok');
+      else el.classList.add('off');
+      if (prev !== undefined && prev !== on) {
+        el.classList.add('edge');
+        setTimeout(function() { el.classList.remove('edge'); }, 500);
+      }
+    });
+    const bfill = document.getElementById('status-batt-fill');
+    const base = map.base;
+    if (bfill && base && base.battery_pct != null && base.battery_pct >= 0) {
+      bfill.style.width = Math.max(0, Math.min(100, base.battery_pct)) + '%';
+      bfill.className = 'status-batt-fill' + (base.battery_pct < 20 ? ' low' : '');
+    }
+    const dockIc = document.getElementById('status-dock-ic');
+    if (dockIc && map.dock) {
+      var chg = (map.dock.flags & 2) !== 0;
+      dockIc.classList.toggle('charging', chg);
+    }
+  }).catch(function() {});
+}
+
+// Drive
 function setDriveMode(mode) {
   driveMode = mode;
   document.getElementById('drive-joystick').style.display = mode === 'joystick' ? 'flex' : 'none';
@@ -965,7 +1067,9 @@ function devFetch() {
 document.addEventListener('DOMContentLoaded', () => {
   initJoystick();
   fetchStatus();
+  pollNodeHealth();
   setInterval(fetchStatus, 5000);
+  setInterval(pollNodeHealth, 1500);
   try { fetch(BASE + '/stop'); } catch(_) {}
   setTimeout(() => showToast('\uD83D\uDE0A', "Hi! I'm WALL-E"), 1500);
 });

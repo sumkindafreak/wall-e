@@ -34,6 +34,8 @@ static uint32_t        s_stateEnterMs = 0;
 static uint32_t        s_lastDockId = 0;
 static uint32_t        s_lastApproachStageMs = 0;
 static int16_t         s_outLeft = 0, s_outRight = 0;
+static uint8_t         s_irHint = DOCK_IR_ALIGN_LOST;
+static uint32_t        s_lastIrHintMs = 0;
 
 #define APPROACH_STAGE_SEND_MS  150
 
@@ -89,6 +91,15 @@ void autonomousDockingSetLastDockId(uint32_t dock_id) {
   s_lastDockId = dock_id;
 }
 
+void autonomousDockingOnIrAlign(uint8_t ir_align_hint) {
+  s_irHint = ir_align_hint;
+  s_lastIrHintMs = millis();
+}
+
+static bool irAlignHintFresh(uint32_t now) {
+  return (now - s_lastIrHintMs) < 500u;
+}
+
 void autonomousDockingSetRequested(bool requested) {
   s_requested = requested;
   if (requested && s_state == DOCK_STATE_IDLE) {
@@ -116,6 +127,7 @@ static bool batteryOk(void) {
 bool autonomousDockingUpdate(uint32_t now) {
   /* IDLE: Check for low battery → auto-start search */
   if (s_state == DOCK_STATE_IDLE) {
+    irBeaconSetTransmitEnabled(false);
     if (batteryLow() && !s_requested) {
       s_requested = true;
       s_state = DOCK_STATE_SEARCH;
@@ -131,8 +143,15 @@ bool autonomousDockingUpdate(uint32_t now) {
 
   /* CHARGING: No motor output */
   if (s_state == DOCK_STATE_CHARGING) {
+    irBeaconSetTransmitEnabled(false);
     stopMotors();
     return false;
+  }
+
+  {
+    bool wantTx = (s_state == DOCK_STATE_SEARCH || s_state == DOCK_STATE_ALIGN ||
+                   s_state == DOCK_STATE_APPROACH);
+    irBeaconSetTransmitEnabled(wantTx);
   }
 
   /* Default: no output */
@@ -166,11 +185,8 @@ bool autonomousDockingUpdate(uint32_t now) {
       s_lastApproachStageMs = now;
     }
     if (s_lastRssi > RSSI_THRESHOLD) {
-      if (irBeaconAnyDetected()) {
-        s_state = DOCK_STATE_ALIGN;
-      } else {
-        s_state = DOCK_STATE_APPROACH;  /* Beacon only: skip align, go straight */
-      }
+      /* Strong beacon: run ALIGN so dock IR + beacon hint can center the robot */
+      s_state = DOCK_STATE_ALIGN;
       s_stateEnterMs = now;
       return true;
     }
@@ -193,21 +209,32 @@ bool autonomousDockingUpdate(uint32_t now) {
       dockControllerSendApproachStage(stage, s_lastDockId ? s_lastDockId : 0);
       s_lastApproachStageMs = now;
     }
-    int16_t balance = irBeaconGetBalance();
-    if (abs(balance) < DOCK_IR_ALIGN_THRESHOLD) {
-      /* Aligned — move to approach */
-      s_state = DOCK_STATE_APPROACH;
-      s_stateEnterMs = now;
-      driveForward(SPEED_NORMAL);
+    if (!irAlignHintFresh(now)) {
+      /* No recent dock packet with IR hint — creep and weave */
+      rotateSlow(-SPEED_ALIGN / 2, SPEED_ALIGN);
       return true;
     }
-    if (balance > 0) {
-      /* Right stronger — steer right */
-      steerRight(SPEED_ALIGN);
-    } else {
-      steerLeft(SPEED_ALIGN);
+
+    switch (s_irHint) {
+      case DOCK_IR_ALIGN_CENTER:
+        s_state = DOCK_STATE_APPROACH;
+        s_stateEnterMs = now;
+        driveForward(SPEED_NORMAL);
+        return true;
+      case DOCK_IR_ALIGN_LEFT:
+        steerLeft(SPEED_ALIGN);
+        return true;
+      case DOCK_IR_ALIGN_RIGHT:
+        steerRight(SPEED_ALIGN);
+        return true;
+      case DOCK_IR_ALIGN_PAUSE:
+        stopMotors();
+        return true;
+      case DOCK_IR_ALIGN_LOST:
+      default:
+        rotateSlow(-SPEED_ALIGN / 2, SPEED_ALIGN);
+        return true;
     }
-    return true;
   }
 
   /* -----------------------------------------------------------------------
@@ -290,4 +317,16 @@ bool autonomousDockingIsActive(void) {
 
 DockState autonomousDockingGetState(void) {
   return s_state;
+}
+
+const char* autonomousDockingGetStateName(void) {
+  switch (s_state) {
+    case DOCK_STATE_SEARCH: return "SEARCHING";
+    case DOCK_STATE_ALIGN: return "ALIGNING";
+    case DOCK_STATE_APPROACH: return "APPROACH";
+    case DOCK_STATE_DOCKED: return "DOCKED";
+    case DOCK_STATE_CHARGING: return "CHARGING";
+    case DOCK_STATE_IDLE:
+    default: return "IDLE";
+  }
 }

@@ -11,6 +11,7 @@
 #include "motion_engine.h"  // For SERVO_COUNT and motionGetServoTargets
 #include <Arduino.h>
 #include <stdio.h>
+#include <string.h>
 #include <math.h>
 
 TFT_eSPI* g_tft = nullptr;
@@ -24,6 +25,7 @@ static float s_lastCurrent = -1.0f;
 static float s_lastTemp = -1.0f;
 static uint16_t s_lastPacketRate = 999;
 static const char* s_lastModeStr = nullptr;
+static char s_lastEmoStr[16] = "";
 static int s_lastJoyDotX = JOY_CX, s_lastJoyDotY = JOY_CY;
 static int s_lastLeftSpeed = 999, s_lastRightSpeed = 999;
 static const int DOT_R = 8;  // Larger dot for single joystick
@@ -121,6 +123,7 @@ void uiDrawStaticDrive(void) {
   s_lastBatV = -999.0f;
   s_lastModeStr = nullptr;
   s_lastPacketRate = 9999;
+  s_lastEmoStr[0] = '\0';
   
   // Draw initial eye
   animDrawEye(0, false, true);
@@ -273,9 +276,11 @@ void uiDrawTelemetryStrip(const TelemetryStripData* telem) {
   if (batPct < 0) batPct = 0;
   if (batPct > 100) batPct = 100;
 
+  const char* emo = telem->emotionStr ? telem->emotionStr : "";
   bool changed = (telem->batteryV != s_lastBatV || batPct != s_lastBatPct ||
                   telem->currentA != s_lastCurrent || telem->tempC != s_lastTemp ||
-                  telem->packetRate != s_lastPacketRate || telem->modeStr != s_lastModeStr);
+                  telem->packetRate != s_lastPacketRate || telem->modeStr != s_lastModeStr ||
+                  strcmp(s_lastEmoStr, emo) != 0);
   if (!changed) return;
 
   s_lastBatV = telem->batteryV;
@@ -284,6 +289,8 @@ void uiDrawTelemetryStrip(const TelemetryStripData* telem) {
   s_lastTemp = telem->tempC;
   s_lastPacketRate = telem->packetRate;
   s_lastModeStr = telem->modeStr;
+  strncpy(s_lastEmoStr, emo, sizeof(s_lastEmoStr) - 1);
+  s_lastEmoStr[sizeof(s_lastEmoStr) - 1] = '\0';
 
   g_tft->fillRect(0, TOP_BAR_HEIGHT, SCREEN_W, TELEM_STRIP_H, C_BG_DARK);
   g_tft->drawRect(10, y, w + 2, h + 2, C_BORDER);
@@ -297,10 +304,11 @@ void uiDrawTelemetryStrip(const TelemetryStripData* telem) {
   g_tft->setTextSize(1);
   g_tft->drawString(batText, 14, y + 1);  // Inside the battery bar
 
-  char buf[80];
-  snprintf(buf, sizeof(buf), "%.2fV | %.1fC | %.2fA | %up/s | %s",
+  char buf[96];
+  snprintf(buf, sizeof(buf), "%.2fV | %.1fC | %.2fA | %up/s | %s | Emo:%s",
            telem->batteryV, telem->tempC, telem->currentA,
-           (unsigned)telem->packetRate, telem->modeStr ? telem->modeStr : "--");
+           (unsigned)telem->packetRate, telem->modeStr ? telem->modeStr : "--",
+           emo[0] ? emo : "--");
   g_tft->setTextColor(telem->connected ? C_WHITE : C_TEXT_DIM, C_BG_DARK);
   g_tft->setTextSize(1);
   g_tft->drawString(buf, 78, y);

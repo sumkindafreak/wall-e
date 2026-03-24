@@ -15,3 +15,6 @@ const char* visionBehaviourGetStateName(void);
 String visionGetStatusJSON(void);
 void visionSetEnabled(bool en);
 bool visionIsEnabled(void);
+
+/** Recent vision activity suitable for pose "human / interest" (motion or active track). */
+bool visionBehaviourIsEngaged(void);

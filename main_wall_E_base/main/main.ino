@@ -1,4 +1,7 @@
 // ============================================================
+//  Arduino IDE: You opened the correct sketch (folder "main" + main.ino).
+//  See ../ARDUINO_IDE_QUICK_START.md — ignore platformio.ini for daily use.
+// ============================================================
 //  WALL-E Simple WebUI + Tank Drive Controller
 //  Platform:   ESP32-S3 Dev Module
 //  Motor:      L298N Dual H-Bridge
@@ -24,6 +27,9 @@
 #include "dock_config.h"
 #include "vision_behaviour.h"
 #include "audio_espnow.h"
+#include "node_health_registry.h"
+#include "walle_emotion_pose_bridge.h"
+#include "walle_emotion_pose.h"
 
 // NEW: Autonomy and behavioral brain includes
 #include "sonar_sensor.h"
@@ -137,6 +143,10 @@ void setup() {
   Serial.println("[Setup] Post-espnow");
   audioEspNowInit();
   Serial.println("[Setup] Post-audioEspNow");
+  nodeHealthInit();
+  Serial.println("[Setup] Post-nodeHealth");
+  walleEmotionPoseBridgeInit();
+  Serial.println("[Setup] Post-emotionPoseBridge");
 
   // Vision behaviour (servo tracking from camera node ESP-NOW packets)
   visionBehaviourInit();
@@ -265,6 +275,10 @@ void loop() {
     espnowSendTelemetry();
     lastTelemSendMs = now;
   }
+
+  nodeHealthTick();
+  walleEmotionPoseBridgeTick();
+  walleEmotionPoseApplyToServosStub();
 
   // Failsafe: stop drive motors if no command received (AUTONOMY TEMPORARILY DISABLED)
   if ((now - lastCommandMillis) > FAILSAFE_TIMEOUT_MS) {

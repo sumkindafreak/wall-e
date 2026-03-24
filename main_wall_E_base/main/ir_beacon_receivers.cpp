@@ -1,45 +1,72 @@
 /*******************************************************************************
  * ir_beacon_receivers.cpp
- * Left/right IR beacon receiver readings for dock alignment
+ * WALL-E front IR transmitters (940 nm) for dock TSOP receivers.
+ * Pins unchanged: IR_BEACON_LEFT_PIN / IR_BEACON_RIGHT_PIN (see .h).
+ *
+ * TSOP/VS1838B need ~38 kHz carrier — we drive LEDs with LEDC PWM, not DC.
  ******************************************************************************/
 
 #include "ir_beacon_receivers.h"
 #include <Arduino.h>
 
-#define IR_SMOOTH        0.3f   /* Low-pass: new = alpha*raw + (1-alpha)*prev */
-#define IR_DETECT_THRESH 100    /* ADC above this = beacon detected */
+#define IR_PWM_FREQ_HZ   38000u
+#define IR_PWM_RES_BITS  8
+#define IR_PWM_DUTY_ON   128u
 
-static uint16_t s_left  = 0;
-static uint16_t s_right = 0;
-static uint32_t s_lastUpdateMs = 0;
-#define IR_POLL_MS 20
+#if defined(ARDUINO_ARCH_ESP32)
+static const uint8_t kChL = 8;
+static const uint8_t kChR = 9;
+#endif
+
+static bool s_txEnabled = false;
+
+#if defined(ARDUINO_ARCH_ESP32)
+static void ledcApplyOutputs(void) {
+  uint32_t duty = s_txEnabled ? IR_PWM_DUTY_ON : 0u;
+  ledcWrite(kChL, duty);
+  ledcWrite(kChR, duty);
+}
+#endif
 
 void irBeaconInit(void) {
-  pinMode(IR_BEACON_LEFT_PIN,  INPUT);
-  pinMode(IR_BEACON_RIGHT_PIN, INPUT);
-  s_left  = 0;
-  s_right = 0;
+#if defined(ARDUINO_ARCH_ESP32)
+  ledcSetup((uint8_t)kChL, IR_PWM_FREQ_HZ, IR_PWM_RES_BITS);
+  ledcSetup((uint8_t)kChR, IR_PWM_FREQ_HZ, IR_PWM_RES_BITS);
+  ledcAttachPin(IR_BEACON_LEFT_PIN, (uint8_t)kChL);
+  ledcAttachPin(IR_BEACON_RIGHT_PIN, (uint8_t)kChR);
+  s_txEnabled = false;
+  ledcApplyOutputs();
+#else
+  pinMode(IR_BEACON_LEFT_PIN, OUTPUT);
+  pinMode(IR_BEACON_RIGHT_PIN, OUTPUT);
+  digitalWrite(IR_BEACON_LEFT_PIN, LOW);
+  digitalWrite(IR_BEACON_RIGHT_PIN, LOW);
+#endif
+}
+
+void irBeaconSetTransmitEnabled(bool on) {
+  s_txEnabled = on;
+#if defined(ARDUINO_ARCH_ESP32)
+  ledcApplyOutputs();
+#else
+  digitalWrite(IR_BEACON_LEFT_PIN, on ? HIGH : LOW);
+  digitalWrite(IR_BEACON_RIGHT_PIN, on ? HIGH : LOW);
+#endif
 }
 
 void irBeaconUpdate(uint32_t now) {
-  if (now - s_lastUpdateMs < IR_POLL_MS) return;
-  s_lastUpdateMs = now;
-
-  uint16_t l = analogRead(IR_BEACON_LEFT_PIN);
-  uint16_t r = analogRead(IR_BEACON_RIGHT_PIN);
-
-  /* Simple low-pass to reduce noise */
-  s_left  = (uint16_t)(IR_SMOOTH * l + (1.0f - IR_SMOOTH) * s_left);
-  s_right = (uint16_t)(IR_SMOOTH * r + (1.0f - IR_SMOOTH) * s_right);
+  (void)now;
 }
 
-uint16_t irBeaconGetLeft(void)  { return s_left;  }
-uint16_t irBeaconGetRight(void) { return s_right; }
+uint16_t irBeaconGetLeft(void) { return s_txEnabled ? 1u : 0u; }
+uint16_t irBeaconGetRight(void) { return s_txEnabled ? 1u : 0u; }
 
 int16_t irBeaconGetBalance(void) {
-  return (int16_t)s_right - (int16_t)s_left;
+  /* Legacy API — alignment uses dock beacon ir_align_hint on base. */
+  return 0;
 }
 
 bool irBeaconAnyDetected(void) {
-  return (s_left > IR_DETECT_THRESH || s_right > IR_DETECT_THRESH);
+  /* Legacy: was “either local receiver saw dock”. TX side: on when actively transmitting. */
+  return s_txEnabled;
 }

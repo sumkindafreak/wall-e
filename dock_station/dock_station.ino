@@ -22,6 +22,7 @@
 #endif
 #include "dock_state.h"
 #include "dock_alignment.h"
+#include "dock_ir_guidance.h"
 #include "dock_callout.h"
 #include "dock_display.h"
 #include "dock_hw.h"
@@ -54,7 +55,7 @@ void setup() {
                          "internal LED");
 
   /* Sensors (IR + obstacles, current sense; sonar optional last-resort) */
-  Serial.println(F("[DOCK] Enabling sensors (no current sense on S3)"));
+  Serial.println(F("[DOCK] Enabling sensors (IR, obstacles, ACS712 if GPIO OK)"));
   dockSensorsBegin();
 #if USE_VL6180_TOF
   dockVl6180Begin();
@@ -76,7 +77,7 @@ void setup() {
   Serial.println(F("[DOCK] Enabling NeoPixel status strip"));
   dockNeoPixelBegin();
   /* Dock TFT display */
-  Serial.println(F("[DOCK] Enabling TFT display (ST7789)"));
+  Serial.println(F("[DOCK] Enabling TFT display"));
   dockDisplayBegin();
 
 #if ENABLE_WIFI
@@ -135,12 +136,15 @@ void loop() {
     pkt.charge_enabled = dockChargeEnabled() ? 1 : 0;
     pkt.callout_active = dockCalloutIsActive() ? 1 : 0;
     pkt.current_a_x100 = (int16_t)(dockCurrentAmps() * 100.0f);
+    pkt.ir_align_hint = dockIrGuidanceGetBeaconHint();
     dockEspNowSendBeacon(&pkt);
+    dockEspNowSendNodeHealth();
   }
 #endif
 
   /* 1. Read sensors */
   dockSensorsUpdate();
+  dockIrGuidanceUpdate(now, dockDockDetected(), !dockCalloutIsActive());
 
   /* 2. Update state machine (controls MOSFET internally) */
   bool state_changed = dockStateUpdate();

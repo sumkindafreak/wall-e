@@ -5,7 +5,7 @@
 #ifndef DOCK_VL6180_H
 #define DOCK_VL6180_H
 
-#include <stdbool.h>
+#include <Arduino.h>
 
 void dockVl6180Begin(void);
 void dockVl6180Update(void);

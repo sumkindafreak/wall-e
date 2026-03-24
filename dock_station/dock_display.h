@@ -1,6 +1,7 @@
 /*******************************************************************************
  * dock_display.h
- * SSD1306 128x64 OLED status display
+ * Dock status display API — uses the same graphite + amber *theme* as the CYD
+ * master UI (RGB565 palette / layout cues). Panel driver and resolution unchanged.
  ******************************************************************************/
 
 #ifndef DOCK_DISPLAY_H

@@ -91,6 +91,7 @@ static void onRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len
       dockHomingOnBeacon(rssi);
       autonomousDockingOnBeacon(rssi);
       autonomousDockingSetLastDockId(bp->dock_id);
+      autonomousDockingOnIrAlign(bp->ir_align_hint);
       if (bp->callout_active) autonomousDockingSetRequested(true);
       return;
     }

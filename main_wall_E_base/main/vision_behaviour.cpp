@@ -5,6 +5,7 @@
 
 #include "vision_behaviour.h"
 #include "vision_protocol.h"
+#include "node_health_registry.h"
 #include "servo_manager.h"
 #include <Arduino.h>
 #include <Preferences.h>
@@ -78,6 +79,7 @@ void visionBehaviourOnPacket(const VisionPacket_t* pkt, size_t len) {
   size_t copyLen = (len < sizeof(VisionPacket_t)) ? len : sizeof(VisionPacket_t);
   memcpy(&s_lastPacket, pkt, copyLen);
   if (copyLen < sizeof(VisionPacket_t)) memset((uint8_t*)&s_lastPacket + copyLen, 0, sizeof(VisionPacket_t) - copyLen);
+  nodeHealthMarkVisionSeen();
   s_hasPacket = true;
   s_lastVisionMs = millis();
   if (pkt->motionDetected) s_lastMotionMs = millis();
@@ -220,4 +222,11 @@ void visionSetEnabled(bool en) {
 
 bool visionIsEnabled(void) {
   return s_visionEnabled;
+}
+
+bool visionBehaviourIsEngaged(void) {
+  if (!s_hasPacket) return false;
+  if (millis() - s_lastVisionMs > 3000) return false;
+  if (s_lastPacket.motionDetected) return true;
+  return (s_state == VBEHAVE_TRACKING || s_state == VBEHAVE_FOLLOWING || s_state == VBEHAVE_CURIOUS);
 }

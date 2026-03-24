@@ -15,6 +15,26 @@
 <div id="app">
   <div id="override-banner" aria-live="polite">Local Control Active - CYD touchscreen has control</div>
 
+  <div id="status-strip" role="region" aria-label="Fleet status">
+    <div class="status-eye-wrap" title="Heartbeat">
+      <div id="status-eye" class="status-eye"><span class="status-eye-lens"></span></div>
+    </div>
+    <div class="node-pills" id="node-pills">
+      <span class="node-pill ok" data-pill="base" title="Base">BASE</span>
+      <span class="node-pill off" data-pill="master" title="CYD Master">CYD</span>
+      <span class="node-pill off" data-pill="audio" title="Audio">AUD</span>
+      <span class="node-pill off" data-pill="dock" title="Dock">DOCK</span>
+      <span class="node-pill off" data-pill="vision" title="Vision">VIS</span>
+    </div>
+    <div class="status-right">
+      <div class="status-batt" id="status-batt" title="Battery">
+        <span class="status-batt-icon">&#9889;</span>
+        <div class="status-batt-track"><div class="status-batt-fill" id="status-batt-fill"></div></div>
+      </div>
+      <div class="status-dock-ic" id="status-dock-ic" title="Dock charge">&#9632;</div>
+    </div>
+  </div>
+
   <header id="topbar">
     <h1 id="topbar-title">WALL-E <span>LROS</span></h1>
     <div id="conn-badge" onclick="switchTab('network')">

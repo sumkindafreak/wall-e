@@ -32,6 +32,20 @@ static bool isKnownAdcCapablePin(uint8_t pin) {
 #endif
 }
 
+/**
+ * True if we should call analogRead() on this pin.
+ * On ESP32-S3, some Arduino-ESP32 core versions return digitalPinToAnalogChannel() < 0 for GPIO1
+ * etc. even though ADC still works — so we allow the usual S3 ADC GPIO range (1–20) as fallback.
+ */
+static bool pinAdcOkForRead(uint8_t pin) {
+  if (digitalPinToAnalogChannel(pin) >= 0) return true;
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+  return (pin >= 1 && pin <= 20);
+#else
+  return false;
+#endif
+}
+
 bool dockConfigureInputPin(uint8_t pin, uint8_t mode, const char *label) {
   if (!digitalPinIsValid(pin)) {
     warnPinOnce(s_warned_invalid_gpio, pin, label, "is not a valid GPIO on ESP32-S3");
@@ -84,7 +98,7 @@ int dockAnalogReadSafe(uint8_t pin, const char *label, int fallback) {
     warnPinOnce(s_warned_invalid_analog, pin, label, "is not in the ESP32-S3 ADC pin range (GPIO1-20)");
     return fallback;
   }
-  if (digitalPinToAnalogChannel(pin) < 0) {
+  if (!pinAdcOkForRead(pin)) {
     warnPinOnce(s_warned_invalid_analog, pin, label, "is not ADC-capable on ESP32-S3");
     return fallback;
   }
@@ -118,7 +132,7 @@ bool dockCurrentSenseAvailable(void) {
     warnPinOnce(s_warned_invalid_analog, PIN_ACS712_ADC, "ACS712 current sense", "is not in the ESP32-S3 ADC pin range (GPIO1-20)");
     return false;
   }
-  if (digitalPinToAnalogChannel(PIN_ACS712_ADC) < 0) {
+  if (!pinAdcOkForRead(PIN_ACS712_ADC)) {
     warnPinOnce(s_warned_invalid_analog, PIN_ACS712_ADC, "ACS712 current sense", "is not ADC-capable on ESP32-S3");
     return false;
   }

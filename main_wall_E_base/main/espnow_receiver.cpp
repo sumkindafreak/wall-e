@@ -17,6 +17,8 @@
 #include "vision_protocol.h"
 #include "vision_behaviour.h"
 #include "audio_protocol.h"
+#include "node_health_protocol.h"
+#include "node_health_registry.h"
 #include "audio_espnow.h"
 #include "audio_telem.h"
 #include "audio_esp_status.h"
@@ -90,6 +92,14 @@ static uint32_t s_lastManualCommandMs = 0;
 static void onRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len) {
   audioTelemOnPacket(data, len);
 
+  if (len >= (int)sizeof(WalleNodeHealthPacket_t)) {
+    const WalleNodeHealthPacket_t* hp = (const WalleNodeHealthPacket_t*)data;
+    if (hp->magic == WALLE_NODE_HEALTH_MAGIC && hp->version == WALLE_NODE_HEALTH_VERSION) {
+      nodeHealthOnPacket(data, len);
+      return;
+    }
+  }
+
   /* Dock beacon: homing target. Feed RSSI and dock_id to both systems. */
   if (len >= (int)sizeof(DockBeaconPacket_t)) {
     const DockBeaconPacket_t* bp = (const DockBeaconPacket_t*)data;
@@ -99,6 +109,8 @@ static void onRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len
       dockHomingOnBeacon(rssi);
       autonomousDockingOnBeacon(rssi);
       autonomousDockingSetLastDockId(bp->dock_id);
+      autonomousDockingOnIrAlign(bp->ir_align_hint);
+      nodeHealthOnDockBeacon(bp);
       return;
     }
   }

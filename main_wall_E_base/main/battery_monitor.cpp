@@ -72,10 +72,25 @@ bool batteryHandle() {
   float v = readVoltage();
   float a = readCurrent();
 
-  if (v < BATTERY_MIN_V || v > BATTERY_MAX_V) {
-    Serial.printf("[Battery] voltage clamped from %.2fV to %.1f–%.1fV range\n", v, BATTERY_MIN_V, BATTERY_MAX_V);
+  /* Below BATTERY_MIN_V: not a valid 5V rail reading — floating ADC / no sensor / dead sense line.
+     Old behavior used constrain() which forced 0.35V → 4.0V and looked like a full rail. */
+  if (v < BATTERY_MIN_V) {
+    _bat.voltage = v;
+    _bat.currentA = a;
+    _bat.percent = 0;
+    _bat.valid = false;
+    _bat.status = BAT_UNKNOWN;
+    Serial.printf("[Battery] %.2fV < %.1fV (min rail) — treat as no/faulty sensor; not clamping to %.1fV\n",
+                  v, BATTERY_MIN_V, BATTERY_MIN_V);
+    Serial.printf("[Battery] %.2fV | %.2fA | --%% | status=invalid\n", v, a);
+    return true;
   }
-  v = constrain(v, BATTERY_MIN_V, BATTERY_MAX_V);
+
+  if (v > BATTERY_MAX_V) {
+    Serial.printf("[Battery] voltage clamped from %.2fV to max %.1fV\n", v, BATTERY_MAX_V);
+    v = BATTERY_MAX_V;
+  }
+
   int pct = (int)(((v - BATTERY_MIN_V) / (BATTERY_MAX_V - BATTERY_MIN_V)) * 100.0f);
   pct = constrain(pct, 0, 100);
 

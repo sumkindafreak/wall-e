@@ -8,9 +8,12 @@
  *   20cm:    Precision alignment (faster blink)
  *   Beam:    Docking lock (both solid)
  *
- * Left/right IR sensors detect which side WALL-E is closer to.
+ * Hardware: many builds use a **left + right IR transmitter** pair on the dock for alignment,
+ * with **receiver** modules (or a pair of detectors) wired to the ESP32. This code only reads
+ * those receiver pins — it does not drive the IR LEDs (they are usually always powered).
+ *
  * steer left → right arrow flashes; steer right → left arrow flashes;
- * centered → both blink; docked → both solid.
+ * centered → both blink; docked → both off.
  ******************************************************************************/
 
 #ifndef DOCK_ALIGNMENT_H

@@ -13,12 +13,18 @@
 
 #include "dock_neopixel.h"
 #include "dock_config.h"
+#include "dock_ir_guidance.h"
 #include "dock_state.h"
 #include <FastLED.h>
 #include <Arduino.h>
 
 #define LED_TYPE    WS2812B
 #define COLOR_ORDER GRB
+
+/* Match CYD TFT accent (RGB565 0xFD20 / 0xB360) for one coherent “console” look */
+static const CRGB kCydAccent(255, 140, 0);
+static const CRGB kCydAccentDim(179, 96, 0);
+static const CRGB kCydGreen(0, 220, 60);
 
 static CRGB leds[NEOPIXEL_COUNT];
 static uint8_t g_brightness = NEOPIXEL_BRIGHTNESS_DEFAULT;
@@ -78,48 +84,41 @@ void dockNeoPixelUpdateEx(NeoPixelState state, bool mouth_blocked_warn,
   // Map state -> colours
   switch (state) {
     case NP_STATE_NOT_DOCKED: {
-      // Idle: dim amber breathing bar across all strip pixels
       uint8_t lvl = breathe(elapsed, NEOPIXEL_BREATHE_PERIOD_MS, 10, 80);
-      CRGB c = CRGB(lvl, lvl / 2, 0);
       for (int i = 0; i < NEOPIXEL_STRIP_COUNT; ++i) {
-        leds[i] = c;
+        leds[i].r = scale8(kCydAccent.r, lvl);
+        leds[i].g = scale8(kCydAccent.g, lvl);
+        leds[i].b = scale8(kCydAccent.b, lvl);
       }
       break;
     }
     case NP_STATE_DOCKED_IDLE: {
-      // Front segment = dock present, mid = amber waiting, tail = dim amber
-      CRGB dockC = dock_present ? CRGB::Green : CRGB::Black;
+      // Front segment = dock present, mid = CYD amber, tail = dim amber
+      CRGB dockC = dock_present ? kCydGreen : CRGB::Black;
       int midStart = NEOPIXEL_STRIP_COUNT / 3;
       int midEnd   = (NEOPIXEL_STRIP_COUNT * 2) / 3;
       for (int i = 0; i < NEOPIXEL_STRIP_COUNT; ++i) {
         if (i < midStart) {
           leds[i] = dockC;
         } else if (i < midEnd) {
-          leds[i] = CRGB(255, 160, 0);
+          leds[i] = kCydAccent;
         } else {
-          leds[i] = CRGB(120, 80, 0);
+          leds[i] = kCydAccentDim;
         }
       }
       break;
     }
     case NP_STATE_CHARGING: {
-      // Orange bar scaled by current across entire strip
-      float iAbs = (current_amps < 0) ? -current_amps : current_amps;
-      int maxBars = NEOPIXEL_STRIP_COUNT;
-      int bars = (int)(iAbs / (CURRENT_OVERCURRENT_A / (float)maxBars));
-      if (bars < 1) bars = 1;
-      if (bars > maxBars) bars = maxBars;
       for (int i = 0; i < NEOPIXEL_STRIP_COUNT; ++i) {
-        leds[i] = CRGB(255, 140, 0);
+        leds[i] = kCydAccent;
       }
       break;
     }
     case NP_STATE_CHARGED: {
-      // Solid green with slow pulse
       uint8_t lvl = breathe(elapsed, NEOPIXEL_CHARGED_PULSE_MS, 30, 120);
       FastLED.setBrightness(lvl);
       for (int i = 0; i < NEOPIXEL_STRIP_COUNT; ++i) {
-        leds[i] = CRGB::Green;
+        leds[i] = kCydGreen;
       }
       break;
     }
@@ -132,12 +131,11 @@ void dockNeoPixelUpdateEx(NeoPixelState state, bool mouth_blocked_warn,
       break;
     }
     case NP_STATE_CALLOUT: {
-      // Amber chase
       int pos = (elapsed / 80) % NEOPIXEL_STRIP_COUNT;
       for (int i = 0; i < NEOPIXEL_STRIP_COUNT; ++i) {
         int d = abs(i - pos);
-        leds[i] = (d == 0) ? CRGB(255, 180, 0)
-                 : (d == 1) ? CRGB(200, 100, 0)
+        leds[i] = (d == 0) ? kCydAccent
+                 : (d == 1) ? kCydAccentDim
                  : CRGB::Black;
       }
       break;
@@ -161,19 +159,26 @@ void dockNeoPixelUpdateEx(NeoPixelState state, bool mouth_blocked_warn,
         g_attention_flash_count++;
       }
       g_attention_last_on = on;
-      status = on ? CRGB(255, 165, 0) : CRGB::Black;
+      status = on ? kCydAccent : CRGB::Black;
     } else {
-      status = CRGB::Green;
+      status = kCydGreen;
     }
   } else if (dock_present || state == NP_STATE_NOT_DOCKED || state == NP_STATE_CHARGED) {
     g_attention_flash_count = 0;
     g_attention_last_on = false;
-    status = CRGB::Green;
+    status = kCydGreen;
   }
 
   if (NEOPIXEL_FAULT_LED_INDEX >= 0 && NEOPIXEL_FAULT_LED_INDEX < NEOPIXEL_COUNT) {
     leds[NEOPIXEL_FAULT_LED_INDEX] = status;
   }
+
+#if DOCK_IR_NEOPIXEL_DEBUG
+  if (state == NP_STATE_NOT_DOCKED && NEOPIXEL_STRIP_COUNT > 9) {
+    leds[8] = dockIrGuidanceDebugLeftOn() ? CRGB::Green : CRGB::Black;
+    leds[9] = dockIrGuidanceDebugRightOn() ? CRGB::Green : CRGB::Black;
+  }
+#endif
 
   FastLED.show();
 }

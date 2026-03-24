@@ -8,6 +8,7 @@
 #include "battery_monitor.h"
 #include "autonomy_engine.h"
 #include "emotion_engine.h"
+#include "walle_emotion_pose.h"
 #include "interest_engine.h"
 #include "personality_engine.h"
 #include "memory_engine.h"
@@ -17,6 +18,10 @@
 #include "audio_espnow.h"
 #include "audio_telem.h"
 #include "audio_protocol.h"
+#include "node_health_registry.h"
+#include "node_health_protocol.h"
+#include "autonomous_docking.h"
+#include "dock_config.h"
 #include "sonar_sensor.h"
 #include "gps_module.h"
 #include <WebServer.h>
@@ -268,6 +273,7 @@ static void handleAutonomyStatus() {
   json += ",\"interest\":"; json += String(interestGetLevel(), 1);
   json += ",\"heightLevel\":"; json += String(ctx->investigationLevel);
   json += ",\"emotion\":\""; json += emotionGetName();
+  json += "\",\"poseEmotion\":\""; json += walleEmotionPoseGetName();
   json += "\",\"personality\":{\"curiosity\":"; json += String(p->curiosity, 2);
   json += ",\"bravery\":"; json += String(p->bravery, 2);
   json += ",\"energy\":"; json += String(p->energy, 2);
@@ -358,6 +364,73 @@ static void handleAudioVolume() {
   server.send(ok ? 200 : 503, "text/plain", ok ? "OK" : "FAIL");
 }
 
+static void handleSystemHealth() {
+  addCORS();
+  server.send(200, "application/json", nodeHealthGetJSON());
+}
+
+static void handleNodesApi() {
+  addCORS();
+  server.send(200, "application/json", nodeHealthGetJSON());
+}
+
+static void handleEmotionApi() {
+  WalleEmotionPose p = walleEmotionPoseGetPose(walleEmotionPoseGetState());
+  String json = "{";
+  json += "\"behavior\":\""; json += emotionGetName(); json += "\"";
+  json += ",\"pose\":\""; json += walleEmotionPoseGetName(); json += "\"";
+  json += ",\"pose_id\":"; json += (int)walleEmotionPoseGetState();
+  json += ",\"pose_axes\":{\"eyeTilt\":"; json += (int)p.eyeTilt;
+  json += ",\"neckRotate\":"; json += (int)p.neckRotate;
+  json += ",\"neckLift\":"; json += (int)p.neckLift;
+  json += ",\"neckHeight\":"; json += (int)p.neckHeight;
+  json += "}}";
+  addCORS();
+  server.send(200, "application/json", json);
+}
+
+static void handleEmotionSetApi() {
+  if (server.hasArg("clear") && server.arg("clear") == "1") {
+    walleEmotionPoseSetManualOverride(-1);
+  } else if (server.hasArg("id")) {
+    int v = server.arg("id").toInt();
+    if (v >= 0 && v <= (int)WALLE_EMOTION_TIRED) {
+      walleEmotionPoseSetManualOverride((int8_t)v);
+    }
+  }
+  addCORS();
+  server.send(200, "text/plain", "OK");
+}
+
+static void handleAudioTestApi() {
+  bool ok = audioEspNowPlayTrack(1, WALLE_AUDIO_PRIORITY_WEB);
+  addCORS();
+  server.send(ok ? 200 : 503, "text/plain", ok ? "OK" : "FAIL");
+}
+
+static void handleDockStartApi() {
+#if USE_AUTONOMOUS_DOCKING
+  autonomousDockingSetRequested(true);
+#endif
+  addCORS();
+  server.send(200, "text/plain", "OK");
+}
+
+static void handleDockStatusApi() {
+  String j = "{";
+  j += "\"fsm\":\""; j += autonomousDockingGetStateName(); j += "\"";
+#if USE_AUTONOMOUS_DOCKING
+  j += ",\"active\":"; j += autonomousDockingIsActive() ? "true" : "false";
+#else
+  j += ",\"active\":false";
+#endif
+  j += ",\"dock_node_online\":"; j += nodeHealthIsOnline(WALLE_NODE_DOCK) ? "true" : "false";
+  j += ",\"dock_flags\":"; j += (uint32_t)nodeHealthGetFlags(WALLE_NODE_DOCK);
+  j += "}";
+  addCORS();
+  server.send(200, "application/json", j);
+}
+
 static void handleAudioMic() {
   uint16_t el = 0, er = 0;
   uint8_t vad = 0;
@@ -411,6 +484,13 @@ void webServerInit() {
   server.on("/api/vision/snapshot_url", HTTP_GET, handleVisionSnapshotUrl);
   server.on("/imu/recalibrate",  HTTP_GET, handleImuRecalibrate);
   server.on("/battery/status",    HTTP_GET, handleBatteryStatus);
+  server.on("/api/system/health", HTTP_GET, handleSystemHealth);
+  server.on("/api/nodes", HTTP_GET, handleNodesApi);
+  server.on("/api/emotion", HTTP_GET, handleEmotionApi);
+  server.on("/api/emotion/set", HTTP_GET, handleEmotionSetApi);
+  server.on("/api/audio/test", HTTP_GET, handleAudioTestApi);
+  server.on("/api/dock/start", HTTP_GET, handleDockStartApi);
+  server.on("/api/dock/status", HTTP_GET, handleDockStatusApi);
 
   server.on("/api/autonomy",      HTTP_GET, handleAutonomyStatus);
   server.on("/api/autonomy/enable", HTTP_GET, handleAutonomyEnable);
