@@ -1,25 +1,36 @@
-# Master Controller (CYD / Touch Operator Desk)
+# Master Controller (CYD Touch Desk)
 
-Handheld **operator interface** for WALL-E: touchscreen, drive abstraction, and **ESP-NOW** transmission of **ControlPacket** to the base. Receives **TelemetryPacket** for battery, autonomy state, and optional extras.
+The **handheld operator station** for WALL-E: resistive touch UI, drive abstraction, and **ESP-NOW** exchange of **`ControlPacket`** (out) and **`TelemetryPacket`** (in) with the base.
+
+---
 
 ## Purpose
 
-- Send **left/right** speed, **precision mode**, **behaviour/mood**, **actions** (scan, beep, dock go/cancel), **system flags** (E-stop, etc.).
-- **Servo targets** array in the control packet for head/arms when enabled.
-- Display telemetry and status from the base.
+- Send normalized **left/right** speed, **precision** mode, **behaviour/mood**, **actions** (scan, beep, dock go/cancel), and **system flags** (E-stop, etc.).
+- Optional **servo target** array for head/arms when the protocol and base build support it.
+- Display **battery**, autonomy, and safety-related telemetry from the base.
+
+---
 
 ## Hardware
 
-- **Typical board:** ESP32 with **CYD** 2432S028 (243×320 TFT + resistive touch) — see `platformio.ini` env `cyd_esp32_2432s028`.
-- **Extras:** SX1509 IO expander, ADS1015, GPS (optional), per `lib_deps`.
+| Item | Detail |
+|------|--------|
+| **Typical board** | ESP32 **CYD** 2432S028 — 243×320 TFT + resistive touch |
+| **PlatformIO env** | `cyd_esp32_2432s028` ([platformio.ini](platformio.ini)) |
+| **Optional peripherals** | SX1509 IO expander, ADS1015 ADC, GPS (see `lib_deps`) |
+
+---
 
 ## Dependencies
 
-- PlatformIO + `espressif32` / Arduino.
-- Libraries: **TFT_eSPI**, **XPT2046_Touchscreen**, **SparkFun SX1509**, **Adafruit ADS1X15**, **TinyGPSPlus** (see `platformio.ini`).
-- `lib_extra_dirs = ../lib` for shared emotion pose stubs.
+- **PlatformIO** + `espressif32` / Arduino framework.
+- Libraries: **TFT_eSPI**, **XPT2046_Touchscreen**, **SparkFun SX1509**, **Adafruit ADS1X15**, **TinyGPSPlus** (exact versions in `platformio.ini`).
+- **`lib_extra_dirs = ../lib`** for shared emotion-pose stubs.
 
-## Build & flash
+---
+
+## Build and flash
 
 ```bash
 cd wall_e_master_controller
@@ -27,27 +38,52 @@ pio run -e cyd_esp32_2432s028
 pio run -e cyd_esp32_2432s028 -t upload
 ```
 
-## Node ID / MAC
+---
 
-- **Node health:** `WALLE_NODE_MASTER` (`1`) in [node_health_protocol.h](node_health_protocol.h) — keep in sync with other copies in the repo.
-- **ESP-NOW:** Peers must share the **Wi-Fi channel** with the base access point. No fixed MAC in source; pairing is dynamic unless you add explicit peer registration.
+## Node ID and addressing
 
-## Communication with base
+| Item | Value |
+|------|--------|
+| **Node health ID** | `WALLE_NODE_MASTER` = **1** — [node_health_protocol.h](node_health_protocol.h) (keep in sync with other copies in the repo) |
+| **MAC address** | Factory Wi-Fi MAC per chip; no fixed MAC in source |
+| **ESP-NOW channel** | Must match the **Wi-Fi channel** used by the **base access point** (`WALL-E-Control`) |
 
-- **Outbound:** Packed **ControlPacket** ([protocol.h](protocol.h)).
-- **Inbound:** **TelemetryPacket** from base.
-- Same channel as **WALL-E-Control** AP (e.g. `192.168.4.1` network).
+---
+
+## Communication responsibilities
+
+| Direction | Content |
+|-----------|---------|
+| **→ Base** | Packed `ControlPacket` — [protocol.h](protocol.h) |
+| **← Base** | Packed `TelemetryPacket` |
+| **Transport** | ESP-NOW (not HTTP) |
+
+The master does **not** talk to the dock or vision nodes directly in the stock design.
+
+---
 
 ## OTA
 
-- **ArduinoOTA** on port **3232** when connected to the WALL-E AP — see root [OTA_README.md](../OTA_README.md).
+- **ArduinoOTA** on port **3232** when joined to the WALL-E AP — see [../OTA_README.md](../OTA_README.md).
 
-## Calibration
+---
 
-- **Touch:** TFT_eSPI / touch calibration in `touch_input.cpp` / `profiles` as applicable to your board revision.
-- **Display:** `profiles.h` / UI layout for 2432S028.
+## Calibration and setup
 
-## Related
+- **Touch** — Calibrate in `touch_input` / profile code for your CYD revision.
+- **Display** — UI layout in `profiles` / `ui_draw` for 2432S028 resolution.
 
-- [ARCHITECTURE.md](../ARCHITECTURE.md) — protocol overview  
-- [../README.md](../README.md) — project overview  
+---
+
+## Known quirks and limitations
+
+- **Dual control:** If LROS (browser) also commands the base while the master is driving, define an operator policy to avoid conflicting commands.
+- **ESP-NOW range** — Same as Wi-Fi PHY; obstacles and antenna orientation matter.
+- **Telemetry** — Field availability depends on base firmware build (autonomy features may be disabled).
+
+---
+
+## See also
+
+- [../ARCHITECTURE.md](../ARCHITECTURE.md)  
+- [../README.md](../README.md)  

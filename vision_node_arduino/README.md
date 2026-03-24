@@ -1,38 +1,67 @@
-# Vision Node (Arduino IDE layout)
+# Vision Node (Arduino IDE)
 
-Arduino-IDE–friendly packaging of the **vision** ESP32 camera + motion pipeline, aligned with **vision_protocol.h** for ESP-NOW to the base.
+Arduino-IDE–friendly layout for the **vision** pipeline: ESP32-S3 + camera, **motion detection**, and **ESP-NOW** broadcast of **`VisionPacket_t`** to the base — same logical role as [vision_node](../vision_node/README.md) (PlatformIO).
+
+---
 
 ## Purpose
 
-Same as [vision_node](../vision_node/README.md) for builders who prefer a single `.ino` + `.cpp` tree without PlatformIO.
+- Same as PlatformIO vision node for users who prefer a single `.ino` entry point without PlatformIO.
+
+---
 
 ## Hardware
 
 - ESP32-S3 + OV2640 (board-specific pins in sources).
 
+---
+
 ## Dependencies
 
 - ESP32 Arduino core, camera driver.
-- Match **vision_protocol.h** with `vision_node` and base.
+- **`vision_protocol.h`** must match [vision_node](../vision_node/include/vision_protocol.h) and base expectations.
+
+---
 
 ## Flashing (Arduino IDE)
 
 1. Open the sketch folder containing `vision_node_arduino.ino`.
-2. Select the correct **ESP32-S3** board and **USB**.
-3. Compile & upload.
+2. Select the correct **ESP32-S3** board and **USB** port.
+3. Compile and upload.
 
-## Node ID / MAC
+---
 
-- **Vision** identity is logical (`WALLE_NODE_VISION` in protocol docs); **MAC** is per device after flash.
+## Node ID and addressing
 
-## Communication
+| Item | Detail |
+|------|--------|
+| **Logical role** | Vision satellite — `WALLE_NODE_VISION` in docs |
+| **MAC** | Per-device after flash |
 
-- **ESP-NOW** broadcast of **VisionPacket_t** — same channel as base.
+---
+
+## Communication responsibilities
+
+- **ESP-NOW** — `VisionPacket_t` to base; **same RF channel** as base AP.
+
+---
 
 ## Calibration
 
 - See [vision_node/README.md](../vision_node/README.md) motion parameters.
 
-## Deprecation note
+---
 
-If you maintain **both** `vision_node/` and `vision_node_arduino/`, document which is **canonical** in the root [README.md](../README.md) to avoid drift.
+## Maintenance policy
+
+If both `vision_node/` and `vision_node_arduino/` are kept:
+
+- **Document which is canonical** in the root README.
+- **Change `vision_protocol.h` in one place** and copy to the other, or symlink, to avoid struct mismatch.
+
+---
+
+## See also
+
+- [../vision_node/README.md](../vision_node/README.md)  
+- [../ARCHITECTURE.md](../ARCHITECTURE.md)  

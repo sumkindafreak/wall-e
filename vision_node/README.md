@@ -1,23 +1,33 @@
 # Vision Node (PlatformIO — ESP32-S3 + Camera)
 
-**ESP32-S3** with **OV2640** (or compatible) camera: **motion detection**, **clustering**, **centroid**, optional **object class**, and **ESP-NOW** broadcast of **VisionPacket_t** to the base.
+**ESP32-S3** with **OV2640** (or compatible) camera: **motion detection**, **clustering**, **centroid**, optional **object class**, and **ESP-NOW** transmission of **`VisionPacket_t`** to the base.
+
+---
 
 ## Purpose
 
-- Offload vision from the base; send **target X/Y**, **bbox**, **motion flag**, **frame ID** for head/eye tracking or behaviour.
+- Offload vision from the base; provide **target X/Y**, **bounding box**, **motion flag**, and **frame ID** for head/eye tracking or behaviour.
+
+---
 
 ## Hardware
 
-- **MCU:** ESP32-S3 with **PSRAM** recommended.
-- **Sensor:** OV2640; **pin config** is board-specific — edit `src/main.cpp` camera config struct.
+| Item | Detail |
+|------|--------|
+| **MCU** | ESP32-S3 with **PSRAM** strongly recommended |
+| **Sensor** | OV2640 — **pin config is board-specific**; edit `src/main.cpp` camera structure |
+
+---
 
 ## Dependencies
 
-- PlatformIO (`vision_node/platformio.ini`).
-- ESP32 camera driver (Arduino-esp32 bundled).
-- Same **Wi-Fi channel** as base AP for ESP-NOW.
+- PlatformIO — [platformio.ini](platformio.ini).
+- ESP32 camera driver (Arduino-ESP32).
+- **Same Wi-Fi channel** as the base AP for ESP-NOW (critical).
 
-## Build & flash
+---
+
+## Build and flash
 
 ```bash
 cd vision_node
@@ -25,30 +35,47 @@ pio run
 pio run -t upload
 ```
 
-## Node ID / MAC
+---
 
-- **Node health:** `WALLE_NODE_VISION` (`4`) — base registry merges health from `WalleNodeHealthPacket_t` when vision node also sends health (if implemented).
+## Node ID and addressing
 
-## Communication with master controller
+| Item | Value |
+|------|--------|
+| **Logical ID** | `WALLE_NODE_VISION` = **4** in node health documentation |
+| **Health packets** | If implemented, must match `WalleNodeHealthPacket_t` layout |
 
-- **Direct path:** Typically **none** — vision → **base** only.
-- **Indirect:** Base may expose vision-derived state to **telemetry** or **web UI**; master controller reads **base telemetry**.
+---
 
-## Protocol
+## Communication responsibilities
 
-- **VisionPacket_t** — [include/vision_protocol.h](include/vision_protocol.h), magic `VISION_MAGIC`.
-- Packet size: `VISION_PACKET_SIZE`.
+| Peer | Protocol |
+|------|----------|
+| **→ Base** | `VisionPacket_t` — magic `VISION_MAGIC` — [include/vision_protocol.h](include/vision_protocol.h) |
+| **Master** | **None** — vision does not target the CYD directly |
+
+---
 
 ## Calibration
 
 - **Motion:** `motion_detect.h` — `motionThreshold`, `minMotionPixels`, `smoothFactor`, `occlusionTimeoutMs`.
-- **Camera:** Exposure, resolution, and grayscale path in `main.cpp` for your lighting.
+- **Camera:** Exposure, resolution, grayscale pipeline in `main.cpp` for your lighting.
 
-## Alternative sketch
+---
 
-- **Arduino-style** twin: `../vision_node_arduino/` — use **one** canonical build per deployment to avoid confusion.
+## Canonical vs Arduino duplicate
 
-## Related
+This folder is the **PlatformIO** reference. A parallel **Arduino IDE** tree exists at **`../vision_node_arduino/`**. Pick **one** per deployment to avoid protocol drift; see root [README.md](../README.md).
+
+---
+
+## Known quirks and limitations
+
+- **Frame rate** — Motion pipeline and ESP-NOW rate should be tuned to avoid CPU starvation.
+- **Wi-Fi channel** — If ESP-NOW “goes silent,” verify router/AP channel matches the base.
+
+---
+
+## See also
 
 - [../ARCHITECTURE.md](../ARCHITECTURE.md)  
 - [../main_wall_E_base/main/vision_behaviour.cpp](../main_wall_E_base/main/vision_behaviour.cpp)  

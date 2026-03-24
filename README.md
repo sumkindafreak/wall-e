@@ -1,86 +1,146 @@
 # WALL-E Multi-Node Robotics Platform
 
-[![License](https://img.shields.io/badge/license-project-lightgrey)](LICENSE)
+[![Repo](https://img.shields.io/badge/repo-github-black?logo=github)](https://github.com/sumkindafreak/wall-e)
+[![Platform](https://img.shields.io/badge/platform-ESP32--S3%20%2F%20ESP32-blue)](https://www.espressif.com/)
 
-Open-source, multi-controller robotics stack for a life-size WALL-E–style build: a **handheld master controller**, **base locomotion brain**, **audio**, **vision**, **charging dock**, and a **browser UI (LROS)**. Nodes communicate over **Wi-Fi** and **ESP-NOW** with a shared **node health** heartbeat.
+Distributed firmware for a life-size **WALL-E**-style robot: multiple **ESP32** nodes, a **browser operator UI (LROS)**, shared libraries, and coordination over **Wi-Fi**, **ESP-NOW**, **OTA**, and a **node health** heartbeat.
 
 **Repository:** [github.com/sumkindafreak/wall-e](https://github.com/sumkindafreak/wall-e)
 
 ---
 
-## Project overview
+## Table of contents
 
-WALL-E splits responsibilities across ESP32-class modules:
-
-- **No single MCU runs everything.** The operator desk sends drive commands; the base executes motors and aggregates sensors; optional satellites handle sound and camera processing.
-- **ESP-NOW** carries low-latency control and telemetry between devices on the same Wi-Fi channel.
-- **Node health** packets (`WNHT`) let the base and UI see which peers are alive, charging, or faulted.
-- **Docking** combines ESP-NOW beacons, IR alignment (dock receivers + robot transmitters), optional VL6180 ToF, and charge control.
-
-For deeper design notes see [ARCHITECTURE.md](ARCHITECTURE.md). For contribution workflow see [CONTRIBUTING.md](CONTRIBUTING.md).
+1. [Goals](#high-level-goals)
+2. [Architecture](#architecture)
+3. [Nodes at a glance](#nodes-at-a-glance)
+4. [Communication](#communication-stack)
+5. [Hardware overview](#hardware-overview)
+6. [Setup](#setup)
+7. [Development workflow](#development-workflow)
+8. [Media](#media-placeholders)
+9. [Roadmap](#roadmap)
+10. [Documentation index](#documentation-index)
 
 ---
 
-## Node architecture (ASCII)
+## High-level goals
+
+| Goal | How the repo supports it |
+|------|---------------------------|
+| **Separation of concerns** | No single MCU runs UI, motors, audio, vision, and charging logic together. |
+| **Low-latency control** | Master ↔ base uses **ESP-NOW** with packed structs; same RF channel as the base AP. |
+| **Observability** | **Node health** (`WNHT`) and dock **beacon** packets expose state to the base and UI. |
+| **Safe docking** | Dock station manages charge current, presence sensing, and **IR alignment** hints. |
+| **Operator flexibility** | Physical **CYD master**, optional **LROS** in a browser, both ultimately commanding the **base**. |
+
+---
+
+## Architecture
+
+### Diagram (Mermaid)
+
+> Renders on GitHub; for plain text see the ASCII block below.
+
+```mermaid
+flowchart TB
+  subgraph operator["Operator layer"]
+    MC[wall_e_master_controller\nCYD touchscreen]
+    WEB[webui / LROS\nbrowser]
+  end
+
+  subgraph brain["Base brain"]
+    BASE[main_wall_E_base\nESP32-S3]
+  end
+
+  subgraph satellites["Satellite nodes"]
+    AUD[audio_esp]
+    VIS[vision_node / vision_node_arduino]
+  end
+
+  subgraph home["Home / charge"]
+    DOCK[dock_station]
+  end
+
+  MC -->|"ESP-NOW ControlPacket / TelemetryPacket"| BASE
+  WEB -->|"HTTP API"| BASE
+  AUD <-->|"ESP-NOW"| BASE
+  VIS -->|"ESP-NOW VisionPacket"| BASE
+  BASE <-->|"ESP-NOW beacon + commands"| DOCK
+  MC -.->|"same Wi-Fi channel"| BASE
+  AUD -.->|"same channel"| BASE
+  VIS -.->|"same channel"| BASE
+  DOCK -.->|"optional home Wi-Fi"| DOCK
+```
+
+### Diagram (ASCII)
 
 ```
-                    ┌─────────────────────────────┐
-                    │   wall_e_master_controller  │
-                    │   (CYD / touchscreen desk)   │
-                    │   ESP32 — operator UI        │
-                    └──────────────┬──────────────┘
-                                   │ ESP-NOW
-           ┌───────────────────────┼───────────────────────┐
-           │                       │                       │
-           ▼                       ▼                       ▼
-   ┌───────────────┐       ┌───────────────┐       ┌───────────────┐
-   │ main_wall_E_  │       │   audio_esp   │       │  vision_node  │
-   │    base       │       │  (voice / FX) │       │ (camera / MD) │
-   │ ESP32-S3      │◄─────►│   ESP32…      │       │  ESP32-S3     │
-   │ tank + servos │       │               │       │  + OV2640     │
-   └───────┬───────┘       └───────────────┘       └───────┬───────┘
-           │ ESP-NOW                                      │
-           │                                                │
-           ▼                                                │
-   ┌───────────────┐                                       │
-   │  dock_station │◄──────────────────────────────────────┘
-   │  Smart crate  │         (same RF channel / LAN as configured)
-   │  charge + IR  │
-   └───────────────┘
-
-   ┌───────────────┐
-   │    webui/     │  Static LROS assets (or served from base AP)
-   │  (LROS HTML)  │
-   └───────────────┘
+  ┌─────────────────────┐         ┌─────────────────────┐
+  │ Master controller   │         │ Web UI (LROS)       │
+  │ (ESP32 + touch)     │         │ Browser → HTTP      │
+  └──────────┬──────────┘         └──────────┬──────────┘
+             │ ESP-NOW                      │ HTTP
+             │ Control / Telemetry           │
+             ▼                               ▼
+  ┌──────────────────────────────────────────────────────┐
+  │ main_wall_E_base — Base brain (ESP32-S3)              │
+  │ Motors · servos · AP · web server · ESP-NOW hub       │
+  └─┬──────────────┬──────────────┬──────────────────────┘
+    │              │              │
+    │ ESP-NOW      │ ESP-NOW      │ ESP-NOW
+    ▼              ▼              ▼
+┌────────┐   ┌──────────┐   ┌─────────────┐
+│ audio  │   │ vision   │   │ dock_station │
+│ _esp   │   │ _node     │   │ charge + IR  │
+└────────┘   └──────────┘   └─────────────┘
 ```
 
 ---
 
-## Subsystems
+## Nodes at a glance
 
-| Subsystem | Folder | Role |
-|-----------|--------|------|
-| **Master controller** | `wall_e_master_controller/` | Touch UI, drive abstraction, ESP-NOW control packets to base, receives telemetry. |
-| **Base locomotion** | `main_wall_E_base/` | Motors, servos, display, Wi-Fi AP, web server, ESP-NOW RX, dock homing, autonomous docking, node health aggregation. |
-| **Audio node** | `audio_esp/` | Separate ESP audio / voice path; ESP-NOW integration with base and protocols under `audio_esp/`. |
-| **Vision node** | `vision_node/` (PlatformIO) or `vision_node_arduino/` | Camera, motion detection, `VisionPacket_t` to base via ESP-NOW. |
-| **Dock station** | `dock_station/` | Charging MOSFET, current sense, VL6180 ToF optional, IR alignment receivers, NeoPixel/TFT, dock beacon + `ir_align_hint`. |
-| **Web UI (LROS)** | `webui/` | Operator pages (`index.html`, `lros.js`, `lros.css`) — status, control, and integration with base when hosted. |
+| Node | Folder | Responsibility |
+|------|--------|------------------|
+| **Master controller** | `wall_e_master_controller/` | Touch UI, `ControlPacket` TX, `TelemetryPacket` RX. |
+| **Base (locomotion)** | `main_wall_E_base/` | Motors, servos, Wi-Fi AP, HTTP, ESP-NOW RX/TX, docking FSM, node health registry. |
+| **Audio** | `audio_esp/` | Audio / DFPlayer path; ESP-NOW side channel to base. |
+| **Vision** | `vision_node/` or `vision_node_arduino/` | Camera + motion; `VisionPacket_t` to base. |
+| **Dock** | `dock_station/` | Charging, sensors, IR alignment receivers, dock beacon + `ir_align_hint`. |
+| **Web UI** | `webui/` | Static LROS assets; talks to **base** over HTTP (not ESP-NOW). |
 
-Module-specific READMEs: [wall_e_master_controller/README.md](wall_e_master_controller/README.md), [main_wall_E_base/README.md](main_wall_E_base/README.md), [audio_esp/README.md](audio_esp/README.md), [vision_node/README.md](vision_node/README.md), [dock_station/README.md](dock_station/README.md), [webui/README.md](webui/README.md).
+Per-folder details: [wall_e_master_controller/README.md](wall_e_master_controller/README.md) · [main_wall_E_base/README.md](main_wall_E_base/README.md) · [audio_esp/README.md](audio_esp/README.md) · [vision_node/README.md](vision_node/README.md) · [dock_station/README.md](dock_station/README.md) · [webui/README.md](webui/README.md) · [lib/README.md](lib/README.md)
 
 ---
 
-## Communication
+## Communication stack
 
-| Mechanism | Use |
-|-----------|-----|
-| **ESP-NOW** | Master → base **ControlPacket**; base → master **TelemetryPacket**; vision **VisionPacket_t**; audio/aux protocols; dock **DockBeaconPacket_t** / commands; **WalleNodeHealthPacket_t** (`WNHT`) heartbeats. |
-| **Wi-Fi (STA/AP)** | Base exposes **WALL-E-Control** AP (e.g. `192.168.4.1`); home STA optional. Dock may join home Wi-Fi for beacon/OTA. |
-| **Heartbeat / node health** | `WALLE_NODE_BASE`, `MASTER`, `AUDIO`, `DOCK`, `VISION` slots in [node_health_protocol.h](main_wall_E_base/main/node_health_protocol.h) (copies per node — keep in sync). |
-| **HTTP** | Base web UI and OTA update page; static LROS can be opened locally or served. |
+| Layer | Mechanism | Typical use |
+|-------|-----------|-------------|
+| **Operator → base (real-time)** | ESP-NOW | `ControlPacket` / `TelemetryPacket` ([protocol.h](wall_e_master_controller/protocol.h)). |
+| **Browser → base** | HTTP on LAN or AP | LROS fetches JSON or forms; see `web_server.cpp` on base. |
+| **Vision / audio ↔ base** | ESP-NOW | Magic + length dispatch in base receiver. |
+| **Base ↔ dock** | ESP-NOW | `DockBeaconPacket_t` (~10 Hz when Wi-Fi enabled on dock), dock commands. |
+| **Heartbeat** | ESP-NOW | `WalleNodeHealthPacket_t` — magic `WNHT`, versioned struct ([node_health_protocol.h](main_wall_E_base/main/node_health_protocol.h)). |
+| **Provisioning / OTA** | Wi-Fi STA/AP | Base AP `WALL-E-Control`; OTA [OTA_README.md](OTA_README.md). |
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for protocol relationships and docking flow.
+**Critical:** ESP-NOW peers must use the **same Wi-Fi channel** as the base access point (see [ARCHITECTURE.md](ARCHITECTURE.md)).
+
+---
+
+## Hardware overview
+
+| Role | MCU (typical) | Notes |
+|------|----------------|-------|
+| Master | ESP32 (e.g. CYD 2432S028) | TFT + touch; no motors. |
+| Base | ESP32-S3 | Tank drive, servos (I2C PWM), VL53L1X, rear IR beam, **IR TX** for dock (see `ir_beacon_receivers.h`). |
+| Audio | ESP32-S3 | DFPlayer or project-specific audio chain. |
+| Vision | ESP32-S3 + PSRAM | OV2640; pin map is board-specific. |
+| Dock | ESP32-S3 | Charge MOSFET, ACS712, VL6180 I2C, TSOP IR receivers, NeoPixel, TFT. |
+
+**IR docking:** The robot emits **modulated IR** (~38 kHz); the dock uses **TSOP-class receivers** on alignment pins. The dock beacon can carry **`ir_align_hint`** for closed-loop alignment when the dock’s Wi-Fi/ESP-NOW path is active.
+
+**Pins:** Authoritative maps live in each project’s `*_config.h`. README tables are summaries only.
 
 ---
 
@@ -88,8 +148,8 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for protocol relationships and docking fl
 
 ### Prerequisites
 
-- [PlatformIO](https://platformio.org/) (CLI or IDE) **or** Arduino IDE 2.x with ESP32 core (see [main_wall_E_base/ARDUINO_IDE_QUICK_START.md](main_wall_E_base/ARDUINO_IDE_QUICK_START.md) for base).
-- USB cable per board; common baud **115200**.
+- [PlatformIO](https://platformio.org/) (recommended) **or** Arduino IDE 2.x + ESP32 board support.
+- USB cable per module; serial **115200** baud unless a README says otherwise.
 
 ### Clone and build
 
@@ -98,77 +158,76 @@ git clone https://github.com/sumkindafreak/wall-e.git
 cd wall-e
 ```
 
-Per project:
+Examples:
 
 ```bash
 cd main_wall_E_base && pio run -e wall_e_brain_s3
 cd ../wall_e_master_controller && pio run -e cyd_esp32_2432s028
 cd ../dock_station && pio run -e dock_esp32
-# etc.
 ```
 
-Shared code lives under [`lib/`](lib/README.md) — `lib_extra_dirs = ../lib` is already set for several projects.
+Shared Arduino libraries: [`lib/`](lib/README.md) — referenced via `lib_extra_dirs` in PlatformIO.
 
 ### OTA
 
-See **[OTA_README.md](OTA_README.md)** for `espota`, web update URL on the base, and `ota_build_all` scripts.
+See **[OTA_README.md](OTA_README.md)** — web update URL for the base, `espota`, and `ota_build_all` scripts.
 
-### MAC / pairing notes
+### RF / MAC / channel
 
-- ESP-NOW uses **broadcast** or **registered peers** depending on sketch; ensure all nodes share the **same Wi-Fi channel** as the base AP when using ESP-NOW.
-- After flashing a new ESP32, the **Wi-Fi MAC** changes — re-pair controller ↔ base if your workflow stores MACs.
-- Dock beacon and commands use `dock_id` in [dock_protocol.h](dock_station/dock_protocol.h); set `DOCK_ID` in `dock_config.h` if you run multiple docks.
+- After flashing, each ESP32 has a factory **Wi-Fi MAC**; any stored peer list may need refresh.
+- Align **Wi-Fi channel** with the base AP for ESP-NOW (document your router/AP channel if nodes use STA).
+- **Dock ID:** `DOCK_ID` in `dock_config.h` — set uniquely if multiple docks exist.
 
 ---
 
-## Hardware overview
+## Development workflow
 
-| Node | Typical MCU | Notable I/O |
-|------|-------------|-------------|
-| Master | ESP32 (e.g. CYD 2432S028) | TFT + touch, ESP-NOW |
-| Base | ESP32-S3 | L298N or similar motors, servos (I2C PWM), VL53L1X ToF, IR beam, **IR TX** GPIO 21/38 for dock alignment |
-| Audio | ESP32 variant | I2S / DFPlayer / project-specific |
-| Vision | ESP32-S3 + PSRAM | OV2640, ESP-NOW TX |
-| Dock | ESP32-S3 | Charge MOSFET, ACS712, VL6180 I2C (SDA/SCL in `dock_config.h`), **IR receivers** on alignment pins, NeoPixel |
+1. **Pick a node** — Build only what you change (`pio run -e <env>`).
+2. **Keep protocols in sync** — `dock_protocol.h` and `node_health_protocol.h` are duplicated in several trees until consolidated; change all copies or document follow-up.
+3. **Test on hardware** — Note board variant (DevKit, CYD, etc.) in PRs.
+4. **Document** — Update the module `README.md` when pins, env names, or protocols change.
 
-**IR dock beacon:** Robot emits **modulated IR** (~38 kHz); dock uses **TSOP-style receivers** on left/right alignment GPIOs. Beacon includes **`ir_align_hint`** for closed-loop alignment when Wi-Fi/ESP-NOW is enabled on the dock.
-
-*Authoritative pin maps are always in each project’s `*_config.h` / `platformio.ini` — do not rely only on this table.*
+More detail: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## Media placeholders
 
-<!-- Add your assets under docs/media/ or link externally -->
+| Slot | Suggested path |
+|------|----------------|
+| Hero build photo | `docs/media/hero.jpg` |
+| Master UI | `docs/media/controller.jpg` |
+| Dock + robot | `docs/media/dock.jpg` |
+| Demo GIF | `docs/media/demo.gif` |
 
-| Asset | Placeholder |
-|-------|-------------|
-| Hero photo | `![WALL-E build](docs/media/hero.jpg)` |
-| Master controller UI | `![CYD UI](docs/media/controller.jpg)` |
-| Dock + base | `![Dock](docs/media/dock.jpg)` |
-| Short demo GIF | `![Demo](docs/media/demo.gif)` |
+Create `docs/media/` when you add assets, or host externally and link here.
 
 ---
 
 ## Roadmap
 
-- [ ] Unify `node_health_protocol.h` copies via single include path or code generation
-- [ ] Document vision node channel sync procedure in one place
-- [ ] Optional WebSocket bridge for LROS ↔ base
-- [ ] CI build matrix for `main_wall_E_base`, `dock_station`, `wall_e_master_controller`
-- [ ] Expand integration tests on ESP-NOW packet sizes
+| Item | Notes |
+|------|--------|
+| Single **`protocols/`** include tree | Remove duplicate headers; CI compile check. |
+| Vision channel sync guide | One doc for “set router channel = base channel”. |
+| LROS ↔ base WebSocket (optional) | Lower latency than polling for some panels. |
+| CI matrix | Build `main_wall_E_base`, `dock_station`, `wall_e_master_controller` on push. |
+| SPDX license file | Clarify redistribution terms. |
+
+---
+
+## Documentation index
+
+| Document | Content |
+|----------|---------|
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Design philosophy, protocols, docking, OTA, WebUI chain. |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Branches, commits, conventions, new nodes, LROS. |
+| [FOLDER_STRUCTURE.md](FOLDER_STRUCTURE.md) | Optional repo reorganization (no code moves yet). |
+| [REPO_AUDIT.md](REPO_AUDIT.md) | Gaps, naming, refactors to consider. |
+| [OTA_README.md](OTA_README.md) | Over-the-air updates. |
 
 ---
 
 ## License
 
-See repository license file if present; otherwise treat as project-specific until a SPDX license is added.
-
----
-
-## Related docs
-
-- [ARCHITECTURE.md](ARCHITECTURE.md) — design philosophy and protocols  
-- [CONTRIBUTING.md](CONTRIBUTING.md) — branches, commits, adding nodes  
-- [FOLDER_STRUCTURE.md](FOLDER_STRUCTURE.md) — proposed repo layout (non-binding)  
-- [OTA_README.md](OTA_README.md) — over-the-air updates  
+Add a `LICENSE` file to the repository root when you choose a license (MIT, Apache-2.0, etc.). Until then, treat usage as **all rights reserved** unless you state otherwise.

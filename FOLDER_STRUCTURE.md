@@ -1,19 +1,24 @@
-# Proposed Repository Layout (Suggestion Only)
+# Proposed Repository Layout
 
-**Status:** Documentation-only — **no files have been moved** in the repository as part of this proposal. This is a roadmap for maintainability.
-
----
-
-## Current pain points
-
-- **Duplicate protocol headers** (`dock_protocol.h`, `node_health_protocol.h`) across `dock_station/`, `main_wall_E_base/main/`, `audio_esp/`, `wall_e_master_controller/`, etc.
-- **Two vision entry points** — `vision_node/` (PlatformIO) and `vision_node_arduino/` (Arduino-style) confuse newcomers.
-- **Web UI** (`webui/`) is separate from base `web_server` assets — good for static dev, but paths are easy to duplicate.
-- **Misc projects** (`paludarium_4relay/`) at repo root alongside WALL-E — scope creep in one clone.
+**Status:** Documentation only — **no repository moves have been performed**. Use this as a migration blueprint when the team agrees to reorganize.
 
 ---
 
-## Suggested top-level layout
+## Current layout (summary)
+
+| Area | Folders |
+|------|---------|
+| Firmware | `wall_e_master_controller/`, `main_wall_E_base/`, `audio_esp/`, `vision_node/`, `vision_node_arduino/`, `dock_station/` |
+| Shared code | `lib/` |
+| Web | `webui/` |
+| Docs / OTA | Root `README.md`, `ARCHITECTURE.md`, `OTA_README.md`, `ota_build_all.*` |
+| Other | `paludarium_4relay/` (separate sketch), optional `wall-e electronic mounts/` (often untracked) |
+
+**Pain points:** Duplicate protocol headers; two vision trees; mixed-purpose folders at repo root.
+
+---
+
+## Proposed layout
 
 ```
 wall-e/
@@ -21,68 +26,87 @@ wall-e/
 ├── ARCHITECTURE.md
 ├── CONTRIBUTING.md
 ├── FOLDER_STRUCTURE.md
+├── REPO_AUDIT.md
 ├── OTA_README.md
 ├── ota_config.ini
 ├── ota_build_all.ps1
 ├── ota_build_all.sh
 │
-├── firmware/                      # All flashable ESP32 projects
-│   ├── master_controller/         # was: wall_e_master_controller
-│   ├── base/                      # was: main_wall_E_base
-│   ├── audio/                     # was: audio_esp
-│   ├── vision/                    # merge vision_node + vision_node_arduino OR pick one canonical
-│   ├── dock/                      # was: dock_station
-│   └── legacy/                    # optional: vision_node_arduino if kept for reference
+├── docs/
+│   ├── media/                 # Images, GIFs for README
+│   └── diagrams/              # Optional exported SVGs
 │
-├── protocols/                     # SINGLE source of truth (packed structs + magic)
+├── protocols/                 # Single source: packed structs + magic
 │   ├── node_health.h
 │   ├── dock.h
 │   ├── vision.h
-│   └── control.h                  # ControlPacket / TelemetryPacket
+│   └── control_telemetry.h  # ControlPacket / TelemetryPacket
 │
-├── shared/                        # was: lib/
-│   └── walle_emotion_pose/
+├── shared/                    # Renamed from lib/ (optional name)
+│   ├── walle_emotion_pose/
+│   ├── walle_audio_events/
+│   └── walle_vision_events/
 │
-├── webui/                         # LROS static assets (unchanged)
+├── firmware/
+│   ├── master_controller/     # wall_e_master_controller
+│   ├── base/                  # main_wall_E_base
+│   ├── audio/                 # audio_esp
+│   ├── vision/                # Merge or pick canonical vision_node
+│   ├── dock/                  # dock_station
+│   └── legacy/                # vision_node_arduino if retained
 │
-├── docs/                          # Images, PDFs, diagrams
-│   └── media/
-│
-├── tools/                         # Scripts not tied to OTA (name shortening, etc.)
-│
-└── third_party/                   # optional: paludarium_4relay or non–WALL-E sketches
+├── webui/                     # Unchanged
+├── tools/                     # Helper scripts (non-OTA)
+└── third_party/
+    └── paludarium_4relay/     # Optional move for clarity
 ```
 
 ---
 
-## Justification
+## Reasoning
 
-| Change | Why |
-|--------|-----|
-| `firmware/*` | One place to look for PlatformIO/Arduino projects; shorter paths in docs. |
-| `protocols/` | Eliminates drift between copies; CI can check one header. |
-| `shared/` | Clearer than `lib/` for Arduino users who expect “library” = third party. |
-| `docs/media/` | Keeps README image links stable. |
-| `third_party/` | Isolates non–WALL-E experiments from the main narrative. |
-
----
-
-## Migration strategy (when you choose to implement)
-
-1. Add `protocols/` and **symlink or include path** first (build flags `-I ../protocols`) — **no behavior change**.
-2. Delete duplicate headers **only after** all projects compile against the single tree.
-3. Rename folders in a **dedicated PR** with `git mv` to preserve history.
-4. Update `lib_extra_dirs` / Arduino IDE include paths.
+| Change | Benefit |
+|--------|---------|
+| `protocols/` | Eliminates drift; enables one CI job to compile-test includes. |
+| `firmware/` | Clear “what flashes” vs docs and web assets. |
+| `docs/media/` | Stable image URLs in README. |
+| `third_party/` | Signals that not everything is core WALL-E firmware. |
+| `shared/` (rename `lib/`) | Reduces confusion with Arduino “Library Manager” deps. |
 
 ---
 
-## What not to do
+## Migration plan (non-destructive)
 
-- Do not move folders without updating **every** `platformio.ini` and Arduino IDE sketch path.
-- Do not delete `vision_node_arduino/` until its features are merged or explicitly deprecated in README.
+### Phase 0 — No moves
+
+- Add **`docs/media/`** and drop one hero image when ready.
+- Document canonical **vision** path in root README (PlatformIO vs Arduino).
+
+### Phase 1 — Include paths only
+
+- Create **`protocols/`** with headers; add **`-I ../../protocols`** (or equivalent) to each `platformio.ini`.
+- Keep old headers as **thin wrappers** `#include`ing the new file, or delete duplicates only after all builds pass.
+
+### Phase 2 — Rename `lib/` → `shared/`
+
+- `git mv lib shared`
+- Update **`lib_extra_dirs`** and Arduino include paths in one PR.
+
+### Phase 3 — `firmware/` renames
+
+- `git mv wall_e_master_controller firmware/master_controller` (example)
+- Update **every** `platformio.ini`, `src_dir`, and documentation link in the same PR.
+
+### Phase 4 — Vision consolidation
+
+- Deprecate one of `vision_node/` vs `vision_node_arduino/` or document **dual maintenance** with a checklist in `REPO_AUDIT.md`.
+
+### Rollback
+
+- Git history preserves paths; revert the merge commit if CI or users break.
 
 ---
 
-## Alternative (minimal)
+## Minimal alternative
 
-If you prefer zero moves: add only **`protocols/`** as the single source of truth and keep existing folder names. That alone reduces the highest-risk drift.
+Add **`protocols/`** only — **no folder renames**. Highest ROI for correctness; lowest churn.
