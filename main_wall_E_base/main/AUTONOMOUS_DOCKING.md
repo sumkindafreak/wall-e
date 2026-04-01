@@ -15,10 +15,9 @@ Production-quality docking behaviour for life-size WALL-E.
 
 ## Sensors
 
-- **VL53L1X ToF** (I2C) — approach distance
-- **IR Beacon Left/Right** (GPIO 21, 38) — alignment (edit `ir_beacon_receivers.h` for your pins)
-- **IR Break Beam** (`dock_sensors`) — dock arrival
-- **ESP-NOW** — beacon RSSI and dock_id
+- **VL53L1X ToF** (I2C) — approach distance and dock arrival
+- **Two IR TX on WALL-E** (`dock_ir_transmitters`) + **two IR RX on dock** → **`ir_align_hint`** on beacon for ALIGN
+- **ESP-NOW** — beacon RSSI and `dock_id`
 
 ## Configuration
 
@@ -36,10 +35,10 @@ Production-quality docking behaviour for life-size WALL-E.
 | File | Purpose |
 |------|---------|
 | `autonomous_docking.cpp/h` | State machine, navigation logic |
-| `ir_beacon_receivers.cpp/h` | Left/right IR reading for alignment |
+| `dock_ir_transmitters.cpp/h` | ~38 kHz IR toward dock |
 | `dock_controller.cpp/h` | `dockControllerSendRequestCharge()` |
 | `dock_config.h` | USE_AUTONOMOUS_DOCKING switch |
 
 ## Dock Station
 
-When WALL-E sends `DOCK_CMD_REQUEST_CHARGE` and the IR beam is broken, the dock enables the charging MOSFET. See `dock_station/dock_state.cpp`.
+When WALL-E sends `DOCK_CMD_REQUEST_CHARGE` and the dock accepts arrival, the dock enables the charging MOSFET. See `dock_station/dock_state.cpp`.

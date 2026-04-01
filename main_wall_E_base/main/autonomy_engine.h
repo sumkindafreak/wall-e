@@ -133,6 +133,7 @@ void autonomyEmergencyStop();
 
 // Check if manual control is overriding
 void autonomySetManualOverride(bool active);
+bool autonomyIsManualOverride();
 
 // Waypoint navigation mode
 void autonomySetWaypointMode(bool enabled);

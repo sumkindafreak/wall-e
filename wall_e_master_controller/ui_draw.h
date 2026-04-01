@@ -16,15 +16,32 @@
 #define SCREEN_W        320
 #define SCREEN_H        240
 #define TOP_BAR_HEIGHT  30
-#define TELEM_STRIP_H   22
+/* Two text rows (nums + mode|emo) under battery bar — needs >22px */
+#define TELEM_STRIP_H   30
+/** First Y below title + telemetry strip (battery label + bar live in strip) */
+#define CONTENT_TOP     (TOP_BAR_HEIGHT + TELEM_STRIP_H)
 #define BOTTOM_BAR_Y    200
 #define BOTTOM_BAR_H    40
-#define CONTENT_TOP     52
-#define CONTENT_H       148
+/** Drive bottom bar — Dock/Cancel/E-STOP slightly narrower so four nav tiles fit (320px wide) */
+#define DRIVE_DOCK_X        8
+#define DRIVE_DOCK_W        56
+#define DRIVE_CANCEL_X      (DRIVE_DOCK_X + DRIVE_DOCK_W + 4)
+#define DRIVE_CANCEL_W      56
+#define DRIVE_ESTOP_X       (DRIVE_CANCEL_X + DRIVE_CANCEL_W + 4)
+#define DRIVE_ESTOP_W       78
+#define DRIVE_NAV_GRID_X    (DRIVE_ESTOP_X + DRIVE_ESTOP_W + 4)
+#define DRIVE_NAV_CELL_W    26  /* 4×26 + 3×2 gap = 110px; grid 210+110=320 */
+#define DRIVE_NAV_GAP       2
+#define DRIVE_NAV_BEH_X     (DRIVE_NAV_GRID_X + DRIVE_NAV_CELL_W + DRIVE_NAV_GAP)
+#define DRIVE_NAV_PRF_X     (DRIVE_NAV_BEH_X + DRIVE_NAV_CELL_W + DRIVE_NAV_GAP)
+#define DRIVE_NAV_AUT_X     (DRIVE_NAV_PRF_X + DRIVE_NAV_CELL_W + DRIVE_NAV_GAP)
+#define DRIVE_BOTTOM_BTN_Y  (BOTTOM_BAR_Y + 4)
+#define DRIVE_BOTTOM_BTN_H  32
+#define CONTENT_H       (BOTTOM_BAR_Y - CONTENT_TOP)
 
 // Single centered joystick
 #define JOY_CX          160  // Center X
-#define JOY_CY          110  // Center Y (kept above bottom bar to avoid arrow overlap)
+#define JOY_CY           95  // Center Y (above bottom bar; +15px vs old layout)
 #define JOY_RADIUS      70   // Larger radius
 
 #define GRID_SPACING    20
@@ -72,7 +89,8 @@ void uiDrawCurrentPage(void);  // Central: static draw based on InputMode + Page
 void uiDrawUpdateDynamic(const TelemetryStripData* telem, const DriveState* ds,
                          int joyDotX, int joyDotY);
 void uiDrawTelemetryStrip(const TelemetryStripData* telem);
-void uiDrawControlAuthority(void);
+/** @param brainLinkOk true when recent TelemetryPacket from Base (ESP-NOW) */
+void uiDrawControlAuthority(bool brainLinkOk);
 void uiDrawQuickActionOverlay(void);  // Calibrate IMU, Reset Motors, Supervised, Reboot
 void uiDrawAdvancedModeOverlay(void); // Raw motor %, IMU, CPU, latency
 void uiDrawEStopRegion(bool highlighted);

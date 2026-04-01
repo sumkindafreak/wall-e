@@ -1,6 +1,8 @@
 /**
- * motion_detect.cpp - Frame differencing, clustering, centroid, object classification.
+ * motion_detect.cpp
+ * Frame differencing, motion clustering, centroid, object classification.
  */
+
 #include "motion_detect.h"
 #include <string.h>
 #include <Arduino.h>
@@ -58,7 +60,7 @@ bool motionDetectProcess(MotionDetect* md, const uint8_t* current, const uint8_t
   int h = md->height;
   int sz = w * h;
 
-  if (md->diffBuffer == nullptr || sz > (int)md->diffBufferSize) return false;
+  if (md->diffBuffer == nullptr || sz > md->diffBufferSize) return false;
   uint8_t* diff = md->diffBuffer;
 
   int th = md->motionThreshold;
@@ -99,5 +101,15 @@ bool motionDetectProcess(MotionDetect* md, const uint8_t* current, const uint8_t
   }
 
   md->motionDetected = motion;
+
+  {
+    uint32_t area = (uint32_t)w * (uint32_t)h;
+    uint32_t denom = area / 5;
+    if (denom < 1) denom = 1;
+    uint32_t mi = (md->motionPixelCount * 100u) / denom;
+    if (mi > 100u) mi = 100u;
+    md->motionIntensity = motion ? (uint8_t)mi : 0u;
+  }
+
   return motion;
 }

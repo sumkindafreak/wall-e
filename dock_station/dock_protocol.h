@@ -29,7 +29,7 @@ enum DockState {
 
 #define DOCK_BEACON_MAGIC  0x444F434B  /* "DOCK" in ASCII */
 
-/* Byte for DockBeaconPacket_t.ir_align_hint (dock receivers seeing WALL-E IR TX). */
+/* Byte for DockBeaconPacket_t.ir_align_hint (dock TSOP / guidance logic). */
 #define DOCK_IR_ALIGN_LOST    0u
 #define DOCK_IR_ALIGN_LEFT    1u  /* only left receiver -> robot should steer left */
 #define DOCK_IR_ALIGN_RIGHT   2u
@@ -77,7 +77,9 @@ enum DockCommand {
   DOCK_CMD_WIFI_CONFIG   = 3,   /* WiFi credentials from WALL-E */
   DOCK_CMD_TIME          = 4,   /* Unix timestamp from WALL-E */
   DOCK_CMD_REQUEST_CHARGE = 5,  /* WALL-E requests charge when docked */
-  DOCK_CMD_APPROACH_STAGE = 6   /* WALL-E reports approach stage for arrow staging */
+  DOCK_CMD_APPROACH_STAGE = 6,  /* WALL-E reports approach stage for arrow staging */
+  DOCK_CMD_DOCKING_ARM   = 7,   /* WALL-E started docking — enable arrow indicators (with NOT_DOCKED) */
+  DOCK_CMD_DOCKING_DISARM = 8   /* Abort / docked — disable arrows (dock clears arm on docked state too) */
 };
 
 /* Approach stages: 5m → ESP-NOW homing, 1m → arrows on, 20cm → precision, beam → lock */

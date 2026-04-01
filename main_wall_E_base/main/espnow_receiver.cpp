@@ -22,19 +22,25 @@
 #include "audio_espnow.h"
 #include "audio_telem.h"
 #include "audio_esp_status.h"
+#include "servo_manager.h"
+#include "laser_control.h"
 #include <WiFi.h>
 #include <esp_now.h>
 #include <esp_wifi.h>
 
-// Must match wall_e_master_controller/protocol.h ControlPacket
+// Must match wall_e_master_controller/protocol.h ControlPacket (packed)
 typedef struct __attribute__((packed)) {
-  int8_t   leftSpeed;       // -100 to +100
-  int8_t   rightSpeed;      // -100 to +100
-  uint8_t  driveMode;       // 0=manual, 1=precision
-  uint8_t  behaviourMode;   // mood override (0-4)
-  uint8_t  action;          // trigger event
-  uint16_t systemFlags;     // bitmask (E-STOP, AUTO, etc.)
+  int8_t   leftSpeed;
+  int8_t   rightSpeed;
+  uint8_t  driveMode;
+  uint8_t  behaviourMode;
+  uint8_t  action;
+  uint16_t systemFlags;
+  uint8_t  servoTargets[10];
 } ControlPacket;
+
+#define CONTROL_PACKET_HEADER_BYTES  7
+#define CONTROL_PACKET_FULL_BYTES    (int)sizeof(ControlPacket)
 
 // Telemetry packet to send back (UPDATED with autonomy data)
 typedef struct __attribute__((packed)) {
@@ -71,6 +77,7 @@ typedef struct __attribute__((packed)) {
 #define ACTION_MOTOR_RESET 7
 #define ACTION_DOCK_GO     8
 #define ACTION_DOCK_CANCEL 9
+#define ACTION_STOP_ALL    10
 
 // System flags
 #define FLAG_ESTOP      0x0001
@@ -78,6 +85,7 @@ typedef struct __attribute__((packed)) {
 #define FLAG_PRECISION  0x0004
 #define FLAG_SUPERVISED 0x0008
 #define FLAG_SLEEP      0x0010
+#define FLAG_LASER      0x0020
 
 extern unsigned long lastCommandMillis;
 static uint8_t s_controllerMac[6] = {0};  // Remember controller MAC for telemetry send
@@ -133,7 +141,7 @@ static void onRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len
     }
   }
 
-  if (len < (int)sizeof(ControlPacket)) return;
+  if (len < CONTROL_PACKET_HEADER_BYTES) return;
 
   const ControlPacket* p = (const ControlPacket*)data;
   
@@ -151,6 +159,7 @@ static void onRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len
   bool estop = (p->systemFlags & FLAG_ESTOP);
   if (estop) {
     motorStop();
+    laserOff();
     displaySetCommand(CMD_IDLE);
     lastCommandMillis = millis();
     if (!s_estopLast) {
@@ -162,9 +171,8 @@ static void onRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len
   }
   s_estopLast = false;
   
-  // NEW: Autonomy flag handling (TEMPORARILY DISABLED - autonomy not initialized)
-  // bool autoFlagSet = (p->systemFlags & FLAG_AUTONOMOUS);
-  // autonomySetEnabled(autoFlagSet);  // Enable/disable autonomy engine
+  bool autoFlagSet = (p->systemFlags & FLAG_AUTONOMOUS);
+  autonomySetEnabled(autoFlagSet);
 
   // Action handling (dock, etc.)
   if (p->action == ACTION_DOCK_GO) {
@@ -181,8 +189,28 @@ static void onRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len
     dockHomingSetRequested(false);
 #endif
     displayShowToast("Dock cancelled");
+  } else if (p->action == ACTION_STOP_ALL) {
+    motorStop();
+    laserOff();
+    displaySetCommand(CMD_IDLE);
+    Serial.println(F("[Action] STOP_ALL"));
   } else if (p->action != ACTION_NONE) {
     Serial.printf("[Action] %d\n", p->action);
+  }
+
+  /* Servo + laser from CYD (0–180° in packet → base uses 0–100 scale) */
+  if (len >= CONTROL_PACKET_FULL_BYTES) {
+    if (p->systemFlags & FLAG_LASER) {
+      laserSetBrightness(255);
+    } else {
+      laserSetBrightness(0);
+    }
+    for (uint8_t i = 0; i < SERVO_COUNT; i++) {
+      int pos = ((int)p->servoTargets[i] * 100) / 180;
+      if (pos < 0) pos = 0;
+      if (pos > 100) pos = 100;
+      servoSet(i, pos, 85);
+    }
   }
 
   /* When dock homing or autonomous docking active, don't apply drive commands */
@@ -285,27 +313,26 @@ void espnowSendTelemetry() {
   telem.batteryVoltage = bat.voltage;
   telem.currentDraw = bat.currentA;
   telem.temperature = 25.0f;  // Placeholder: add temp sensor if available
-  telem.moodState = 0;        // Placeholder: 0=curious
-  telem.autonomousState = 0;  // 0=manual
-  telem.safetyState = 0;      // 0=ok
+  telem.moodState = 0;
+  telem.autonomousState = autonomyIsEnabled() ? 1 : 0;
+  telem.safetyState = 0;
 
-  // NEW: Autonomy telemetry (TEMPORARILY DISABLED - autonomy not initialized)
-  // const AutoContext* ctx = autonomyGetContext();
-  // const LocationState* loc = autonomyGetLocation();
-  // const NavState* nav = waypointGetNavState();
-  
-  telem.autonomyEnabled = 0;  // Disabled
-  telem.autonomyState = 0;    // Idle
-  telem.sonarDistanceCm = 0.0f;
-  telem.compassHeading = 0.0f;
-  telem.gpsLatitude = 0.0;
-  telem.gpsLongitude = 0.0;
-  telem.gpsValid = 0;
-  telem.waypointMode = 0;
-  telem.waypointDistanceM = 0.0f;
-  telem.waypointBearingDeg = 0.0f;
-  telem.currentWaypoint = 0;
-  telem.totalWaypoints = 0;
+  const AutoContext* ctx = autonomyGetContext();
+  const LocationState* loc = autonomyGetLocation();
+  const NavState* nav = waypointGetNavState();
+
+  telem.autonomyEnabled = autonomyIsEnabled() ? 1 : 0;
+  telem.autonomyState = (uint8_t)autonomyGetState();
+  telem.sonarDistanceCm = ctx ? ctx->detectedDistance : 0.0f;
+  telem.compassHeading = loc ? loc->heading : 0.0f;
+  telem.gpsLatitude = loc ? (float)loc->latitude : 0.0f;
+  telem.gpsLongitude = loc ? (float)loc->longitude : 0.0f;
+  telem.gpsValid = (loc && loc->gpsValid) ? 1 : 0;
+  telem.waypointMode = autonomyIsWaypointMode() ? 1 : 0;
+  telem.waypointDistanceM = nav ? nav->distanceToWaypoint : 0.0f;
+  telem.waypointBearingDeg = nav ? nav->bearingToWaypoint : 0.0f;
+  telem.currentWaypoint = nav ? nav->currentWaypointIndex : 0;
+  telem.totalWaypoints = waypointGetCount();
 
   esp_err_t result = esp_now_send(s_controllerMac, (uint8_t*)&telem, sizeof(TelemetryPacket));
   
@@ -313,7 +340,8 @@ void espnowSendTelemetry() {
   static int sendCount = 0;
   sendCount++;
   if (sendCount >= 50) {
-    Serial.printf("[Telemetry] Bat=%.2fV Auto=DISABLED\n", telem.batteryVoltage);
+    Serial.printf("[Telemetry] Bat=%.2fV Auto=%s\n", telem.batteryVoltage,
+                  telem.autonomyEnabled ? "ON" : "OFF");
     sendCount = 0;
   }
 }

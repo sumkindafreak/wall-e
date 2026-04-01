@@ -133,12 +133,12 @@ Per-folder details: [wall_e_master_controller/README.md](wall_e_master_controlle
 | Role | MCU (typical) | Notes |
 |------|----------------|-------|
 | Master | ESP32 (e.g. CYD 2432S028) | TFT + touch; no motors. |
-| Base | ESP32-S3 | Tank drive, servos (I2C PWM), VL53L1X, rear IR beam, **IR TX** for dock (see `ir_beacon_receivers.h`). |
+| Base | ESP32-S3 | Tank drive, servos (I2C PWM), VL53L1X, obstacle bumpers; no modulated **IR TX** toward the dock in firmware. |
 | Audio | ESP32-S3 | DFPlayer or project-specific audio chain. |
 | Vision | ESP32-S3 + PSRAM | OV2640; pin map is board-specific. |
 | Dock | ESP32-S3 | Charge MOSFET, ACS712, VL6180 I2C, TSOP IR receivers, NeoPixel, TFT. |
 
-**IR docking:** The robot emits **modulated IR** (~38 kHz); the dock uses **TSOP-class receivers** on alignment pins. The dock beacon can carry **`ir_align_hint`** for closed-loop alignment when the dock’s Wi-Fi/ESP-NOW path is active.
+**Dock alignment:** WALL-E emits **modulated IR** from two LEDs; the dock’s two receivers drive **`ir_align_hint`** on the beacon; the base **ALIGN** state uses that over ESP-NOW.
 
 **Pins:** Authoritative maps live in each project’s `*_config.h`. README tables are summaries only.
 

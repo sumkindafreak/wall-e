@@ -1,6 +1,8 @@
 # Vision Node (PlatformIO — ESP32-S3 + Camera)
 
-**ESP32-S3** with **OV2640** (or compatible) camera: **motion detection**, **clustering**, **centroid**, optional **object class**, and **ESP-NOW** transmission of **`VisionPacket_t`** to the base.
+**ESP32-S3** with **OV2640** (or compatible) camera: **motion detection**, **clustering**, **centroid**, optional **object class**, **lightweight recognition** (RGB565 colour heuristics, blob, distance band, classification, events), and **ESP-NOW** transmission of **`VisionPacket_t`** to the base.
+
+Recognition runs on a **~150 ms** cadence: one **RGB565** QQVGA frame is captured, analysed, then the sensor returns to **grayscale** for motion (pins unchanged). No ML / OpenCV.
 
 ---
 

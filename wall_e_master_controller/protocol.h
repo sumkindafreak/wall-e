@@ -70,6 +70,7 @@ typedef struct __attribute__((packed)) {
 #define ACTION_MOTOR_RESET 7
 #define ACTION_DOCK_GO     8
 #define ACTION_DOCK_CANCEL 9
+#define ACTION_STOP_ALL    10
 
 // ------------------------------------------------------------
 //  Mood codes (behaviourMode / moodState)
@@ -102,5 +103,6 @@ typedef struct __attribute__((packed)) {
 #define FLAG_PRECISION  0x0004
 #define FLAG_SUPERVISED 0x0008
 #define FLAG_SLEEP      0x0010
+#define FLAG_LASER      0x0020  /* Eye laser beam enabled (base GPIO; aim via servo targets) */
 
 #endif // PROTOCOL_H

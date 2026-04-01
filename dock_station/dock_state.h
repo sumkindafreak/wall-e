@@ -32,6 +32,13 @@ int dockStateToNeoPixelState(DockState s);
 /* True after CHARGED for IDLE_AFTER_CHARGED_MS (dim display/LEDs, show Idle). Cleared when leaving CHARGED. */
 bool dockIsIdleMode(void);
 
+/* True when NOT_DOCKED, quiet bay (no presence) for BAY_IDLE_AFTER_MS — arrows stay off until WALL-E arms docking. */
+bool dockIsBayIdle(void);
+void dockStateClearBayIdle(void);
+
+/* Short name for Serial (includes STANDBY when bay idle). */
+const char* dockStateNameForSerial(void);
+
 /* Remote command handlers (from WALL-E via ESP-NOW) */
 void dockStateForceOff(void);     /* Force charging off, enter FAULT */
 void dockStateResetFault(void);   /* Clear FAULT, return to NOT_DOCKED or DOCKED_IDLE */

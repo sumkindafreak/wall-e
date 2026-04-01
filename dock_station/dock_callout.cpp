@@ -10,6 +10,7 @@
 #include "dock_callout.h"
 #include "dock_config.h"
 #include "dock_hw.h"
+#include "dock_ir_guidance.h"
 #include "dock_sensors.h"
 #include <Arduino.h>
 
@@ -30,9 +31,14 @@ static bool s_last_docked = false;
 static uint8_t s_idle_led_flash_count = 0;
 static bool s_idle_led_last_on = false;
 
+/* Arrows only when TSOP receivers see WALL-E's modulated IR — avoids hot MOSFETs when idle/callout. */
+static uint8_t gateArrow(uint8_t wantOn) {
+  return dockIrGuidanceAnyReceiverActive() ? wantOn : ARR_OFF;
+}
+
 static void setCalloutOutputs(uint8_t leftLevel, uint8_t rightLevel, uint8_t internalLevel) {
-  dockWriteOutputPin(PIN_ARROW_LEFT, leftLevel, "left arrow");
-  dockWriteOutputPin(PIN_ARROW_RIGHT, rightLevel, "right arrow");
+  dockWriteOutputPin(PIN_ARROW_LEFT, gateArrow(leftLevel), "left arrow");
+  dockWriteOutputPin(PIN_ARROW_RIGHT, gateArrow(rightLevel), "right arrow");
   dockWriteOutputPin(PIN_INTERNAL_LED, internalLevel, "internal LED");
 }
 
@@ -40,7 +46,7 @@ void dockCalloutBegin(void) {
   dockConfigureInputPin(PIN_CALL_SWITCH, INPUT_PULLUP, "call switch");
   s_last_switch = (dockDigitalReadSafe(PIN_CALL_SWITCH, "call switch", HIGH) == LOW);
   s_switch_stable_ms = millis();
-  s_last_docked = dockDockDetected();
+  s_last_docked = dockRobotInSlot();
 }
 
 bool dockCalloutIsActive(void) {
@@ -50,7 +56,7 @@ bool dockCalloutIsActive(void) {
 void dockCalloutUpdate(void) {
   uint32_t now = millis();
   bool sw = (dockDigitalReadSafe(PIN_CALL_SWITCH, "call switch", HIGH) == LOW);  /* LOW = pressed */
-  bool docked = dockDockDetected();
+  bool docked = dockRobotInSlot();
 
   /* Track docked state; we no longer use a flash counter here. */
   s_last_docked = docked;

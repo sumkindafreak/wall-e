@@ -4,15 +4,15 @@
  *
  * Full navigation and docking logic for life-size WALL-E:
  * 1. Detect low battery
- * 2. Search for dock (ESP-NOW beacon / IR)
- * 3. Align using dock IR receiver telemetry (ESP-NOW ir_align_hint) + WALL-E IR transmitters
+ * 2. Search for dock (ESP-NOW beacon RSSI)
+ * 3. WALL-E IR TX on during search/align/approach; dock’s two RX → ir_align_hint on beacon
  * 4. Approach using ToF distance (speed ramps down as distance decreases)
- * 5. Enter dock until IR break beam confirms
+ * 5. Enter dock when ToF reads close (no onboard IR break-beam)
  * 6. Send REQUEST_CHARGE via ESP-NOW
  * 7. Stop and enter CHARGING
  *
  * Integrates with: motor_control, vl53l1x_tof, dock_sensors, battery_monitor,
- *                  dock_controller, ir_beacon_receivers
+ *                  dock_controller, dock_ir_transmitters
  ******************************************************************************/
 
 #ifndef AUTONOMOUS_DOCKING_H

@@ -68,7 +68,9 @@ typedef enum {
   TOUCH_ZONE_NAV_AUTONOMY,     // NEW: Navigate to Autonomy page
   TOUCH_ZONE_AUTONOMY_TOGGLE,  // NEW: Toggle autonomy enable/disable
   TOUCH_ZONE_DOCK_GO,          // Go to dock (sends ACTION_DOCK_GO)
-  TOUCH_ZONE_DOCK_CANCEL       // Cancel dock homing (sends ACTION_DOCK_CANCEL)
+  TOUCH_ZONE_DOCK_CANCEL,      // Cancel dock homing (sends ACTION_DOCK_CANCEL)
+  TOUCH_ZONE_LASER_PAD,        // Drag crosshair — head pan/tilt aim + laser alignment
+  TOUCH_ZONE_LASER_FIRE        // Toggle laser armed (FLAG_LASER on base)
 } TouchZone;
 
 #define LONG_PRESS_MS  2000

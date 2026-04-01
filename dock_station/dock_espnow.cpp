@@ -208,6 +208,12 @@ bool dockEspNowHandleRecv(const uint8_t *data, int len) {
   } else if (p->cmd == DOCK_CMD_REQUEST_CHARGE) {
     dockStateRequestCharge();
     Serial.println(F("[DOCK] CMD: Request charge (from WALL-E)"));
+  } else if (p->cmd == DOCK_CMD_DOCKING_ARM) {
+    dockAlignmentSetDockingArmed(true);
+    Serial.println(F("[DOCK] CMD: Docking ARM — arrow guidance allowed"));
+  } else if (p->cmd == DOCK_CMD_DOCKING_DISARM) {
+    dockAlignmentSetDockingArmed(false);
+    Serial.println(F("[DOCK] CMD: Docking DISARM — arrows off"));
   } else if (p->cmd == DOCK_CMD_APPROACH_STAGE && len >= (int)sizeof(DockApproachStagePacket_t)) {
     const DockApproachStagePacket_t *ap = (const DockApproachStagePacket_t *)data;
     dockAlignmentSetStage(ap->stage);

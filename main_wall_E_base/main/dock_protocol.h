@@ -34,8 +34,10 @@ typedef struct {
 
 #define DOCK_BEACON_SIZE   sizeof(DockBeaconPacket_t)
 
-/* DOCK_CMD_APPROACH_STAGE: WALL-E reports approach stage for arrow staging */
-#define DOCK_CMD_APPROACH_STAGE  6
+/* DOCK_CMD_* — keep in sync with dock_station/dock_protocol.h */
+#define DOCK_CMD_APPROACH_STAGE   6
+#define DOCK_CMD_DOCKING_ARM      7   /* dock may drive arrow MOSFETs after this */
+#define DOCK_CMD_DOCKING_DISARM   8   /* dock turns arrows off */
 
 typedef enum {
   APPROACH_FAR   = 0,  /* >1m: arrows off / ready pulse */

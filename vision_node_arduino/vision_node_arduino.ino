@@ -11,6 +11,7 @@
 #include "esp_camera.h"
 #include "vision_protocol.h"
 #include "motion_detect.h"
+#include "recognition_engine.h"
 #include "vision_espnow.h"
 #include "FS.h"
 #include "SD_MMC.h"
@@ -63,6 +64,7 @@ static uint32_t s_sdLogInterval = 0;
 #define WALLE_AP_PASSWORD "walle1234"
 static WebServer s_httpServer(80);
 static uint32_t s_visionNodeIp = 0;
+static uint32_t s_lastRecognMs = 0;
 
 /* Onboard status LED — ESP32-CAM has a single LED on GPIO33. */
 #define LED_ENABLE       1
@@ -217,10 +219,11 @@ void setup() {
   ledSet(0, 0, LED_BRIGHTNESS);  /* blue = ready */
 #endif
 
-  Serial.println("[Vision] Ready");
+  Serial.println("[Vision] Ready (motion + lightweight recognition)");
 }
 
 void loop() {
+  uint32_t now = millis();
   camera_fb_t* fb = esp_camera_fb_get();
   if (!fb || fb->len < (size_t)(FRAME_W * FRAME_H)) {
     if (fb) esp_camera_fb_return(fb);
@@ -244,6 +247,28 @@ void loop() {
   pkt.objectClass = s_motion.objectClass;
   pkt.frameID = s_motion.frameID;
   pkt.visionNodeIp = s_visionNodeIp;
+
+  recognitionApplyMotionBasics(&pkt, &s_motion, FRAME_W, FRAME_H);
+
+  if (now - s_lastRecognMs >= RECOGNITION_INTERVAL_MS) {
+    sensor_t* sens = esp_camera_sensor_get();
+    if (sens) {
+      sens->set_pixformat(sens, PIXFORMAT_RGB565);
+      sens->set_framesize(sens, FRAMESIZE_QQVGA);
+      camera_fb_t* fr = esp_camera_fb_get();
+      if (fr && fr->len >= (size_t)(FRAME_W * FRAME_H * 2)) {
+        recognitionProcessRgbFrame(&pkt, fr->buf, FRAME_W, FRAME_H);
+        esp_camera_fb_return(fr);
+      } else {
+        if (fr) esp_camera_fb_return(fr);
+      }
+      sens->set_pixformat(sens, PIXFORMAT_GRAYSCALE);
+      sens->set_framesize(sens, FRAMESIZE_QQVGA);
+      s_lastRecognMs = now;
+    }
+  }
+
+  recognitionApplyLockSmoothing(&pkt, FRAME_W, FRAME_H);
 
   visionEspNowSend(&pkt);
 

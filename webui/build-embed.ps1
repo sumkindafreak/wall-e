@@ -1,27 +1,45 @@
 # Build LROS WebUI for ESP32 PROGMEM embedding
-# Output: web_page_lros.h (replace web_page.h content or use conditionally)
+# Reads webui/index.html + css/lros.css + js/*.js and writes main_wall_E_base/main/web_page_lros.h
 
-$standalone = Join-Path $PSScriptRoot "index-standalone.html"
-$out = Join-Path (Join-Path (Join-Path $PSScriptRoot "..") "main_wall_E_base") "main\web_page_lros.h"
+$ErrorActionPreference = "Stop"
+$root = $PSScriptRoot
 
-if (-not (Test-Path $standalone)) {
-    Write-Host "Run first: Create index-standalone.html (inline css+js)"
-    $css = Get-Content (Join-Path $PSScriptRoot "css\lros.css") -Raw
-    $js = Get-Content (Join-Path $PSScriptRoot "js\lros.js") -Raw
-    $html = Get-Content (Join-Path $PSScriptRoot "index.html") -Raw
-    $html = $html -replace '<link rel="stylesheet" href="css/lros.css">', "<style>$css</style>"
-    $html = $html -replace '<script src="js/lros.js"></script>', "<script>$js</script>"
-    $html | Set-Content $standalone -Encoding UTF8
+$css = [System.IO.File]::ReadAllText((Join-Path $root "css\lros.css"), [System.Text.UTF8Encoding]::new($false))
+$jsFiles = @(
+  "js\walleConnection.js",
+  "js\pathPlanner.js",
+  "js\proximityAlert.js",
+  "js\navWorldContext.js",
+  "js\lros-navigation.js",
+  "js\navMissionPanel.js",
+  "js\lros.js"
+)
+$parts = foreach ($rel in $jsFiles) {
+  [System.IO.File]::ReadAllText((Join-Path $root $rel), [System.Text.UTF8Encoding]::new($false))
 }
+$jsCombined = ($parts -join "`n`n")
 
-$content = Get-Content $standalone -Raw -Encoding UTF8
-# R"rawliteral(...)" uses content verbatim — do not escape
+$html = [System.IO.File]::ReadAllText((Join-Path $root "index.html"), [System.Text.UTF8Encoding]::new($false))
+
+$html = $html.Replace(
+  '<link rel="stylesheet" href="css/lros.css">',
+  "<style>`n$css`n</style>"
+)
+
+$pattern = '(?s)<script src="js/walleConnection\.js"></script>\s*<script src="js/pathPlanner\.js"></script>\s*<script src="js/proximityAlert\.js"></script>\s*<script src="js/navWorldContext\.js"></script>\s*<script src="js/lros-navigation\.js"></script>\s*<script src="js/navMissionPanel\.js"></script>\s*<script src="js/lros\.js"></script>'
+$embedded = "<script>`n" + $jsCombined + "`n</script>"
+if (-not ([regex]::IsMatch($html, $pattern))) {
+  Write-Error "Could not find expected script bundle in index.html; update build-embed.ps1 pattern."
+}
+$html = [regex]::Replace($html, $pattern, { param($m) return $embedded })
+
+$out = Join-Path (Join-Path (Join-Path $root "..") "main_wall_E_base") "main\web_page_lros.h"
 
 $header = @"
 #pragma once
 #include <Arduino.h>
-// WALL-E LROS Web UI - Built from webui/
-// Replace WALLE_PAGE in web_page.h with WALLE_PAGE_LROS to use this UI.
+// WALL-E LROS Web UI - Built from webui/ (run: webui/build-embed.ps1)
+// Served at GET / via web_server.cpp
 const char WALLE_PAGE_LROS[] PROGMEM = R"rawliteral(
 "@
 
@@ -30,6 +48,5 @@ $footer = @"
 "@
 
 $utf8NoBom = New-Object System.Text.UTF8Encoding $false
-[System.IO.File]::WriteAllText($out, $header + $content + $footer, $utf8NoBom)
+[System.IO.File]::WriteAllText($out, $header + $html + $footer, $utf8NoBom)
 Write-Host "Built: $out"
-Write-Host "To use: In web_page.h, use WALLE_PAGE_LROS instead of WALLE_PAGE, or merge the content."

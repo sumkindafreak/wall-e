@@ -8,11 +8,10 @@
 
 #include "autonomous_docking.h"
 #include "battery_monitor.h"
-#include "dock_sensors.h"
 #include "dock_controller.h"
 #include "dock_protocol.h"
 #include "vl53l1x_tof.h"
-#include "ir_beacon_receivers.h"
+#include "dock_ir_transmitters.h"
 #include "motor_control.h"
 #include "display_manager.h"
 #include <Arduino.h>
@@ -107,6 +106,7 @@ void autonomousDockingSetRequested(bool requested) {
     s_stateEnterMs = millis();
   }
   if (!requested && s_state != DOCK_STATE_CHARGING) {
+    dockControllerSendDockingDisarm(s_lastDockId ? s_lastDockId : 0);
     s_state = DOCK_STATE_IDLE;
     stopMotors();
   }
@@ -127,7 +127,6 @@ static bool batteryOk(void) {
 bool autonomousDockingUpdate(uint32_t now) {
   /* IDLE: Check for low battery → auto-start search */
   if (s_state == DOCK_STATE_IDLE) {
-    irBeaconSetTransmitEnabled(false);
     if (batteryLow() && !s_requested) {
       s_requested = true;
       s_state = DOCK_STATE_SEARCH;
@@ -143,15 +142,16 @@ bool autonomousDockingUpdate(uint32_t now) {
 
   /* CHARGING: No motor output */
   if (s_state == DOCK_STATE_CHARGING) {
-    irBeaconSetTransmitEnabled(false);
+    dockIrTransmittersSetEnabled(false);
     stopMotors();
     return false;
   }
 
   {
-    bool wantTx = (s_state == DOCK_STATE_SEARCH || s_state == DOCK_STATE_ALIGN ||
-                   s_state == DOCK_STATE_APPROACH);
-    irBeaconSetTransmitEnabled(wantTx);
+    const bool wantTx =
+        (s_state == DOCK_STATE_SEARCH || s_state == DOCK_STATE_ALIGN ||
+         s_state == DOCK_STATE_APPROACH);
+    dockIrTransmittersSetEnabled(wantTx);
   }
 
   /* Default: no output */
@@ -161,6 +161,7 @@ bool autonomousDockingUpdate(uint32_t now) {
   /* Abort conditions */
   if (s_state != DOCK_STATE_IDLE && s_state != DOCK_STATE_CHARGING) {
     if (s_lastBeaconMs > 0 && (now - s_lastBeaconMs) > DOCK_BEACON_TIMEOUT_MS) {
+      dockControllerSendDockingDisarm(s_lastDockId ? s_lastDockId : 0);
       s_state = DOCK_STATE_IDLE;
       s_requested = false;
       stopMotors();
@@ -168,6 +169,7 @@ bool autonomousDockingUpdate(uint32_t now) {
       return false;
     }
     if ((now - s_stateEnterMs) > DOCK_APPROACH_TIMEOUT_MS) {
+      dockControllerSendDockingDisarm(s_lastDockId ? s_lastDockId : 0);
       s_state = DOCK_STATE_IDLE;
       s_requested = false;
       stopMotors();
@@ -177,7 +179,7 @@ bool autonomousDockingUpdate(uint32_t now) {
   }
 
   /* -----------------------------------------------------------------------
-   * SEARCH_DOCK: Rotate slowly, listen for ESP-NOW beacon or IR
+   * SEARCH_DOCK: Rotate slowly, listen for ESP-NOW beacon (RSSI)
    * ----------------------------------------------------------------------- */
   if (s_state == DOCK_STATE_SEARCH) {
     if (now - s_lastApproachStageMs >= APPROACH_STAGE_SEND_MS) {
@@ -185,7 +187,8 @@ bool autonomousDockingUpdate(uint32_t now) {
       s_lastApproachStageMs = now;
     }
     if (s_lastRssi > RSSI_THRESHOLD) {
-      /* Strong beacon: run ALIGN so dock IR + beacon hint can center the robot */
+      /* Strong beacon: run ALIGN using dock ir_align_hint (ESP-NOW) when fresh */
+      dockControllerSendDockingArm(s_lastDockId ? s_lastDockId : 0);
       s_state = DOCK_STATE_ALIGN;
       s_stateEnterMs = now;
       return true;
@@ -245,20 +248,14 @@ bool autonomousDockingUpdate(uint32_t now) {
       uint8_t stage = APPROACH_1M;
       if (tofIsValid()) {
         uint16_t d = tofGetDistanceMm();
-        if (d > 0 && d < DOCK_TOF_SLOW_MM) stage = APPROACH_20CM;  /* precision to beam */
+        if (d > 0 && d < DOCK_TOF_SLOW_MM) stage = APPROACH_20CM;
         else if (d < 1000) stage = APPROACH_1M;
         else stage = APPROACH_FAR;
       }
       dockControllerSendApproachStage(stage, s_lastDockId ? s_lastDockId : 0);
       s_lastApproachStageMs = now;
     }
-    /* Arrival: IR beam or ToF < 60 mm */
-    if (dockBeamPresent()) {
-      s_state = DOCK_STATE_DOCKED;
-      s_stateEnterMs = now;
-      stopMotors();
-      return true;
-    }
+    /* Arrival: ToF close (onboard IR break-beam removed) */
     if (tofIsValid()) {
       uint16_t d = tofGetDistanceMm();
       if (d > 0 && d < DOCK_TOF_CRAWL_MM) {
@@ -293,6 +290,7 @@ bool autonomousDockingUpdate(uint32_t now) {
    * DOCKED: Send REQUEST_CHARGE → CHARGING
    * ----------------------------------------------------------------------- */
   if (s_state == DOCK_STATE_DOCKED) {
+    dockControllerSendDockingDisarm(s_lastDockId ? s_lastDockId : 0);
     dockControllerSendRequestCharge(s_lastDockId);
     s_state = DOCK_STATE_CHARGING;
     s_requested = false;

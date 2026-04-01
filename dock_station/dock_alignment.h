@@ -22,7 +22,11 @@
 #include <stdint.h>
 
 void dockAlignmentBegin(void);
+/* IR arrow guidance: only runs in STATE_NOT_DOCKED; other states force arrows off (saves MOSFET heat). */
 void dockAlignmentUpdate(bool docked);
+
+/* WALL-E sends DOCK_CMD_DOCKING_ARM before dock may drive arrows; cleared on DISARM or when leaving NOT_DOCKED. */
+void dockAlignmentSetDockingArmed(bool armed);
 
 /* WALL-E sends stage via ESP-NOW (overrides sensor fallback until timeout) */
 void dockAlignmentSetStage(uint8_t stage);

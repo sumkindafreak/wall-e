@@ -4,6 +4,7 @@
 // ============================================================
 
 #include "ui_draw.h"
+#include "ui_draw_laser.h"
 #include "animation_system.h"
 #include "espnow_control.h"
 #include "packet_control.h"
@@ -114,7 +115,7 @@ void uiDrawStaticDrive(void) {
   g_tft->drawString("WALL-E", 10, 6);
   
   // Control authority indicator (drawn in top bar initially)
-  uiDrawControlAuthority();
+  uiDrawControlAuthority(packetTelemetryValid());
 
   g_tft->fillRect(0, TOP_BAR_HEIGHT, SCREEN_W, TELEM_STRIP_H, C_BG_DARK);
   g_tft->drawFastHLine(0, TOP_BAR_HEIGHT + TELEM_STRIP_H - 1, SCREEN_W, C_BORDER);
@@ -153,34 +154,32 @@ void uiDrawStaticDrive(void) {
   g_tft->fillRect(0, BOTTOM_BAR_Y, SCREEN_W, BOTTOM_BAR_H, C_BG_DARK);
 
   const int by = BOTTOM_BAR_Y + 4, bh = 32;
-  // Dock | Cancel (left of E-STOP) — 60x32 each for easier touch
-  const int dockX = 8, dockW = 60;
-  const int cancelX = dockX + dockW + 4, cancelW = 60;
-  g_tft->fillRoundRect(dockX, by, dockW, bh, 3, C_ACCENT);
-  g_tft->drawRoundRect(dockX, by, dockW, bh, 3, C_ACCENT_DIM);
+  g_tft->fillRoundRect(DRIVE_DOCK_X, by, DRIVE_DOCK_W, bh, 3, C_ACCENT);
+  g_tft->drawRoundRect(DRIVE_DOCK_X, by, DRIVE_DOCK_W, bh, 3, C_ACCENT_DIM);
   g_tft->setTextColor(C_BG, C_ACCENT);
   g_tft->setTextSize(1);
-  g_tft->drawString("Dock", dockX + 16, by + 10);
-  g_tft->fillRoundRect(cancelX, by, cancelW, bh, 3, C_BG_DARK);
-  g_tft->drawRoundRect(cancelX, by, cancelW, bh, 3, C_BORDER);
+  g_tft->drawString("Dock", DRIVE_DOCK_X + 14, by + 10);
+  g_tft->fillRoundRect(DRIVE_CANCEL_X, by, DRIVE_CANCEL_W, bh, 3, C_BG_DARK);
+  g_tft->drawRoundRect(DRIVE_CANCEL_X, by, DRIVE_CANCEL_W, bh, 3, C_BORDER);
   g_tft->setTextColor(C_ACCENT, C_BG_DARK);
-  g_tft->drawString("Cancel", cancelX + 10, by + 10);
+  g_tft->drawString("Cancel", DRIVE_CANCEL_X + 6, by + 10);
 
-  // E-STOP (right of Dock/Cancel)
-  const int ex = cancelX + cancelW + 4, ew = 100;
-  g_tft->fillRoundRect(ex, by, ew, bh, 4, C_RED);
-  g_tft->drawRoundRect(ex, by, ew, bh, 4, C_WHITE);
+  g_tft->fillRoundRect(DRIVE_ESTOP_X, by, DRIVE_ESTOP_W, bh, 4, C_RED);
+  g_tft->drawRoundRect(DRIVE_ESTOP_X, by, DRIVE_ESTOP_W, bh, 4, C_WHITE);
   g_tft->setTextColor(C_WHITE, C_RED);
   g_tft->setTextSize(2);
-  g_tft->drawString("E-STOP", ex + 22, by + 8);
+  g_tft->drawString("E-STOP", DRIVE_ESTOP_X + 4, by + 8);
 
-  // System | Behav (right of E-STOP)
-  const int gridX = ex + ew + 4, cellW = 48, cellH = 16, gap = 4;
+  g_tft->setTextSize(1);
   g_tft->setTextColor(C_ACCENT, C_BG_DARK);
-  g_tft->drawRect(gridX, by, cellW, cellH, C_BORDER);
-  g_tft->drawString("System", gridX + 4, by + 4);
-  g_tft->drawRect(gridX + cellW + gap, by, cellW, cellH, C_BORDER);
-  g_tft->drawString("Behav", gridX + cellW + gap + 8, by + 4);
+  g_tft->drawRoundRect(DRIVE_NAV_GRID_X, by, DRIVE_NAV_CELL_W, bh, 2, C_BORDER);
+  g_tft->drawString("Sys", DRIVE_NAV_GRID_X + 3, by + 10);
+  g_tft->drawRoundRect(DRIVE_NAV_BEH_X, by, DRIVE_NAV_CELL_W, bh, 2, C_BORDER);
+  g_tft->drawString("Beh", DRIVE_NAV_BEH_X + 3, by + 10);
+  g_tft->drawRoundRect(DRIVE_NAV_PRF_X, by, DRIVE_NAV_CELL_W, bh, 2, C_BORDER);
+  g_tft->drawString("Prf", DRIVE_NAV_PRF_X + 4, by + 10);
+  g_tft->drawRoundRect(DRIVE_NAV_AUT_X, by, DRIVE_NAV_CELL_W, bh, 2, C_BORDER);
+  g_tft->drawString("Aut", DRIVE_NAV_AUT_X + 4, by + 10);
 }
 
 void uiDrawStaticBehaviour(void) {
@@ -205,10 +204,7 @@ void uiDrawPhysicalJoystickLayout(void) {
 
   int midX = SCREEN_W / 2;
   g_tft->drawFastVLine(midX, cTop, CONTENT_H, C_BORDER);
-  g_tft->setTextColor(C_ACCENT, C_BG);
-  g_tft->setTextSize(1);
-  g_tft->drawString("Battery", 8, cTop + 4);
-  g_tft->drawString("Behaviour", midX + 8, cTop + 4);
+  /* "Battery" / "Behaviour" labels drawn in uiDrawTelemetryStrip (telemetry row) */
 
   // Get animation names based on current profile's favorites
   Profile* p = profileGet();
@@ -224,43 +220,54 @@ void uiDrawPhysicalJoystickLayout(void) {
     }
   }
   
+  g_tft->setTextColor(C_ACCENT, C_BG);
+  g_tft->setTextSize(1);
+  const int animBoxW = 64;
+  const int animBoxH = 32;
+  const int animCharW = 6;
   for (int i = 0; i < 5; i++) {
     int bx = midX + 16 + (i % 2) * 72;
     int by = cTop + 30 + (i / 2) * 38;
-    g_tft->drawRect(bx, by, 64, 32, C_BORDER);
-    g_tft->drawString(displayNames[i], bx + 4, by + 10);
+    g_tft->drawRect(bx, by, animBoxW, animBoxH, C_BORDER);
+    const char* name = displayNames[i];
+    int tw = (int)strlen(name) * animCharW;
+    if (tw > animBoxW - 4) tw = animBoxW - 4;
+    int tx = bx + (animBoxW - tw) / 2;
+    if (tx < bx + 2) tx = bx + 2;
+    int ty = by + (animBoxH - 8) / 2;
+    g_tft->drawString(name, tx, ty);
   }
   
   g_tft->drawFastHLine(0, BOTTOM_BAR_Y, SCREEN_W, C_BORDER);
   g_tft->fillRect(0, BOTTOM_BAR_Y, SCREEN_W, BOTTOM_BAR_H, C_BG_DARK);
   const int by = BOTTOM_BAR_Y + 4, bh = 32;
-  // Dock | Cancel (left of E-STOP) — 60x32 each for easier touch
-  const int dockX = 8, dockW = 60;
-  const int cancelX = dockX + dockW + 4, cancelW = 60;
-  g_tft->fillRoundRect(dockX, by, dockW, bh, 3, C_ACCENT);
-  g_tft->drawRoundRect(dockX, by, dockW, bh, 3, C_ACCENT_DIM);
+  g_tft->fillRoundRect(DRIVE_DOCK_X, by, DRIVE_DOCK_W, bh, 3, C_ACCENT);
+  g_tft->drawRoundRect(DRIVE_DOCK_X, by, DRIVE_DOCK_W, bh, 3, C_ACCENT_DIM);
   g_tft->setTextColor(C_BG, C_ACCENT);
   g_tft->setTextSize(1);
-  g_tft->drawString("Dock", dockX + 16, by + 10);
-  g_tft->fillRoundRect(cancelX, by, cancelW, bh, 3, C_BG_DARK);
-  g_tft->drawRoundRect(cancelX, by, cancelW, bh, 3, C_BORDER);
+  g_tft->drawString("Dock", DRIVE_DOCK_X + 14, by + 10);
+  g_tft->fillRoundRect(DRIVE_CANCEL_X, by, DRIVE_CANCEL_W, bh, 3, C_BG_DARK);
+  g_tft->drawRoundRect(DRIVE_CANCEL_X, by, DRIVE_CANCEL_W, bh, 3, C_BORDER);
   g_tft->setTextColor(C_ACCENT, C_BG_DARK);
-  g_tft->drawString("Cancel", cancelX + 10, by + 10);
-  // E-STOP (right of Dock/Cancel)
-  const int ex = cancelX + cancelW + 4, ew = 100;
-  g_tft->fillRoundRect(ex, by, ew, bh, 4, C_RED);
-  g_tft->drawRoundRect(ex, by, ew, bh, 4, C_WHITE);
+  g_tft->drawString("Cancel", DRIVE_CANCEL_X + 6, by + 10);
+  g_tft->fillRoundRect(DRIVE_ESTOP_X, by, DRIVE_ESTOP_W, bh, 4, C_RED);
+  g_tft->drawRoundRect(DRIVE_ESTOP_X, by, DRIVE_ESTOP_W, bh, 4, C_WHITE);
   g_tft->setTextColor(C_WHITE, C_RED);
   g_tft->setTextSize(2);
-  g_tft->drawString("E-STOP", ex + 22, by + 8);
-  // System | Behav (right of E-STOP)
-  const int gridX = ex + ew + 4, cellW = 48, cellH = 16, gap = 4;
+  g_tft->drawString("E-STOP", DRIVE_ESTOP_X + 4, by + 8);
+  g_tft->setTextSize(1);
   g_tft->setTextColor(C_ACCENT, C_BG_DARK);
-  g_tft->drawRect(gridX, by, cellW, cellH, C_BORDER);
-  g_tft->drawString("System", gridX + 4, by + 4);
-  g_tft->drawRect(gridX + cellW + gap, by, cellW, cellH, C_BORDER);
-  g_tft->drawString("Behav", gridX + cellW + gap + 8, by + 4);
+  g_tft->drawRoundRect(DRIVE_NAV_GRID_X, by, DRIVE_NAV_CELL_W, bh, 2, C_BORDER);
+  g_tft->drawString("Sys", DRIVE_NAV_GRID_X + 3, by + 10);
+  g_tft->drawRoundRect(DRIVE_NAV_BEH_X, by, DRIVE_NAV_CELL_W, bh, 2, C_BORDER);
+  g_tft->drawString("Beh", DRIVE_NAV_BEH_X + 3, by + 10);
+  g_tft->drawRoundRect(DRIVE_NAV_PRF_X, by, DRIVE_NAV_CELL_W, bh, 2, C_BORDER);
+  g_tft->drawString("Prf", DRIVE_NAV_PRF_X + 4, by + 10);
+  g_tft->drawRoundRect(DRIVE_NAV_AUT_X, by, DRIVE_NAV_CELL_W, bh, 2, C_BORDER);
+  g_tft->drawString("Aut", DRIVE_NAV_AUT_X + 4, by + 10);
   g_tft->drawFastHLine(0, BOTTOM_BAR_Y, SCREEN_W, C_BORDER);
+
+  uiDrawLaserPadFrame(g_tft);
 }
 #endif
 
@@ -270,7 +277,6 @@ void uiDrawPhysicalJoystickLayout(void) {
 void uiDrawTelemetryStrip(const TelemetryStripData* telem) {
   if (!g_tft || !telem) return;
 
-  int y = TOP_BAR_HEIGHT + 4;
   int w = 60, h = 8;
   int batPct = telem->batteryPct;
   if (batPct < 0) batPct = 0;
@@ -293,25 +299,41 @@ void uiDrawTelemetryStrip(const TelemetryStripData* telem) {
   s_lastEmoStr[sizeof(s_lastEmoStr) - 1] = '\0';
 
   g_tft->fillRect(0, TOP_BAR_HEIGHT, SCREEN_W, TELEM_STRIP_H, C_BG_DARK);
-  g_tft->drawRect(10, y, w + 2, h + 2, C_BORDER);
-  g_tft->fillRect(11, y + 1, (w * batPct) / 100, h, telem->connected ? C_GREEN : C_ACCENT_DIM);
-  g_tft->fillRect(11 + (w * batPct) / 100, y + 1, w - (w * batPct) / 100, h, C_BG);
+  /* Row 1: labels under title bar, above the % bar */
+  g_tft->setTextSize(1);
+  g_tft->setTextColor(C_ACCENT, C_BG_DARK);
+  g_tft->drawString("Battery", 10, TOP_BAR_HEIGHT + 2);
+#if USE_PHYSICAL_JOYSTICKS
+  if (g_inputMode == INPUT_PHYSICAL_JOYSTICK && g_currentPage == PAGE_DRIVE) {
+    g_tft->drawString("Behaviour", SCREEN_W / 2 + 8, TOP_BAR_HEIGHT + 2);
+  }
+#endif
+  const int yBar = TOP_BAR_HEIGHT + 11;
+  g_tft->drawRect(10, yBar, w + 2, h + 2, C_BORDER);
+  g_tft->fillRect(11, yBar + 1, (w * batPct) / 100, h, telem->connected ? C_GREEN : C_ACCENT_DIM);
+  g_tft->fillRect(11 + (w * batPct) / 100, yBar + 1, w - (w * batPct) / 100, h, C_BG);
 
-  // Draw battery percentage text inside/next to bar
   char batText[8];
   snprintf(batText, sizeof(batText), "%d%%", batPct);
   g_tft->setTextColor(C_WHITE, C_BG_DARK);
   g_tft->setTextSize(1);
-  g_tft->drawString(batText, 14, y + 1);  // Inside the battery bar
+  g_tft->drawString(batText, 14, yBar + 1);
 
-  char buf[96];
-  snprintf(buf, sizeof(buf), "%.2fV | %.1fC | %.2fA | %up/s | %s | Emo:%s",
+  /* 320px wide: one long line from x=78 clips after ~40 chars — use two lines */
+  char line1[48];
+  char line2[44];
+  snprintf(line1, sizeof(line1), "%.1fV %.0fC %.1fA %up/s",
            telem->batteryV, telem->tempC, telem->currentA,
-           (unsigned)telem->packetRate, telem->modeStr ? telem->modeStr : "--",
-           emo[0] ? emo : "--");
+           (unsigned)telem->packetRate);
+  const char* mode = telem->modeStr ? telem->modeStr : "--";
+  snprintf(line2, sizeof(line2), "%s | %s", mode, emo[0] ? emo : "--");
+  if (strlen(line2) > 39) line2[39] = '\0';
+
+  const int yLine2 = TOP_BAR_HEIGHT + 20;
   g_tft->setTextColor(telem->connected ? C_WHITE : C_TEXT_DIM, C_BG_DARK);
   g_tft->setTextSize(1);
-  g_tft->drawString(buf, 78, y);
+  g_tft->drawString(line1, 78, yBar + 1);
+  g_tft->drawString(line2, 78, yLine2);
 }
 
 // ------------------------------------------------------------
@@ -326,31 +348,55 @@ static uint16_t lerpRGB(uint16_t a, uint16_t b, float t) {
   return (r << 11) | (g << 5) | bv;
 }
 
-void uiDrawControlAuthority(void) {
+void uiDrawControlAuthority(bool brainLinkOk) {
   if (!g_tft) return;
-  int x = SCREEN_W - 120;
-  int y = 4;
+  const int y = 4;
   uint16_t color = C_GREEN;
   const char* label = "LOCAL";
   bool pulse = false;
   uint16_t pulseColor = C_BLUE;
-  switch (g_controlAuthority) {
-    case CTRL_AUTONOMOUS: color = C_BLUE;  label = "AUTO"; pulse = true; pulseColor = C_BLUE;  break;
-    case CTRL_SUPERVISED: color = C_YELLOW; label = "SUPV"; pulse = true; pulseColor = C_YELLOW; break;
-    case CTRL_SAFETY:     color = C_RED;    label = "SAFE"; pulse = true; pulseColor = C_RED; break;
-    default: break;
+
+  /* E-STOP / safety overrides link. Otherwise no Brain telemetry ⇒ OFFLINE (not LOCAL). */
+  if (g_controlAuthority == CTRL_SAFETY) {
+    color = C_RED;
+    label = "SAFE";
+    pulse = true;
+    pulseColor = C_RED;
+  } else if (!brainLinkOk) {
+    color = C_TEXT_DIM;
+    label = "OFFLINE";
+    pulse = true;
+    pulseColor = C_RED;
+  } else {
+    switch (g_controlAuthority) {
+      case CTRL_AUTONOMOUS: color = C_BLUE;  label = "AUTO"; pulse = true; pulseColor = C_BLUE;  break;
+      case CTRL_SUPERVISED: color = C_YELLOW; label = "SUPV"; pulse = true; pulseColor = C_YELLOW; break;
+      default: break; /* LOCAL */
+    }
   }
   float brightness = animGetPulseBrightness();
   uint16_t bg = pulse ? lerpRGB(C_BG_DARK, pulseColor, brightness * 0.25f) : C_BG_DARK;
-  
-  // Only fill the exact text area, not a big rectangle
-  // "CTRL:" = ~30px, label = ~30px, total ~65px width
-  g_tft->fillRect(x, y, 65, 10, bg);
-  
+
+  /* GLCD font @ size 1 ≈ 6px/char — always wipe the full top-right slot so shorter labels
+   * (e.g. SAFE) do not leave ghost pixels from longer ones (OFFLINE), which looked like
+   * duplicate or overlapped "CTRL:…" text. */
+  const int slotW = 120;
+  const int slotH = 12;
+  const int slotX = SCREEN_W - slotW;
+  const int charW = 6;
+  const char kCtrl[] = "CTRL:";
+  int wCtrl = (int)strlen(kCtrl) * charW;
+  int wLab = (int)strlen(label) * charW;
+  int textW = wCtrl + wLab;
+  int textX = slotX + (slotW - textW) / 2;
+  if (textX < slotX) textX = slotX;
+
+  g_tft->fillRect(slotX, y, slotW, slotH, bg);
+
   g_tft->setTextColor(color, bg);
   g_tft->setTextSize(1);
-  g_tft->drawString("CTRL:", x, y);
-  g_tft->drawString(label, x + 30, y);
+  g_tft->drawString(kCtrl, textX, y);
+  g_tft->drawString(label, textX + wCtrl, y);
 }
 
 // ------------------------------------------------------------
@@ -387,18 +433,17 @@ void uiDrawUpdateDynamic(const TelemetryStripData* telem, const DriveState* ds,
   }
 
   if (telem) uiDrawTelemetryStrip(telem);
-  uiDrawControlAuthority();
+  uiDrawControlAuthority(telem && telem->connected);
 }
 
 void uiDrawEStopRegion(bool highlighted) {
   if (!g_tft) return;
-  // Match bottom bar: Dock 8-68, Cancel 72-132, E-STOP 136-236
-  int ex = 136, ey = BOTTOM_BAR_Y + 4, ew = 100, eh = 32;
+  int ex = DRIVE_ESTOP_X, ey = BOTTOM_BAR_Y + 4, ew = DRIVE_ESTOP_W, eh = 32;
   g_tft->fillRoundRect(ex, ey, ew, eh, 4, highlighted ? 0xFF00 : C_RED);
   g_tft->drawRoundRect(ex, ey, ew, eh, 4, C_WHITE);
   g_tft->setTextColor(C_WHITE, highlighted ? 0xFF00 : C_RED);
   g_tft->setTextSize(2);
-  g_tft->drawString("E-STOP", ex + 22, ey + 8);
+  g_tft->drawString("E-STOP", ex + 4, ey + 8);
 }
 
 void uiDrawPageBehaviour(void) {
@@ -883,9 +928,9 @@ void uiDrawPhysicalJoystickIndicators(float joy1X, float joy1Y, float joy2X, flo
   
   // Middle left: HEAD and DRIVE side by side with a gap
   const int joy1_cx = 25;
-  const int joy1_cy = 120;
+  const int joy1_cy = 105;
   const int joy2_cx = 115;
-  const int joy2_cy = 120;
+  const int joy2_cy = 105;
   const int joy_radius = 25;
   const int stick_radius = 6;
   

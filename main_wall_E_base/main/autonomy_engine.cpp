@@ -43,6 +43,7 @@ static uint32_t s_nextIdleActionMs = 0;
 // Safety
 static uint32_t s_lastSonarValidMs = 0;
 static uint32_t s_lastCompassValidMs = 0;
+static bool s_hadValidSonar = false;
 
 // Motor output
 static int8_t s_leftSpeed = 0;
@@ -750,11 +751,23 @@ void autonomySetManualOverride(bool active) {
   s_manualOverride = active;
 }
 
+bool autonomyIsManualOverride() {
+  return s_manualOverride;
+}
+
 void autonomySetWaypointMode(bool enabled) {
   s_context.waypointMode = enabled;
   Serial.printf("[Autonomy] Waypoint mode: %s\n", enabled ? "ON" : "OFF");
-  
-  if (enabled && s_enabled) {
+
+  if (!enabled && s_context.state == AUTO_NAVIGATE_WAYPOINT) {
+    s_leftSpeed = s_rightSpeed = 0;
+    if (s_enabled) {
+      transitionToState(AUTO_EXPLORE_LOOP, millis());
+      s_nextHeadingChangeMs = millis() + random(EXPLORE_HEADING_CHANGE_MIN, EXPLORE_HEADING_CHANGE_MAX);
+    } else {
+      transitionToState(AUTO_IDLE, millis());
+    }
+  } else if (enabled && s_enabled) {
     transitionToState(AUTO_NAVIGATE_WAYPOINT, millis());
   }
 }

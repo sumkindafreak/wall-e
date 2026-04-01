@@ -8,7 +8,7 @@ The **ESP32-S3** central node: **tank drive**, **servos**, **local TFT**, **Wi-F
 
 - Execute **motor** commands from the master (ESP-NOW) with **fail-safe** stop when commands time out.
 - Host **REST/HTML** endpoints used by the web UI and OTA page.
-- **Fuse** dock beacon RSSI, **IR TX** alignment, **VL53L1X** approach, and **rear IR beam** / ToF for docking behavior.
+- **Fuse** dock beacon RSSI, optional **`ir_align_hint`** from the dock, **VL53L1X** approach, and bumper inputs for docking behavior.
 - **Aggregate** telemetry for the master and optional UI.
 
 ---
@@ -23,7 +23,7 @@ The **ESP32-S3** central node: **tank drive**, **servos**, **local TFT**, **Wi-F
 | **Sensing** | VL53L1X ToF, rear dock IR beam, **front IR TX** on GPIO **21** / **38** (modulated — see `ir_beacon_receivers`), IMU; optional sonar/GPS when enabled in code |
 | **Display** | ST7735/ST7789 (`display_manager`) |
 
-**Authoritative pins:** `main/dock_sensors.h`, `main/ir_beacon_receivers.h`, and other `main/*.h` — **not** this README alone.
+**Authoritative pins:** `main/dock_sensors.h` and other `main/*.h` — **not** this README alone.
 
 ---
 
@@ -68,11 +68,10 @@ pio run -e wall_e_brain_s3 -t upload
 
 ---
 
-## Docking and IR
+## Docking
 
 - **Autonomous docking FSM:** [main/AUTONOMOUS_DOCKING.md](main/AUTONOMOUS_DOCKING.md).
-- **IR transmitters:** `ir_beacon_receivers` uses **LEDC ~38 kHz** on ESP32 for TSOP-class dock receivers.
-- **Alignment hints:** When the dock sends **`ir_align_hint`** on the beacon, the base autonomous **ALIGN** state can use it (requires Wi-Fi ESP-NOW path on dock).
+- **IR:** Two transmitters on WALL-E (`dock_ir_transmitters.h`, default GPIO **21** / **38**); two receivers on the dock feed **`ir_align_hint`** on the ESP-NOW beacon for **ALIGN**.
 
 ---
 

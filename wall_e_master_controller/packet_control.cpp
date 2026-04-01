@@ -6,6 +6,7 @@
 #include "packet_control.h"
 #include "espnow_control.h"
 #include "motion_engine.h"
+#include "cyd_laser_ui.h"
 #include <string.h>
 #include <Arduino.h>
 
@@ -42,6 +43,11 @@ void packetUpdate(unsigned long now, const DriveState* ds, bool estop) {
   pkt.action = s_pendingAction;
   s_pendingAction = ACTION_NONE;
   pkt.systemFlags = estop ? FLAG_ESTOP : 0;
+  if (estop) {
+    cydLaserUiSetArmed(false);
+  } else {
+    pkt.systemFlags |= cydLaserUiGetExtraFlags();
+  }
 
   espnowSend(&pkt);
   espnowBroadcastAudioEstopEdge(estop);

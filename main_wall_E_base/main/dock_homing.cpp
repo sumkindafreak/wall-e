@@ -3,7 +3,6 @@
 // ============================================================
 
 #include "dock_homing.h"
-#include "dock_sensors.h"
 #include "vl53l1x_tof.h"
 #include "motor_control.h"
 #include <Arduino.h>
@@ -108,13 +107,7 @@ bool dockHomingUpdate(uint32_t now) {
     }
   }
 
-  /* Arrived: dock beam broken or ToF very close */
-  if (dockBeamPresent()) {
-    s_state = HOMING_ARRIVED;
-    s_requested = false;
-    motorStop();
-    return true;
-  }
+  /* Arrived: ToF very close (onboard IR break-beam removed) */
   if (tofIsValid()) {
     uint16_t d = tofGetDistanceMm();
     if (d > 0 && d < TOF_STOP_MM) {

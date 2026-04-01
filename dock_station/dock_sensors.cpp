@@ -21,6 +21,9 @@ static int   g_acs_buffer[ACS712_MOVING_AVG_SAMPLES];
 static int   g_acs_index = 0;
 static bool  g_acs_filled = false;
 static bool  g_beam_present = false;
+static bool  g_motion_present = false;
+static bool  g_motion_pending = false;
+static uint32_t g_motion_debounce_ms = 0;
 static bool  g_mouth_blocked = false;
 static bool  g_obstacle[4] = {false, false, false, false};  /* 0=FL, 1=FR, 2=BL, 3=BR */
 static bool  g_acs_available = false;
@@ -32,7 +35,25 @@ static bool  g_acs_available = false;
  * IMPLEMENTATION
  *===========================================================================*/
 
+static void dockMotionUpdate(void) {
+  bool high = (dockDigitalReadSafe(PIN_MOTION_SENSOR, "motion", LOW) == HIGH);
+  bool motion_raw = MOTION_ACTIVE_HIGH ? high : !high;
+  uint32_t now = millis();
+  if (motion_raw != g_motion_pending) {
+    g_motion_pending = motion_raw;
+    g_motion_debounce_ms = now;
+  }
+  if ((uint32_t)(now - g_motion_debounce_ms) >= (uint32_t)MOTION_DEBOUNCE_MS) {
+    g_motion_present = g_motion_pending;
+  }
+}
+
 void dockSensorsBegin(void) {
+  dockConfigureInputPin(PIN_MOTION_SENSOR, INPUT, "motion sensor");
+  g_motion_present = false;
+  g_motion_pending = false;
+  g_motion_debounce_ms = millis();
+
 #if !S3_CURRENT_ONLY_MODE
   // Obstacle digital inputs only (beam hardware removed on this build)
 #if USE_OBSTACLE_SENSORS
@@ -88,6 +109,8 @@ void dockSensorsUpdate(void) {
   dockSonarUpdate();
 #endif
 
+  dockMotionUpdate();
+
   // IR + obstacle sensors
 #if !S3_CURRENT_ONLY_MODE
 #if USE_OBSTACLE_SENSORS
@@ -135,7 +158,18 @@ bool dockBeamPresent(void) {
   return dockDockDetected();
 }
 
+bool dockMotionPresent(void) {
+  return g_motion_present;
+}
+
 bool dockDockDetected(void) {
+  if (g_motion_present) {
+    return true;
+  }
+  return dockRobotInSlot();
+}
+
+bool dockRobotInSlot(void) {
 #if USE_VL6180_TOF
   if (dockVl6180Ready()) {
     return dockVl6180Docked();

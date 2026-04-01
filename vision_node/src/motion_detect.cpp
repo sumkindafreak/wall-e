@@ -101,5 +101,15 @@ bool motionDetectProcess(MotionDetect* md, const uint8_t* current, const uint8_t
   }
 
   md->motionDetected = motion;
+
+  {
+    uint32_t area = (uint32_t)w * (uint32_t)h;
+    uint32_t denom = area / 5;
+    if (denom < 1) denom = 1;
+    uint32_t mi = (md->motionPixelCount * 100u) / denom;
+    if (mi > 100u) mi = 100u;
+    md->motionIntensity = motion ? (uint8_t)mi : 0u;
+  }
+
   return motion;
 }

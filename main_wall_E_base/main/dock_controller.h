@@ -26,3 +26,7 @@ bool dockControllerSendRequestCharge(uint32_t dock_id);
 
 /* Approach stage — dock uses for arrow staging (FAR/1m/20cm). */
 bool dockControllerSendApproachStage(uint8_t stage, uint32_t dock_id);
+
+/* Dock must receive ARM before driving arrow MOSFETs (when dock has DOCK_ARROWS_REQUIRE_WALLE_ARM + WiFi). */
+bool dockControllerSendDockingArm(uint32_t dock_id);
+bool dockControllerSendDockingDisarm(uint32_t dock_id);

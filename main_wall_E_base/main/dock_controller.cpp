@@ -15,6 +15,9 @@
 #define DOCK_CMD_WIFI_CONFIG  3
 #define DOCK_CMD_TIME         4
 #define DOCK_CMD_REQUEST_CHARGE 5
+#define DOCK_CMD_APPROACH_STAGE 6
+#define DOCK_CMD_DOCKING_ARM    7
+#define DOCK_CMD_DOCKING_DISARM 8
 
 typedef struct __attribute__((packed)) {
   uint32_t magic;
@@ -119,4 +122,12 @@ bool dockControllerSendApproachStage(uint8_t stage, uint32_t dock_id) {
   pkt.stage = (stage <= APPROACH_DOCKED) ? stage : APPROACH_FAR;
   esp_err_t r = esp_now_send(s_broadcast_mac, (uint8_t *)&pkt, sizeof(pkt));
   return (r == ESP_OK);
+}
+
+bool dockControllerSendDockingArm(uint32_t dock_id) {
+  return sendCmd(dock_id, DOCK_CMD_DOCKING_ARM);
+}
+
+bool dockControllerSendDockingDisarm(uint32_t dock_id) {
+  return sendCmd(dock_id, DOCK_CMD_DOCKING_DISARM);
 }

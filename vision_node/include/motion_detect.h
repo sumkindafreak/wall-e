@@ -30,6 +30,7 @@ typedef struct {
   uint32_t frameID;
   uint32_t lastMotionMs;
   bool motionDetected;
+  uint8_t motionIntensity; /* 0–100 scaled from motion pixel coverage */
 } MotionDetect;
 
 void motionDetectInit(MotionDetect* md);

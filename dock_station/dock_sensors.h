@@ -21,13 +21,18 @@ void dockSensorsBegin(void);
 /* Call every loop iteration. Updates all sensor readings. Non-blocking. */
 void dockSensorsUpdate(void);
 
-/* --- IR beam --- */
-/* true = beam broken = robot present */
+/* --- Motion / legacy “beam” --- */
+/* true = motion sensor sees presence (GPIO PIN_MOTION_SENSOR) */
+bool dockMotionPresent(void);
+
+/* Legacy alias: same as dockDockDetected() (was IR break-beam). */
 bool dockBeamPresent(void);
 
-/* --- Dock detected (beam or sonar fallback) --- */
-/* true = robot in position: beam present OR (USE_SONAR and sonar distance < SONAR_DOCKED_CM). Use for state machine and top bar. */
+/* Bay / legacy: motion OR ToF OR sonar OR obstacles — can flicker with PIR. */
 bool dockDockDetected(void);
+
+/* Robot physically in slot (ToF / sonar / mouth obstacles only — NOT PIR). Use for state machine, arrows, beacon “docked”. */
+bool dockRobotInSlot(void);
 
 /* --- Obstacles (mouth blocked) --- */
 /* true = any obstacle sensor active */

@@ -37,6 +37,13 @@
 // Profile system
 #include "profiles.h"
 
+#include "command_queue.h"
+#include "cyd_laser_ui.h"
+#include "system_status.h"
+#include "touch_handling.h"
+#include "ui_rendering.h"
+#include "command_input.h"
+
 #define TFT_BL 21
 #define WDT_TIMEOUT_SEC 3
 
@@ -64,8 +71,13 @@ void setup() {
   tft.setRotation(1);
 
   uiDrawInit(&tft);
+  uiRenderingInit(&tft);
   uiStateInit();
-  touchInit();
+  touchHandlingInit();
+  commandQueueInit();
+  cydLaserUiInit();
+  systemStatusInit();
+  commandInputInit();
   animInit();
   audioInit();
   packetInit();
@@ -99,33 +111,54 @@ void loop() {
   // Feed watchdog to prevent reset
   esp_task_wdt_reset();
 
-  // Update I2C inputs (joysticks + buttons) with error handling
-  static unsigned long lastI2CError = 0;
-  static int i2cErrorCount = 0;
-  
-  try {
-    ads1115Update();
-    sx1509Update();
-  } catch (...) {
-    i2cErrorCount++;
-    if (now - lastI2CError > 5000) {
-      Serial.printf("[I2C] ⚠️  Error count: %d\n", i2cErrorCount);
-      lastI2CError = now;
-    }
-  }
+  ads1115Update();
+  sx1509Update();
+
+  commandQueueDrainAll();
 
   int pageInt = (int)g_currentPage;
-  TouchZone zone = touchUpdate(pageInt);
+  TouchZone zone = touchHandlingUpdate(pageInt);
+
+  static TouchZone s_prevTouchZone = TOUCH_ZONE_NONE;
+  if (touchGetTs()->touched() && zone != TOUCH_ZONE_LASER_PAD && cydLaserUiIsDraggingHead()) {
+    cydLaserUiCancelDrag();
+  }
+  if (!touchGetTs()->touched()) {
+    cydLaserUiCancelDrag();
+  }
+
+  if (zone == TOUCH_ZONE_LASER_PAD && touchGetTs()->touched()) {
+    TS_Point tp = touchGetTs()->getPoint();
+    int screenX = map(tp.x, TOUCH_X_MIN, TOUCH_X_MAX, 0, 319);
+    int screenY = map(tp.y, TOUCH_Y_MIN, TOUCH_Y_MAX, 0, 239);
+    screenX = constrain(screenX, 0, 319);
+    screenY = constrain(screenY, 0, 239);
+    cydLaserUiDragFromScreen(screenX, screenY);
+  }
+  if (zone == TOUCH_ZONE_LASER_FIRE && s_prevTouchZone != TOUCH_ZONE_LASER_FIRE) {
+    cydLaserUiToggleArmed();
+    playUISound(SOUND_CLICK);
+    Serial.println(F("[UI] Laser arm toggle"));
+  }
+  s_prevTouchZone = zone;
 
   DriveState ds;
   
   // Priority: Physical joystick overrides touch
   const JoystickState& joy = getJoystickState();
   bool joystickActive = joy.active[JOY2_X] || joy.active[JOY2_Y];
-  
-  // HEAD CONTROL (Joy1) - velocity-based - ALWAYS ACTIVE (no deadman required)
-  motionSetHeadPanVelocity(joy.processed[JOY1_X]);   // Left stick X → Pan
-  motionSetHeadTiltVelocity(joy.processed[JOY1_Y]);  // Left stick Y → Tilt
+  bool joy1Active = joy.active[JOY1_X] || joy.active[JOY1_Y];
+
+  if (joy1Active) {
+    cydLaserUiCancelDrag();
+  }
+
+  if (cydLaserUiIsDraggingHead() && !joy1Active) {
+    cydLaserUiApplyMotion();
+  } else {
+    motionSetHeadPanVelocity(joy.processed[JOY1_X]);
+    motionSetHeadTiltVelocity(joy.processed[JOY1_Y]);
+  }
   
   // DRIVE CONTROL (Joy2) - tank drive
   if (joystickActive) {
@@ -141,6 +174,8 @@ void loop() {
   } else {
     touchGetDriveState(&ds);
   }
+
+  commandQueueApplyDriveOverride(&ds, joystickActive);
 
   // CRITICAL: DEADMAN BUTTON CHECK - Must be held to move TRACKS ONLY!
   // Servos, head, animations work WITHOUT deadman!
@@ -418,7 +453,10 @@ void loop() {
     Serial.println(F("[Action] Left eyebrow raise (no deadman needed)"));
   }
   
-  // Extra buttons (2-7) use profile mappings (NO deadman required)
+  // Extra buttons: optional scripted queue macros OR profile mappings
+#if USE_CMD_BUTTON_MACROS
+  commandInputPollButtonMacros(btn);
+#else
   for (int i = 2; i < 8; i++) {
     if (i == 6) continue;  // Skip deadman button
     if (btn.pressed[i]) {
@@ -426,11 +464,13 @@ void loop() {
       Serial.printf("[Action] Button %d pressed (no deadman needed)\n", i);
     }
   }
+#endif
   
   // Update motion engine
   motionUpdate(now);
 
   packetUpdate(now, &ds, g_estop);
+  systemStatusTick(now);
   audioUpdate(now);
 
   // Static redraw on page/overlay change
@@ -458,8 +498,9 @@ void loop() {
   strip.packetRate = espnowGetPacketRate();
   strip.rssi = 0;
   strip.connected = connected;
-  strip.modeStr = g_estop ? "E-STOP" : (g_controlAuthority == CTRL_AUTONOMOUS ? "AUTO" :
-                  g_controlAuthority == CTRL_SUPERVISED ? "SUPV" : "MANUAL");
+  strip.modeStr = g_estop ? "E-STOP" : (!connected ? "OFFLINE" :
+                  (g_controlAuthority == CTRL_AUTONOMOUS ? "AUTO" :
+                  g_controlAuthority == CTRL_SUPERVISED ? "SUPV" : "MANUAL"));
   strip.emotionStr = emotionGetName();
 
   // Debug telemetry every 5 seconds
@@ -474,7 +515,8 @@ void loop() {
   touchGetJoystickDots(&lx, &ly);
 
   uiDrawUpdateDynamic(&strip, &ds, lx, ly);
-  
+  uiRenderingDrawDriveLaserOverlayIfNeeded();
+
   // Draw physical joystick indicators (only on Drive page)
   if (g_currentPage == PAGE_DRIVE) {
     const JoystickState& joyVis = getJoystickState();
@@ -494,5 +536,5 @@ void loop() {
     uiDrawAdvancedModeOverlay();
   }
 
-  delay(5);
+  delay(1);
 }

@@ -9,6 +9,7 @@
 #include "vision_protocol.h"
 #include "motion_detect.h"
 #include "vision_espnow.h"
+#include "recognition_engine.h"
 #include <WebServer.h>
 #include <WiFi.h>
 
@@ -52,6 +53,7 @@ static uint8_t* s_prevFrame = nullptr;
 static uint32_t s_frameCount = 0;
 static WebServer s_httpServer(80);
 static uint32_t s_visionNodeIp = 0;
+static uint32_t s_lastRecognMs = 0;
 
 static bool camInit(void) {
   esp_err_t err = esp_camera_init(&s_camConfig);
@@ -136,6 +138,7 @@ void setup() {
 }
 
 void loop() {
+  uint32_t now = millis();
   camera_fb_t* fb = esp_camera_fb_get();
   if (!fb || fb->len < (size_t)(FRAME_W * FRAME_H)) {
     if (fb) esp_camera_fb_return(fb);
@@ -159,14 +162,38 @@ void loop() {
   pkt.frameID = s_motion.frameID;
   pkt.visionNodeIp = s_visionNodeIp;
 
+  recognitionApplyMotionBasics(&pkt, &s_motion, FRAME_W, FRAME_H);
+
+  if (now - s_lastRecognMs >= RECOGNITION_INTERVAL_MS) {
+    sensor_t* sens = esp_camera_sensor_get();
+    if (sens) {
+      sens->set_pixformat(sens, PIXFORMAT_RGB565);
+      sens->set_framesize(sens, FRAMESIZE_QQVGA);
+      camera_fb_t* fr = esp_camera_fb_get();
+      if (fr && fr->len >= (size_t)(FRAME_W * FRAME_H * 2)) {
+        recognitionProcessRgbFrame(&pkt, fr->buf, FRAME_W, FRAME_H);
+        esp_camera_fb_return(fr);
+      } else {
+        if (fr) esp_camera_fb_return(fr);
+      }
+      sens->set_pixformat(sens, PIXFORMAT_GRAYSCALE);
+      sens->set_framesize(sens, FRAMESIZE_QQVGA);
+      s_lastRecognMs = now;
+    }
+  }
+
+  recognitionApplyLockSmoothing(&pkt, FRAME_W, FRAME_H);
+
   visionEspNowSend(&pkt);
   if (s_visionNodeIp) s_httpServer.handleClient();
 
   s_frameCount++;
   if (s_frameCount % 50 == 0) {
-    Serial.printf("[Vision] F=%lu motion=%d x=%d y=%d sz=%u class=%u\n",
-      s_frameCount, pkt.motionDetected, pkt.targetX, pkt.targetY,
-      pkt.objectSize, pkt.objectClass);
+    Serial.printf(
+      "[Vision] F=%lu motion=%d x=%d y=%d sz=%u class=%u col=%u ev=%u dist=%u\n",
+      (unsigned long)s_frameCount, (int)pkt.motionDetected, (int)pkt.targetX, (int)pkt.targetY,
+      (unsigned)pkt.objectSize, (unsigned)pkt.objectClass, (unsigned)pkt.colourId,
+      (unsigned)pkt.visionEvent, (unsigned)pkt.distanceBand);
   }
 
   delay(5);

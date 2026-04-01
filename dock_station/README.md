@@ -1,6 +1,6 @@
 # Dock Station (Smart Charging Crate)
 
-**ESP32-S3** fixed install: **charge control** (MOSFET + **ACS712**), **dock presence** (VL6180 ToF, optional IR break-beam, obstacles), **IR alignment receivers**, **arrow indicators**, **NeoPixel + TFT**, **ESP-NOW beacon** for homing, optional **home Wi-Fi**, and **OTA**.
+**ESP32-S3** fixed install: **charge control** (MOSFET + **ACS712**), **dock presence** (GPIO motion sensor, VL6180 ToF, optional sonar, obstacles), **IR alignment receivers**, **arrow indicators**, **NeoPixel + TFT**, **ESP-NOW beacon** for homing, optional **home Wi-Fi**, and **OTA**.
 
 ---
 
@@ -21,7 +21,7 @@
 | Current sense | `PIN_ACS712_ADC` |
 | VL6180 ToF | `PIN_VL6180_SDA`, `PIN_VL6180_SCL` |
 | Alignment IR | `PIN_ALIGN_LEFT`, `PIN_ALIGN_RIGHT` (TSOP: **LOW** = IR seen) |
-| Break-beam | `PIN_IR_BEAM` (separate from side alignment) |
+| Motion (presence) | `PIN_MOTION_SENSOR` / `PIN_IR_BEAM` (alias; separate from side alignment) |
 | Arrows / UI | Arrow MOSFETs, NeoPixel data, TFT SPI, call switch |
 
 **Important:** Pin tables in old wikis may be wrong. The **comment block at the top of `dock_config.h`** is the authoritative map for this firmware.
@@ -78,7 +78,7 @@ pio run -e dock_esp32 -t upload
 
 - **ACS712:** `ACS712_MV_PER_AMP`, `CURRENT_CALIB_*` in `dock_config.h`.
 - **VL6180:** `VL6180_DOCK_MIN_MM` / `VL6180_DOCK_MAX_MM` for “robot in slot” band.
-- **IR:** Robot must emit **modulated** IR (~38 kHz); adjust debounce in `dock_ir_guidance.cpp` if needed.
+- **IR alignment:** WALL-E base drives two ~38 kHz IR LEDs; dock TSOP inputs — tune debounce in `dock_ir_guidance.cpp` if needed.
 
 ---
 

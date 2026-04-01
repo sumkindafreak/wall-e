@@ -134,7 +134,7 @@ End-to-end docking is **layered**; do not conflate unrelated sensors.
 | Layer | Mechanism |
 |-------|-----------|
 | **Search / homing** | Dock `DockBeaconPacket_t` at ~10 Hz; base uses RSSI and `dock_id`. |
-| **IR alignment** | Robot **IR transmitters** (~38 kHz); dock **TSOP-style receivers**; firmware derives **LEFT / RIGHT / CENTER / LOST** and **`ir_align_hint`** on the beacon. |
+| **IR alignment** | Base **two IR transmitters** (~38 kHz); dock **two receivers** → **`ir_align_hint`** on the beacon. |
 | **Approach stage** | WALL-E sends `DOCK_CMD_APPROACH_STAGE`; dock uses **timeout** to fall back to local IR sensors. |
 | **Presence** | VL6180 ToF band, optional **break-beam** (`PIN_IR_BEAM`), obstacle inputs — see `dock_config.h`. |
 | **Charge** | ACS712 thresholds + MOSFET gate + state machine (`STATE_*` in dock state module). |

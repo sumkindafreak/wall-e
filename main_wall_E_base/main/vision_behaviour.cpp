@@ -199,6 +199,19 @@ String visionGetStatusJSON(void) {
   json += "\",\"bboxW\":"; json += s_hasPacket ? (int)s_lastPacket.bboxWidth : 0;
   json += ",\"bboxH\":"; json += s_hasPacket ? (int)s_lastPacket.bboxHeight : 0;
   json += ",\"frameID\":"; json += s_hasPacket ? (uint32_t)s_lastPacket.frameID : 0;
+  json += ",\"motionIntensity\":"; json += s_hasPacket ? (int)s_lastPacket.motionIntensity : 0;
+  json += ",\"zone\":"; json += s_hasPacket ? (int)s_lastPacket.zone : 3;
+  json += ",\"colourId\":"; json += s_hasPacket ? (int)s_lastPacket.colourId : 0;
+  json += ",\"colourConfidence\":"; json += s_hasPacket ? (int)s_lastPacket.colourConfidence : 0;
+  json += ",\"blobDetected\":"; json += s_hasPacket && s_lastPacket.blobDetected ? "true" : "false";
+  json += ",\"blobSize\":"; json += s_hasPacket ? (int)s_lastPacket.blobSize : 0;
+  json += ",\"blobX\":"; json += s_hasPacket ? (int)s_lastPacket.blobX : 0;
+  json += ",\"blobY\":"; json += s_hasPacket ? (int)s_lastPacket.blobY : 0;
+  json += ",\"distanceBand\":"; json += s_hasPacket ? (int)s_lastPacket.distanceBand : 0;
+  json += ",\"classification\":"; json += s_hasPacket ? (int)s_lastPacket.classification : 0;
+  json += ",\"visionEvent\":"; json += s_hasPacket ? (int)s_lastPacket.visionEvent : 0;
+  json += ",\"targetLocked\":"; json += s_hasPacket && s_lastPacket.targetLocked ? "true" : "false";
+  json += ",\"targetLockConfidence\":"; json += s_hasPacket ? (int)s_lastPacket.targetLockConfidence : 0;
   json += ",\"ageMs\":"; json += s_hasPacket ? (uint32_t)(millis() - s_lastVisionMs) : 9999;
   if (s_hasPacket && s_lastPacket.visionNodeIp != 0) {
     uint32_t ip = s_lastPacket.visionNodeIp;

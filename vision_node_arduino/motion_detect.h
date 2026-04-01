@@ -1,10 +1,11 @@
 /**
- * motion_detect.h - Frame differencing, clustering, centroid, object classification.
+ * motion_detect.h
+ * Frame differencing, clustering, centroid, object classification.
  */
+
 #ifndef MOTION_DETECT_H
 #define MOTION_DETECT_H
 
-#include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include "vision_protocol.h"
@@ -12,12 +13,12 @@
 typedef struct {
   int width, height;
   int centerX, centerY;
-  int motionThreshold;
-  int minMotionPixels;
-  float smoothFactor;
-  uint32_t occlusionTimeoutMs;
+  int motionThreshold;      /* 20-30 typical */
+  int minMotionPixels;      /* ~30 */
+  float smoothFactor;       /* 0.4 for target smoothing */
+  uint32_t occlusionTimeoutMs;  /* 500 */
 
-  uint8_t* diffBuffer;
+  uint8_t* diffBuffer;      /* caller allocates: width*height bytes */
   size_t diffBufferSize;
 
   int clusterMinX, clusterMaxX, clusterMinY, clusterMaxY;
@@ -29,10 +30,11 @@ typedef struct {
   uint32_t frameID;
   uint32_t lastMotionMs;
   bool motionDetected;
+  uint8_t motionIntensity; /* 0–100 scaled from motion pixel coverage */
 } MotionDetect;
 
 void motionDetectInit(MotionDetect* md);
 void motionDetectSetFrameSize(MotionDetect* md, int w, int h);
 bool motionDetectProcess(MotionDetect* md, const uint8_t* current, const uint8_t* previous);
 
-#endif
+#endif /* MOTION_DETECT_H */

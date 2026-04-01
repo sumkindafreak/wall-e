@@ -4,9 +4,11 @@
 #include "wifi_manager.h"
 #include "display_manager.h"
 #include "servo_manager.h"
+#include "laser_control.h"
 #include "imu_manager.h"
 #include "battery_monitor.h"
 #include "autonomy_engine.h"
+#include "unified_autonomy_engine.h"
 #include "emotion_engine.h"
 #include "walle_emotion_pose.h"
 #include "interest_engine.h"
@@ -24,6 +26,7 @@
 #include "dock_config.h"
 #include "sonar_sensor.h"
 #include "gps_module.h"
+#include "navigation_api.h"
 #include <WebServer.h>
 #include <Arduino.h>
 #include <Preferences.h>
@@ -37,6 +40,9 @@ WebServer server(80);
 
 static Preferences _settingsPrefs;
 static uint8_t _maxSpeed = 255;
+static int16_t _webDriveLeft = 0;
+static int16_t _webDriveRight = 0;
+static bool _webManualSticky = false;
 #define SETTINGS_NAMESPACE  "walle_cfg"
 #define SETTINGS_KEY_MAXSP "max_sp"
 
@@ -89,6 +95,8 @@ static void handleRight() {
 
 static void handleStop() {
   lastCommandMillis = millis();
+  _webDriveLeft = _webDriveRight = 0;
+  _webManualSticky = false;
   motorStop();
   displaySetCommand(CMD_STOP);
   addCORS();
@@ -120,6 +128,8 @@ static void handleDrive() {
   int right = server.arg("right").toInt();
   left  = constrain(left,  -255, 255);
   right = constrain(right, -255, 255);
+  _webDriveLeft = (int16_t)left;
+  _webDriveRight = (int16_t)right;
   if (left == 0 && right == 0) {
     motorStop();
     displaySetCommand(CMD_STOP);
@@ -285,6 +295,9 @@ static void handleAutonomyStatus() {
   json += ",\"rthActive\":"; json += returnHomeIsActive() ? "true" : "false";
   json += ",\"rthState\":\""; json += returnHomeGetStateName();
   json += "\",\"rthDistance\":"; json += String(returnHomeGetDistance(), 1);
+  json += ",\"manualOverride\":"; json += autonomyIsManualOverride() ? "true" : "false";
+  json += ",\"unifiedState\":\""; json += unifiedAutonomyGetStateName();
+  json += "\",\"unifiedSafety\":"; json += unifiedAutonomySafetyActive() ? "true" : "false";
   json += "}";
 
   addCORS();
@@ -300,6 +313,15 @@ static void handleAutonomyEnable() {
   server.send(200, "text/plain", "OK");
 }
 
+/** Sticky manual override until /drive, /stop, or active=0 (AI Assist "take over"). */
+static void handleAutonomyManual() {
+  if (server.hasArg("active")) {
+    _webManualSticky = (server.arg("active") == "1" || server.arg("active") == "true");
+  }
+  addCORS();
+  server.send(200, "text/plain", "OK");
+}
+
 static void handleMemorySetHome() {
   if (gpsHasFix()) {
     memorySetHome(gpsGetLatitude(), gpsGetLongitude());
@@ -307,6 +329,79 @@ static void handleMemorySetHome() {
   }
   addCORS();
   server.send(200, "application/json", "{\"ok\":true}");
+}
+
+// --- Laser (GPIO on base, aim via PCA9685 pan/tilt) ---
+static void handleLaserOn() {
+  laserOn();
+  addCORS();
+  server.send(200, "text/plain", "OK");
+}
+
+static void handleLaserOff() {
+  laserOff();
+  addCORS();
+  server.send(200, "text/plain", "OK");
+}
+
+static void handleLaserBrightness() {
+  if (server.hasArg("value")) {
+    int v = server.arg("value").toInt();
+    v = constrain(v, 0, 255);
+    laserSetBrightness((uint8_t)v);
+  }
+  addCORS();
+  server.send(200, "text/plain", "OK");
+}
+
+static void handleLaserSet() {
+  int pan = server.hasArg("pan") ? server.arg("pan").toInt() : 50;
+  int tilt = server.hasArg("tilt") ? server.arg("tilt").toInt() : 50;
+  laserAim(pan, tilt);
+  addCORS();
+  server.send(200, "text/plain", "OK");
+}
+
+static void handleLaserFire() {
+  int pan = server.hasArg("pan") ? server.arg("pan").toInt() : 50;
+  int tilt = server.hasArg("tilt") ? server.arg("tilt").toInt() : 50;
+  uint32_t ms = server.hasArg("time") ? (uint32_t)server.arg("time").toInt() : 1000;
+  if (ms > 10000) ms = 10000;
+  laserFire(pan, tilt, ms);
+  addCORS();
+  server.send(200, "text/plain", "OK");
+}
+
+static void handleLaserStatus() {
+  addCORS();
+  server.send(200, "application/json", laserGetStatusJSON());
+}
+
+static void handleLaserScan() {
+  bool on = false;
+  if (server.hasArg("enable")) {
+    on = (server.arg("enable") == "1" || server.arg("enable") == "true");
+  }
+  laserScanSetEnabled(on);
+  addCORS();
+  server.send(200, "text/plain", "OK");
+}
+
+static void handleLaserMood() {
+  if (server.hasArg("mood")) {
+    laserSetMoodMode((int8_t)server.arg("mood").toInt());
+  }
+  addCORS();
+  server.send(200, "text/plain", "OK");
+}
+
+static void handleLaserSmooth() {
+  int pan = server.hasArg("pan") ? server.arg("pan").toInt() : 50;
+  int tilt = server.hasArg("tilt") ? server.arg("tilt").toInt() : 50;
+  uint16_t per = server.hasArg("delay") ? (uint16_t)server.arg("delay").toInt() : 30;
+  laserSmoothSetTarget(pan, tilt, per);
+  addCORS();
+  server.send(200, "text/plain", "OK");
 }
 
 static void handleVisionStatus() {
@@ -445,6 +540,36 @@ static void handleAudioMic() {
   server.send(200, "application/json", buf);
 }
 
+/** Cancel autonomous docking + return-home (matches webui /api/dock/cancel) */
+static void handleDockCancelApi() {
+#if USE_AUTONOMOUS_DOCKING
+  autonomousDockingSetRequested(false);
+#endif
+  returnHomeCancel();
+  addCORS();
+  server.send(200, "text/plain", "OK");
+}
+
+static void handleSleepApi() {
+  addCORS();
+  server.send(200, "application/json", "{\"ok\":true,\"note\":\"not_implemented\"}");
+}
+
+static void handleFilesListApi() {
+  addCORS();
+  server.send(200, "application/json", "{\"files\":[]}");
+}
+
+static void handleVoiceCommandApi() {
+  addCORS();
+  server.send(200, "application/json", "{\"ok\":true,\"note\":\"not_implemented\"}");
+}
+
+static void handleAiChatApi() {
+  addCORS();
+  server.send(200, "text/plain", "OK");
+}
+
 // --- Public Functions ---
 
 void webServerInit() {
@@ -491,10 +616,31 @@ void webServerInit() {
   server.on("/api/audio/test", HTTP_GET, handleAudioTestApi);
   server.on("/api/dock/start", HTTP_GET, handleDockStartApi);
   server.on("/api/dock/status", HTTP_GET, handleDockStatusApi);
+  server.on("/api/dock/cancel", HTTP_GET, handleDockCancelApi);
+
+  server.on("/api/sleep", HTTP_GET, handleSleepApi);
+  server.on("/api/files/list", HTTP_GET, handleFilesListApi);
+  server.on("/api/voice/command", HTTP_GET, handleVoiceCommandApi);
+  server.on("/api/ai/chat", HTTP_GET, handleAiChatApi);
 
   server.on("/api/autonomy",      HTTP_GET, handleAutonomyStatus);
   server.on("/api/autonomy/enable", HTTP_GET, handleAutonomyEnable);
+  server.on("/api/autonomy/manual", HTTP_GET, handleAutonomyManual);
   server.on("/api/autonomy/set_home", HTTP_GET, handleMemorySetHome);
+
+  server.on("/api/navigation/route", HTTP_POST, navigationHandleRoutePost);
+  server.on("/api/navigation/status", HTTP_GET, navigationHandleStatusGet);
+  server.on("/api/navigation/stop", HTTP_GET, navigationHandleStopGet);
+
+  server.on("/api/laser/on",        HTTP_GET, handleLaserOn);
+  server.on("/api/laser/off",       HTTP_GET, handleLaserOff);
+  server.on("/api/laser/brightness", HTTP_GET, handleLaserBrightness);
+  server.on("/api/laser/set",       HTTP_GET, handleLaserSet);
+  server.on("/api/laser/fire",      HTTP_GET, handleLaserFire);
+  server.on("/api/laser/status",    HTTP_GET, handleLaserStatus);
+  server.on("/api/laser/scan",      HTTP_GET, handleLaserScan);
+  server.on("/api/laser/mood",      HTTP_GET, handleLaserMood);
+  server.on("/api/laser/smooth",    HTTP_GET, handleLaserSmooth);
 
   server.on("/api/audio/play",    HTTP_GET, handleAudioPlay);
   server.on("/api/audio/volume",  HTTP_GET, handleAudioVolume);
@@ -507,4 +653,8 @@ void webServerInit() {
 
 void webServerHandle() {
   server.handleClient();
+}
+
+bool webServerIsManualOverrideActive() {
+  return (_webDriveLeft != 0 || _webDriveRight != 0) || _webManualSticky;
 }

@@ -124,7 +124,13 @@ String wifiGetStatusJSON() {
   jsonEscape(out, wifiGetSTA_SSID());
   out += "\",\"sta_ip\":\"";
   out += wifiGetSTA_IP();
-  out += "\"}";
+  out += "\",\"rssi\":";
+  if (WiFi.status() == WL_CONNECTED) {
+    out += String(WiFi.RSSI());
+  } else {
+    out += "null";
+  }
+  out += "}";
   return out;
 }
 

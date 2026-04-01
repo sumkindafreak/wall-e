@@ -17,7 +17,7 @@
  *   GPIO  2  NeoPixel data (WS2812B)
  *   GPIO  4  Charge MOSFET gate
  *   GPIO  5  Alignment right (IR input)
- *   GPIO  6  IR beam sensor (break-beam)
+ *   GPIO  6  PIR / motion sensor (charging bay presence — OR’d into dock detect)
  *   GPIO  8  TFT CS (chip select)
  *   GPIO  9   (free)
  *   GPIO 10  Alignment left (IR input)
@@ -38,9 +38,12 @@
 
 #define PIN_MOSFET_GATE      4   /* Charge enable MOSFET gate (GPIO4: output-capable on ESP32-S3) */
 #define PIN_ACS712_ADC       1   /* ACS712 analog out (GPIO1: ADC-capable on ESP32-S3) */
-#define PIN_IR_BEAM          6   /* IR break-beam receiver output (if no detect on 6, try 9 — some S3 boards use 6 for flash) */
-/* 0 = beam broken when pin LOW, 1 = beam broken when pin HIGH (set 1 if hand-in-front never registers) */
-#define IR_BEAM_BROKEN_HIGH  0
+/** Digital motion sensor (PIR etc.) on GPIO6 — “presence” for dock/charging state machine (OR with ToF/sonar/obstacles). */
+#define PIN_MOTION_SENSOR    6
+#define PIN_IR_BEAM          PIN_MOTION_SENSOR   /* legacy name */
+/* 1 = motion when pin reads HIGH (typ. HC-SR501); 0 = motion when LOW */
+#define MOTION_ACTIVE_HIGH   1
+#define MOTION_DEBOUNCE_MS   60
 /* Obstacle sensors — positions when looking at the dock box from the front */
 #define PIN_OBSTACLE_1      14   /* Front left  (GPIO14) */
 #define PIN_OBSTACLE_2      13   /* Front right (GPIO13) */
@@ -68,8 +71,9 @@
 /* Call WALL-E push button (INPUT_PULLUP: LOW = pressed). Press to start callout; stops when WALL-E docks or press again. */
 #define PIN_CALL_SWITCH   15   /* avoid GPIO 0 (boot) */
 
-/* Dock alignment — dual TSOP/VS1838B receivers (WALL-E carries modulated IR TX on GPIO 21+38).
- *   Receiver output: LOW = IR seen, HIGH = idle. Not mixed with break-beam logic (PIN_IR_BEAM).
+/* Dock alignment — dual TSOP/VS1838B receivers (see dock_ir_guidance).
+ *   WALL-E base firmware drives two modulated IR TX toward these (dock_ir_transmitters.h).
+ *   Receiver output: LOW = IR seen, HIGH = idle. Not mixed with break-beam (PIN_IR_BEAM).
  */
 #define PIN_ALIGN_LEFT    10   /* Left side of bay: IR receiver digital OUT */
 #define PIN_ALIGN_RIGHT    5   /* Right side of bay: IR receiver digital OUT */
@@ -92,6 +96,8 @@
 #define PIN_TFT_RST      7   /* RESET */
 #define PIN_TFT_BL      20   /* LED (backlight) */
 #define PIN_TFT_CS       8   /* CS (chip select) */
+/* Adafruit_ST7735: 0=0°, 1=90°, 2=180°, 3=270° (128x160 ST7735 “green tab”) */
+#define TFT_ROTATION       2
 
 /*=============================================================================
  * FEATURE FLAGS
@@ -99,6 +105,9 @@
 
 /* 0 = disable WiFi/ESP-NOW/OTA (use if dock bootloops on ESP32-S3; try 1 when radio is stable) */
 #define ENABLE_WIFI  0
+
+/* With ENABLE_WIFI: 1 = arrows only after WALL-E sends DOCK_CMD_DOCKING_ARM. 0 = NOT_DOCKED only (no ESP-NOW arm). If ENABLE_WIFI is 0, arm is ignored (local testing). */
+#define DOCK_ARROWS_REQUIRE_WALLE_ARM  1
 
 #define USE_OBSTACLE_SENSORS  1   /* 1 = use obstacle sensors (mouth blocked) */
 
@@ -178,9 +187,15 @@
  * TIMING
  *===========================================================================*/
 
+/* After power-on: stay in BOOT this long (ms) while sensors settle, then pick DOCKED_IDLE vs NOT_DOCKED. */
+#define BOOT_SETTLE_MS        600
+
+/* In NOT_DOCKED with no dock presence this long → STANDBY (arrows off, quiet bay). 0 = disable. */
+#define BAY_IDLE_AFTER_MS       10000
+
 #define DOCK_DEBOUNCE_MS      1500   /* Wait before enabling charge after dock */
 #define BEAM_BROKEN_DEBOUNCE_MS  400   /* Beam must be broken this long before NOT_DOCKED -> DOCKED_IDLE */
-#define BEAM_CLEAR_DEBOUNCE_MS   400   /* Beam must be clear this long before docked states -> NOT_DOCKED */
+#define BEAM_CLEAR_DEBOUNCE_MS   2500  /* ToF/PIR jitter: must read “no robot in slot” this long before docked -> NOT_DOCKED */
 #define CHARGING_TO_IDLE_DEBOUNCE_MS  800   /* Blocked must be true this long before CHARGING -> DOCKED_IDLE */
 #define IDLE_TO_CHARGING_DEBOUNCE_MS  800   /* Current must be above threshold this long before DOCKED_IDLE -> CHARGING */
 #define CHARGING_STUCK_MS             10000 /* No current for this long in CHARGING + mouth clear -> back to DOCKED_IDLE (sensor stuck recovery) */

@@ -60,6 +60,7 @@ static uint32_t g_last_update = 0;
 
 static DockState g_last_s = STATE_BOOT;
 static bool g_last_idle = false;
+static bool g_last_bay_idle = false;
 static int16_t g_last_i100 = 0;
 static bool g_last_charge = false;
 static bool g_last_beam = false;
@@ -102,10 +103,12 @@ static void drawLine0(void) {
   tft->setTextColor(C_WHITE, C_BG_DARK);
   if (g_last_idle) {
     tft->print(F("IDLE"));
+  } else if (g_last_s == STATE_NOT_DOCKED && g_last_bay_idle) {
+    tft->print(F("STANDBY"));
   } else {
     switch (g_last_s) {
       case STATE_BOOT:        tft->print(F("BOOT")); break;
-      case STATE_NOT_DOCKED:  tft->print(F("IDLE")); break;
+      case STATE_NOT_DOCKED:  tft->print(F("READY")); break;
       case STATE_DOCKED_IDLE: tft->print(F("DOCKED")); break;
       case STATE_CHARGING:    tft->print(F("CHARGING")); break;
       case STATE_CHARGED:     tft->print(F("CHARGED")); break;
@@ -189,7 +192,7 @@ void dockDisplayBegin(void) {
   SPI.begin(PIN_TFT_SCK, -1, PIN_TFT_MOSI, PIN_TFT_CS);
   tft = new Adafruit_ST7735(PIN_TFT_CS, PIN_TFT_DC, PIN_TFT_RST);
   tft->initR(INITR_GREENTAB);
-  tft->setRotation(0);
+  tft->setRotation(TFT_ROTATION);
   tft->fillScreen(C_BG);
   drawCydBackgroundGrid();
 
@@ -225,8 +228,9 @@ void dockDisplayUpdate(void) {
 
   DockState s = dockStateGet();
   float i = dockCurrentAmps();
-  bool beam = dockDockDetected();
+  bool beam = dockRobotInSlot();
   bool idle_mode = dockIsIdleMode();
+  bool bay_idle = dockIsBayIdle();
   bool charge = dockChargeEnabled();
   int16_t i100 = (int16_t)(i * 100);
 
@@ -260,9 +264,10 @@ void dockDisplayUpdate(void) {
     drawTopBarStatus(g_last_docked);
   }
 
-  if (g_last_s != s || g_last_idle != idle_mode) {
+  if (g_last_s != s || g_last_idle != idle_mode || g_last_bay_idle != bay_idle) {
     g_last_s = s;
     g_last_idle = idle_mode;
+    g_last_bay_idle = bay_idle;
     drawLine0();
   }
   if (g_last_charge != charge) {

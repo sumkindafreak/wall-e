@@ -131,7 +131,7 @@ void loop() {
     pkt.dock_id = DOCK_ID;
     pkt.uptime_ms = (uint32_t)millis();
     pkt.state = (uint8_t)dockStateGet();
-    pkt.beam_present = dockDockDetected() ? 1 : 0;
+    pkt.beam_present = dockRobotInSlot() ? 1 : 0;
     pkt.mouth_blocked = dockMouthBlocked() ? 1 : 0;
     pkt.charge_enabled = dockChargeEnabled() ? 1 : 0;
     pkt.callout_active = dockCalloutIsActive() ? 1 : 0;
@@ -144,7 +144,7 @@ void loop() {
 
   /* 1. Read sensors */
   dockSensorsUpdate();
-  dockIrGuidanceUpdate(now, dockDockDetected(), !dockCalloutIsActive());
+  dockIrGuidanceUpdate(now, dockRobotInSlot(), !dockCalloutIsActive());
 
   /* 2. Update state machine (controls MOSFET internally) */
   bool state_changed = dockStateUpdate();
@@ -152,7 +152,7 @@ void loop() {
   /* 3. Callout (push button) and alignment arrows */
   dockCalloutUpdate();
   if (!dockCalloutIsActive()) {
-    dockAlignmentUpdate(dockDockDetected());
+    dockAlignmentUpdate(dockRobotInSlot());
   }
 
   /* 4. TFT: state, current, dock, mouth (rate-limited inside dockDisplayUpdate) */
@@ -166,7 +166,7 @@ void loop() {
       : (NeoPixelState)dockStateToNeoPixelState(s);
     bool mouth_warn = dockMouthBlocked() && (s == STATE_DOCKED_IDLE || s == STATE_CHARGING);
     dockNeoPixelUpdateEx(np, mouth_warn, dockStateGetFaultCode(),
-                         dockDockDetected(), dockMouthBlocked(), dockCurrentAmps());
+                         dockRobotInSlot(), dockMouthBlocked(), dockCurrentAmps());
   }
 
   /* 6. Log state transition */
@@ -187,11 +187,18 @@ void loop() {
   /* 7. Periodic simple debug every 2 seconds */
   if (now - last_log_ms >= 2000) {
     last_log_ms = now;
-    Serial.print(F("[DOCK] Beam="));
-    Serial.print(dockBeamPresent() ? 1 : 0);
+    Serial.print(F("[DOCK] "));
+    Serial.print(dockStateNameForSerial());
+    Serial.print(F(" slot="));
+    Serial.print(dockRobotInSlot() ? 1 : 0);
+    Serial.print(F(" motion="));
+    Serial.print(dockMotionPresent() ? 1 : 0);
     Serial.print(F(" mouth="));
     Serial.print(dockMouthBlocked() ? 1 : 0);
-    Serial.print(F(" state="));
-    Serial.println((int)dockStateGet());
+#if (BAY_IDLE_AFTER_MS > 0)
+    Serial.print(F(" bay_idle="));
+    Serial.print(dockIsBayIdle() ? 1 : 0);
+#endif
+    Serial.println();
   }
 }

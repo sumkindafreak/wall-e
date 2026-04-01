@@ -3,13 +3,16 @@
 //  Proper joystick math: deadzone, radial clamping, smoothing
 // ============================================================
 
+#include <Arduino.h>
+#include <SPI.h>
+#include <math.h>
+
 #include "touch_input.h"
 #include "ui_buttons.h"
 #include "motion_engine.h"  // For SERVO_COUNT
+#include "cyd_laser_ui.h"
+#include "ui_draw.h"
 #include <XPT2046_Touchscreen.h>
-#include <SPI.h>
-#include <Arduino.h>
-#include <math.h>
 
 #define XPT2046_IRQ  36
 #define XPT2046_MOSI 32
@@ -17,7 +20,14 @@
 #define XPT2046_CLK  25
 #define XPT2046_CS   33
 
-static SPIClass s_touchSPI(VSPI);
+/* SPI3 on classic ESP32 (same as legacy VSPI macro). Arduino-ESP32 3.x may not
+ * expose VSPI until after full target headers; numeric id avoids that. Other
+ * ESP32 variants: use default HSPI bus for a second SPI peripheral. */
+#if CONFIG_IDF_TARGET_ESP32
+static SPIClass s_touchSPI(3);
+#else
+static SPIClass s_touchSPI(HSPI);
+#endif
 static XPT2046_Touchscreen s_ts(XPT2046_CS, XPT2046_IRQ);
 
 #define SCREEN_W 320
@@ -27,10 +37,7 @@ static XPT2046_Touchscreen s_ts(XPT2046_CS, XPT2046_IRQ);
 #define ADVANCED_ZONE_X_MAX 50
 #define ADVANCED_ZONE_Y_MAX 50
 
-// Single centered joystick
-#define JOY_CX       160  // Center X
-#define JOY_CY       110  // Center Y (match ui_draw.h — clears bottom bar)
-#define JOY_RADIUS   70   // Larger radius
+// Drive joystick geometry: JOY_CX / JOY_CY / JOY_RADIUS from ui_draw.h
 #define JOY_DEADZONE ((float)(JOY_RADIUS * JOY_DEADZONE_PCT) / 100.0f)
 #define JOY_SMOOTH_PREV (1.0f - JOY_SMOOTH_FACTOR)
 
@@ -285,18 +292,49 @@ unsigned long touchLastActivityMs(void) {
 
 TouchZone touchGetZone(int screenX, int screenY, int page) {
   if (page == 0) {  // PAGE_DRIVE
+    if (screenX >= CYD_LASER_FIRE_X && screenX < CYD_LASER_FIRE_X + CYD_LASER_FIRE_W &&
+        screenY >= CYD_LASER_FIRE_Y && screenY < CYD_LASER_FIRE_Y + CYD_LASER_FIRE_H) {
+      return TOUCH_ZONE_LASER_FIRE;
+    }
+    if (screenX >= CYD_LASER_PAD_X && screenX < CYD_LASER_PAD_X + CYD_LASER_PAD_W &&
+        screenY >= CYD_LASER_PAD_Y && screenY < CYD_LASER_PAD_Y + CYD_LASER_PAD_H) {
+      return TOUCH_ZONE_LASER_PAD;
+    }
     // Single centered joystick zone
     if (inCircle(JOY_CX, JOY_CY, screenX, screenY)) return TOUCH_ZONE_LEFT_JOY;
-    // Dock | Cancel (left of E-STOP) — 60x32 each at y 204-236
-    if (screenY >= 204 && screenY <= 236 && screenX >= 8 && screenX < 68) return TOUCH_ZONE_DOCK_GO;
-    if (screenY >= 204 && screenY <= 236 && screenX >= 72 && screenX < 132) return TOUCH_ZONE_DOCK_CANCEL;
-    if (screenY >= 204 && screenY <= 236 && screenX >= 136 && screenX <= 236) return TOUCH_ZONE_ESTOP;
-    // System | Behav (right of E-STOP)
-    if (screenY >= 204 && screenY <= 220 && screenX >= 240 && screenX <= 288) return TOUCH_ZONE_NAV_SYSTEM;
-    if (screenY >= 204 && screenY <= 220 && screenX >= 292 && screenX <= 320) return TOUCH_ZONE_NAV_BEHAV;
+    // Dock | Cancel | E-STOP — geometry from ui_draw.h (DRIVE_*)
+    if (screenY >= DRIVE_BOTTOM_BTN_Y && screenY <= DRIVE_BOTTOM_BTN_Y + DRIVE_BOTTOM_BTN_H &&
+        screenX >= DRIVE_DOCK_X && screenX < DRIVE_DOCK_X + DRIVE_DOCK_W) {
+      return TOUCH_ZONE_DOCK_GO;
+    }
+    if (screenY >= DRIVE_BOTTOM_BTN_Y && screenY <= DRIVE_BOTTOM_BTN_Y + DRIVE_BOTTOM_BTN_H &&
+        screenX >= DRIVE_CANCEL_X && screenX < DRIVE_CANCEL_X + DRIVE_CANCEL_W) {
+      return TOUCH_ZONE_DOCK_CANCEL;
+    }
+    if (screenY >= DRIVE_BOTTOM_BTN_Y && screenY <= DRIVE_BOTTOM_BTN_Y + DRIVE_BOTTOM_BTN_H &&
+        screenX >= DRIVE_ESTOP_X && screenX < DRIVE_ESTOP_X + DRIVE_ESTOP_W) {
+      return TOUCH_ZONE_ESTOP;
+    }
+    // Four nav tiles: Sys | Beh | Prf | Aut
+    if (screenY >= DRIVE_BOTTOM_BTN_Y && screenY <= DRIVE_BOTTOM_BTN_Y + DRIVE_BOTTOM_BTN_H &&
+        screenX >= DRIVE_NAV_GRID_X && screenX < DRIVE_NAV_GRID_X + DRIVE_NAV_CELL_W) {
+      return TOUCH_ZONE_NAV_SYSTEM;
+    }
+    if (screenY >= DRIVE_BOTTOM_BTN_Y && screenY <= DRIVE_BOTTOM_BTN_Y + DRIVE_BOTTOM_BTN_H &&
+        screenX >= DRIVE_NAV_BEH_X && screenX < DRIVE_NAV_BEH_X + DRIVE_NAV_CELL_W) {
+      return TOUCH_ZONE_NAV_BEHAV;
+    }
+    if (screenY >= DRIVE_BOTTOM_BTN_Y && screenY <= DRIVE_BOTTOM_BTN_Y + DRIVE_BOTTOM_BTN_H &&
+        screenX >= DRIVE_NAV_PRF_X && screenX < DRIVE_NAV_PRF_X + DRIVE_NAV_CELL_W) {
+      return TOUCH_ZONE_NAV_PROFILE;
+    }
+    if (screenY >= DRIVE_BOTTOM_BTN_Y && screenY <= DRIVE_BOTTOM_BTN_Y + DRIVE_BOTTOM_BTN_H &&
+        screenX >= DRIVE_NAV_AUT_X && screenX < DRIVE_NAV_AUT_X + DRIVE_NAV_CELL_W) {
+      return TOUCH_ZONE_NAV_AUTONOMY;
+    }
     
     // Mood buttons on right side (physical joystick layout)
-    const int cTop = 52;  // TOP_BAR_HEIGHT + TELEM_STRIP_H
+    const int cTop = CONTENT_TOP;
     int midX = 320 / 2;  // 160
     for (int i = 0; i < 5; i++) {
       int bx = midX + 16 + (i % 2) * 72;

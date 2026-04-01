@@ -2,16 +2,60 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <meta name="theme-color" content="#0a0c10">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#12100e">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <title>WALL-E - LROS</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/lros.css">
+  <link rel="manifest" href="manifest.json">
+  <meta name="mobile-web-app-capable" content="yes">
 </head>
 <body>
+<!-- Cinematic CYD startup (dismiss → initAll) -->
+<div id="cyd-landing" class="cyd-landing" role="dialog" aria-modal="true" aria-labelledby="cyd-landing-title" aria-describedby="cyd-landing-desc" hidden>
+  <div class="cyd-landing-bg" aria-hidden="true"></div>
+  <div class="cyd-landing-vignette" aria-hidden="true"></div>
+  <div class="cyd-landing-scan" aria-hidden="true"></div>
+  <div class="cyd-landing-grain" aria-hidden="true"></div>
+  <div class="cyd-landing-grid" aria-hidden="true"></div>
+  <div class="cyd-landing-beam" aria-hidden="true"></div>
+  <div class="cyd-landing-inner">
+    <p class="cyd-landing-kicker">BnL Ship · Waste Allocation</p>
+    <h1 id="cyd-landing-title" class="cyd-landing-logo"><span class="cyd-landing-logo-w">WALL</span><span class="cyd-landing-logo-dot">·</span><span class="cyd-landing-logo-e">E</span></h1>
+    <p id="cyd-landing-desc" class="cyd-landing-sub">Living Robot Operating System · remote console</p>
+    <div class="cyd-landing-cyd-block">
+      <div class="cyd-landing-eye-rig" aria-hidden="true">
+        <div class="cyd-landing-eye-housing">
+          <span class="cyd-landing-lens"><span class="cyd-landing-lens-glare"></span></span>
+          <span class="cyd-landing-lens"><span class="cyd-landing-lens-glare cyd-landing-lens-glare--delay"></span></span>
+        </div>
+        <div class="cyd-landing-neck"></div>
+      </div>
+      <div class="cyd-landing-cyd-meta">
+        <span class="cyd-landing-cyd-tag">CYD</span>
+        <span class="cyd-landing-cyd-sub">Master touchscreen · command surface</span>
+      </div>
+    </div>
+    <div class="cyd-landing-boot" aria-live="polite">
+      <p class="cyd-landing-line cyd-landing-line--1"><span class="cyd-landing-prompt">&gt;</span> Handshake with base…</p>
+      <p class="cyd-landing-line cyd-landing-line--2"><span class="cyd-landing-prompt">&gt;</span> Fleet mesh standby…</p>
+      <p class="cyd-landing-line cyd-landing-line--3"><span class="cyd-landing-prompt">&gt;</span> CYD optics calibrated…</p>
+      <p class="cyd-landing-line cyd-landing-line--4"><span class="cyd-landing-prompt">&gt;</span> <strong>Link ready.</strong></p>
+    </div>
+    <div class="cyd-landing-progress" aria-hidden="true">
+      <div class="cyd-landing-progress-track"><div class="cyd-landing-progress-fill"></div></div>
+      <span class="cyd-landing-progress-label">Establishing secure channel</span>
+    </div>
+    <div class="cyd-landing-actions">
+      <button type="button" class="btn cyd-landing-enter" id="cyd-landing-enter">Initialize console</button>
+      <button type="button" class="cyd-landing-skip" id="cyd-landing-skip">Skip intro</button>
+    </div>
+  </div>
+</div>
+
 <div id="app">
   <div id="override-banner" aria-live="polite">Local Control Active - CYD touchscreen has control</div>
 
@@ -48,27 +92,93 @@
     <div class="tab" data-tab="drive" onclick="switchTab('drive')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Drive</div>
     <div class="tab" data-tab="docking" onclick="switchTab('docking')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>Dock</div>
     <div class="tab" data-tab="network" onclick="switchTab('network')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1" fill="currentColor"/></svg>Network</div>
+    <div class="tab" data-tab="settings" onclick="switchTab('settings')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>Set</div>
     <div class="tab" data-tab="more" onclick="switchTab('more')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>More</div>
   </nav>
 
   <main id="pages">
     <!-- HOME -->
     <div class="page active" id="page-home">
+      <header class="page-head">
+        <h2 class="page-title">Dashboard</h2>
+        <p class="page-lead">At-a-glance status, laser, widgets, and quick links to drive and dock.</p>
+      </header>
       <div class="face-container">
-        <div class="face" id="walle-face" data-mood="happy" aria-label="WALL-E face">
-          <div class="face-eyes"><div class="face-eye"></div><div class="face-eye"></div></div>
-        </div>
+        <figure class="face face--photo" id="walle-face" data-mood="happy" aria-label="WALL-E">
+          <span class="face-frame">
+            <img class="face-img" src="assets/walle-character.png" alt="WALL-E" width="260" height="260" decoding="async" loading="eager">
+          </span>
+        </figure>
+      </div>
+      <div class="stat-grid" id="home-stats">
+        <div class="stat-card"><div class="stat-label">Battery</div><div class="stat-value" id="stat-batt">-</div><div class="stat-sub" id="stat-batt-sub">-</div></div>
+        <div class="stat-card emerald"><div class="stat-label">Speed</div><div class="stat-value" id="stat-speed">0</div><div class="stat-sub">avg L/R</div></div>
+        <div class="stat-card"><div class="stat-label">Heading</div><div class="stat-value" id="stat-heading">-</div><div class="stat-sub">IMU</div></div>
+        <div class="stat-card emerald"><div class="stat-label">Wi‑Fi</div><div class="stat-value" id="stat-rssi">-</div><div class="stat-sub" id="stat-wifi-sub">signal</div></div>
       </div>
       <div class="card">
         <div class="card-header">Quick Status</div>
         <div class="card-body">
-          <div class="status-row"><span class="label">Battery</span><span class="value" id="home-battery">-</span></div>
-          <div class="progress-bar" style="margin:8px 0"><div class="progress-fill" id="home-battery-bar" style="width:80%"></div></div>
           <div class="status-row"><span class="label">State</span><span class="value" id="home-state">-</span></div>
-          <div class="status-row"><span class="label">Emotion</span><span class="value" id="home-emotion">-</span></div>
+          <div class="status-row"><span class="label">Emotion / mood</span><span class="value" id="home-emotion">-</span></div>
+          <div class="progress-bar" style="margin:8px 0"><div class="progress-fill" id="home-battery-bar" style="width:80%"></div></div>
+          <div class="status-row"><span class="label">Voltage</span><span class="value" id="home-battery">-</span></div>
         </div>
       </div>
-      <div style="display:flex;gap:12px;flex-wrap:wrap">
+      <div class="card" id="brain-card">
+        <div class="card-header">System brain</div>
+        <div class="card-body">
+          <div class="ai-thinking" id="ai-thinking" hidden>WALL-E is thinking…</div>
+          <div class="status-row"><span class="label">AI decision</span><span class="value" id="ai-decision">—</span></div>
+          <div class="status-row"><span class="label">Confidence</span><span class="value ok" id="ai-confidence">—</span></div>
+          <div class="status-row"><span class="label">Interest</span><span class="value" id="ai-interest">—</span></div>
+        </div>
+      </div>
+      <div class="card" id="laser-card">
+        <div class="card-header">Laser pointer</div>
+        <div class="card-body">
+          <p class="stat-sub" style="margin:0 0 8px">Laser on base GPIO (default 18 in firmware) · aim = pan + tilt 0–100</p>
+          <div class="status-row"><span class="label">Beam</span><span class="value" id="laser-status">Off</span></div>
+          <div class="form-group"><label for="laser-pan">Pan</label><input type="range" id="laser-pan" min="0" max="100" value="50"></div>
+          <div class="form-group"><label for="laser-tilt">Tilt</label><input type="range" id="laser-tilt" min="0" max="100" value="50"></div>
+          <div class="form-group"><label for="laser-bright">Brightness</label><input type="range" id="laser-bright" min="0" max="255" value="0"></div>
+          <div class="form-group"><label for="laser-fire-ms">Fire duration (ms)</label><input type="number" id="laser-fire-ms" min="100" max="10000" value="1000" style="width:100%;max-width:120px"></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+            <button type="button" class="btn btn-small" id="laser-toggle-btn" onclick="laserToggleOnOff()">Laser ON</button>
+            <button type="button" class="btn btn-small btn-ghost" onclick="laserApplyAim()">Aim</button>
+            <button type="button" class="btn btn-small" onclick="laserPointFire()">Point &amp; fire</button>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px">
+            <button type="button" class="btn btn-small btn-ghost" id="laser-scan-btn" onclick="laserScanToggle()">Scan</button>
+            <label for="laser-mood" class="stat-sub">Mood</label>
+            <select id="laser-mood" onchange="laserMoodApply()">
+              <option value="0">Curious</option>
+              <option value="1">Angry</option>
+              <option value="2">Happy</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">Activity feed</div>
+        <div class="card-body" style="padding:0">
+          <div class="activity-feed" id="activity-feed"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">Widgets <span style="font-weight:400;color:var(--txt-dim);font-size:0.65rem">drag to reorder</span></div>
+        <div class="card-body">
+          <div class="widget-grid" id="widget-grid">
+            <div class="widget-tile" draggable="true" data-widget="cam"><h4>Camera</h4><div class="mini">Vision stream</div></div>
+            <div class="widget-tile" draggable="true" data-widget="map"><h4>Map</h4><div class="mini">Tap More → Nav</div></div>
+            <div class="widget-tile" draggable="true" data-widget="power"><h4>Power</h4><div class="mini" id="w-power">-</div></div>
+            <div class="widget-tile" draggable="true" data-widget="tel"><h4>Telemetry</h4><div class="mini">IMU / sonar</div></div>
+            <div class="widget-tile" draggable="true" data-widget="voice"><h4>Voice</h4><div class="mini">Audio page</div></div>
+            <div class="widget-tile" draggable="true" data-widget="quick"><h4>Quick actions</h4><div class="mini"><button type="button" class="btn btn-small" onclick="switchTab('drive')">Drive</button></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="page-actions">
         <button class="btn" onclick="switchTab('drive')">Drive</button>
         <button class="btn btn-ghost" onclick="switchTab('docking')">Docking</button>
         <button class="btn btn-ghost" onclick="switchTab('network')">Network</button>
@@ -76,121 +186,585 @@
     </div>
 
     <!-- DRIVE -->
-    <div class="page" id="page-drive">
-      <div class="card">
-        <div class="card-header">Control Mode</div>
-        <div class="card-body" style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-small" id="mode-joystick" onclick="setDriveMode('joystick')">Joystick</button>
-          <button class="btn btn-small btn-ghost" id="mode-tank" onclick="setDriveMode('tank')">Tank</button>
-          <button class="btn btn-small btn-ghost" id="mode-ai" onclick="setDriveMode('ai')">AI Assist</button>
-        </div>
-      </div>
-      <div id="drive-joystick" class="joystick-wrap">
-        <div class="joystick-container" id="joystick"><div class="joystick-stick" id="joystick-stick"></div></div>
-      </div>
-      <div id="drive-tank" style="display:none">
-        <div class="tank-row"><div class="tank-col"><label>Left</label><input type="range" id="tank-left" min="-255" max="255" value="0"></div><div class="tank-col"><label>Right</label><input type="range" id="tank-right" min="-255" max="255" value="0"></div></div>
-      </div>
-      <div class="card">
-        <div class="card-body">
-          <div class="status-row"><span class="label">Speed</span><span class="value" id="drive-speed">0 / 255</span></div>
-          <div class="form-group"><label>Speed profile</label><select id="speed-profile" onchange="applySpeedProfile()"><option value="low">Low</option><option value="normal" selected>Normal</option><option value="high">High</option></select></div>
-        </div>
-      </div>
-      <div style="display:flex;gap:12px">
-        <button class="btn" onclick="triggerAutoDock()">Go to Dock</button>
-        <button class="btn btn-ghost" onclick="setHome()">Set Home</button>
-      </div>
-    </div>
+    <div class="page" id="page-drive" data-mode="joystick">
+      <header class="page-head">
+        <h2 class="page-title">Drive</h2>
+        <p class="page-lead">CYD-style control: head pan/tilt + drive mix, dual tread rollers, or AI assist with manual override.</p>
+      </header>
 
-    <!-- NAVIGATION -->
-    <div class="page" id="page-navigation">
-      <div class="card">
-        <div class="card-header">Mission Map</div>
-        <div class="card-body" style="padding:8px">
-          <canvas id="map-canvas" width="400" height="220"></canvas>
+      <div class="drive-hero card">
+        <div class="card-body drive-hero-top">
+          <div class="drive-mode-seg" id="drive-deck" data-active-mode="joystick" role="tablist" aria-label="Drive mode">
+            <button type="button" class="btn btn-small drive-mode-btn" id="mode-joystick" onclick="setDriveMode('joystick')" role="tab" aria-selected="true">
+              <span class="drive-mode-ic" aria-hidden="true">&#9678;</span>
+              <span class="drive-mode-txt"><strong>Joystick</strong><span class="drive-mode-sub">Head + drive</span></span>
+            </button>
+            <button type="button" class="btn btn-small btn-ghost drive-mode-btn" id="mode-tank" onclick="setDriveMode('tank')" role="tab" aria-selected="false">
+              <span class="drive-mode-ic" aria-hidden="true">&#9618;</span>
+              <span class="drive-mode-txt"><strong>Tank</strong><span class="drive-mode-sub">Dual rollers</span></span>
+            </button>
+            <button type="button" class="btn btn-small btn-ghost drive-mode-btn" id="mode-ai" onclick="setDriveMode('ai')" role="tab" aria-selected="false">
+              <span class="drive-mode-ic" aria-hidden="true">&#9889;</span>
+              <span class="drive-mode-txt"><strong>AI assist</strong><span class="drive-mode-sub">Brain + override</span></span>
+            </button>
+          </div>
+          <div class="drive-link-stack">
+            <span class="drive-ws-badge" id="ws-status-badge" title="WebSocket or HTTP fallback">HTTP</span>
+            <span class="drive-link-hint">Commands use <span class="mono">/drive</span> · failsafe ~440&nbsp;ms</span>
+          </div>
         </div>
       </div>
-      <div class="card">
-        <div class="card-header">Saved Locations</div>
-        <div class="card-body">
-          <div class="status-row"><span class="label">Home</span><span class="value dim" id="nav-home">Not set</span></div>
-          <div class="status-row"><span class="label">Current</span><span class="value" id="nav-current">-</span></div>
-          <button class="btn btn-small" onclick="addWaypoint()" style="margin-top:8px">Add Waypoint</button>
-        </div>
-      </div>
-    </div>
 
-    <!-- DOCKING -->
-    <div class="page" id="page-docking">
-      <div class="card">
-        <div class="card-header">Approach Alignment</div>
-        <div class="card-body" style="text-align:center;padding:24px">
-          <div style="font-size:3rem;margin-bottom:12px">📍</div>
-          <div class="status-row"><span class="label">Stage</span><span class="value" id="dock-stage">-</span></div>
-          <div class="status-row"><span class="label">Beam</span><span class="value" id="dock-beam">-</span></div>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-header">Charge Status</div>
-        <div class="card-body">
-          <div class="status-row"><span class="label">Current</span><span class="value" id="dock-current">-</span></div>
-          <div class="progress-bar" style="margin:8px 0"><div class="progress-fill" id="dock-charge-bar" style="width:0%"></div></div>
-        </div>
-      </div>
-      <div style="display:flex;gap:12px">
-        <button class="btn" onclick="triggerAutoDock()">Start Docking</button>
-        <button class="btn btn-ghost" onclick="apiCall('/api/dock/cancel')">Cancel</button>
-      </div>
-    </div>
-
-    <!-- VISION -->
-    <div class="page" id="page-vision">
-      <div class="card">
-        <div class="card-header">Live Feed</div>
-        <div class="card-body" style="padding:8px">
-          <div class="fpv-container">
-            <img id="fpv-img" src="" alt="FPV stream" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-            <div id="fpv-placeholder" style="display:flex;flex-direction:column;align-items:center;color:var(--txt-dim);font-size:0.85rem">
-              <span style="font-size:2rem;margin-bottom:8px">📷</span>No stream available
+      <div class="drive-manual-zone" id="drive-manual-zone">
+        <div class="card drive-cockpit">
+          <div class="card-header">Manual output</div>
+          <div class="card-body drive-cockpit-body">
+            <p class="drive-cockpit-hint" id="drive-cockpit-hint">Head: aim the face. Drive: same mix as CYD — forward/back both tracks, left/right turn.</p>
+            <div id="drive-joystick" class="drive-dual-cockpit">
+              <div class="drive-dual-row">
+                <div class="drive-dual-col drive-dual-col--head">
+                  <span class="drive-dual-label">Head</span>
+                  <div class="joystick-wrap drive-head-wrap">
+                    <div class="joystick-rim drive-head-rim">
+                      <div class="joystick-container drive-head-joy" id="head-joystick" aria-label="Head pan and tilt">
+                        <div class="joystick-vector" id="head-vector" aria-hidden="true"></div>
+                        <div class="joystick-stick" id="head-stick"></div>
+                      </div>
+                    </div>
+                  </div>
+                  <span class="drive-dual-meta mono" id="head-servo-readout" aria-live="polite">Pan — · Tilt —</span>
+                </div>
+                <div class="drive-dual-col drive-dual-col--drive">
+                  <span class="drive-dual-label">Drive</span>
+                  <div class="joystick-wrap drive-joystick-wrap">
+                    <div class="joystick-rim">
+                      <div class="joystick-container" id="joystick" aria-label="Drive joystick">
+                        <div class="joystick-vector" id="joystick-vector" aria-hidden="true"></div>
+                        <div class="joystick-stick" id="joystick-stick"></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div id="drive-tank" class="drive-tank-panel" style="display:none">
+              <div class="drive-tank-meters">
+                <div class="drive-tank-meter">
+                  <span class="drive-tank-tag">L</span>
+                  <div class="drive-tank-bar"><div class="drive-tank-fill" id="drive-tank-l-bar" style="width:0%"></div></div>
+                </div>
+                <div class="drive-tank-meter">
+                  <span class="drive-tank-tag">R</span>
+                  <div class="drive-tank-bar"><div class="drive-tank-fill drive-tank-fill-r" id="drive-tank-r-bar" style="width:0%"></div></div>
+                </div>
+              </div>
+              <p class="drive-tank-roller-hint">Drag each roller — top forward, bottom reverse. Two-finger for both treads.</p>
+              <div class="drive-tank-rollers">
+                <div class="drive-roller-col">
+                  <span class="drive-roller-label">L tread</span>
+                  <div class="drive-roller-track" id="tank-roller-left" role="slider" tabindex="0" aria-label="Left tread" aria-valuemin="-255" aria-valuemax="255" aria-valuenow="0">
+                    <div class="drive-roller-groove" aria-hidden="true"></div>
+                    <div class="drive-roller-thumb" id="tank-thumb-left"></div>
+                  </div>
+                </div>
+                <div class="drive-roller-col">
+                  <span class="drive-roller-label">R tread</span>
+                  <div class="drive-roller-track" id="tank-roller-right" role="slider" tabindex="0" aria-label="Right tread" aria-valuemin="-255" aria-valuemax="255" aria-valuenow="0">
+                    <div class="drive-roller-groove" aria-hidden="true"></div>
+                    <div class="drive-roller-thumb" id="tank-thumb-right"></div>
+                  </div>
+                </div>
+              </div>
+              <input type="hidden" id="tank-left" value="0">
+              <input type="hidden" id="tank-right" value="0">
+            </div>
+            <div class="drive-motor-hud">
+              <div class="drive-motor-cell">
+                <span class="drive-motor-lbl">Left</span>
+                <span class="drive-motor-val mono" id="drive-motor-l">0</span>
+              </div>
+              <div class="drive-motor-cell drive-motor-center">
+                <span class="drive-motor-lbl">Avg command</span>
+                <span class="drive-motor-avg mono" id="drive-speed">0 / 255</span>
+                <div class="drive-speed-track" aria-hidden="true"><div class="drive-speed-fill" id="drive-speed-bar" style="width:0%"></div></div>
+              </div>
+              <div class="drive-motor-cell">
+                <span class="drive-motor-lbl">Right</span>
+                <span class="drive-motor-val mono" id="drive-motor-r">0</span>
+              </div>
             </div>
           </div>
         </div>
       </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-small" onclick="snapshot()">Snapshot</button>
-        <button class="btn btn-small btn-ghost" onclick="toggleNightMode()">Night mode</button>
+
+      <div id="drive-ai-panel" class="card drive-ai-card" style="display:none">
+        <div class="card-header">AI assist</div>
+        <div class="card-body">
+          <div class="drive-ai-grid">
+            <div class="drive-ai-kpi"><span class="drive-ai-kpi-lbl">Autonomy</span><span class="drive-ai-kpi-val" id="drive-ai-enabled">—</span></div>
+            <div class="drive-ai-kpi"><span class="drive-ai-kpi-lbl">State</span><span class="drive-ai-kpi-val mono" id="drive-ai-state">—</span></div>
+            <div class="drive-ai-kpi"><span class="drive-ai-kpi-lbl">Brain</span><span class="drive-ai-kpi-val mono" id="drive-ai-unified">—</span></div>
+            <div class="drive-ai-kpi"><span class="drive-ai-kpi-lbl">Safety</span><span class="drive-ai-kpi-val" id="drive-ai-safety">—</span></div>
+            <div class="drive-ai-kpi"><span class="drive-ai-kpi-lbl">Emotion</span><span class="drive-ai-kpi-val" id="drive-ai-emotion">—</span></div>
+            <div class="drive-ai-kpi"><span class="drive-ai-kpi-lbl">Override</span><span class="drive-ai-kpi-val" id="drive-ai-manual">—</span></div>
+          </div>
+          <div class="drive-ai-actions page-actions">
+            <button type="button" class="btn btn-small" id="drive-ai-start" onclick="aiAssistStart()">Start AI</button>
+            <button type="button" class="btn btn-small btn-ghost" onclick="aiAssistStop()">Stop AI</button>
+            <button type="button" class="btn btn-small btn-ghost" onclick="aiAssistTakeOver()">Take over</button>
+            <button type="button" class="btn btn-small" onclick="aiAssistResume()">Resume AI</button>
+          </div>
+          <p class="stat-sub drive-ai-foot">Joystick or tank overrides motors; Take over pauses autonomy until Resume.</p>
+        </div>
       </div>
+
+      <div class="drive-grid-two">
+        <div class="card drive-speed-card">
+          <div class="card-header">Speed cap</div>
+          <div class="card-body">
+            <p class="stat-sub" style="margin:0 0 10px">Motor command ceiling from <span class="mono">/settings</span> · applies to all modes.</p>
+            <div class="form-group" style="margin-bottom:0"><label for="speed-profile">Profile</label>
+              <select id="speed-profile" onchange="applySpeedProfile()">
+                <option value="low">Low (128)</option>
+                <option value="normal" selected>Normal (200)</option>
+                <option value="high">High (255)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="card drive-mission-card">
+          <div class="card-header">Shortcuts</div>
+          <div class="card-body">
+            <p class="stat-sub" style="margin:0 0 12px">Docking and home use the same APIs as the Dock tab.</p>
+            <div class="page-actions" style="margin-top:0">
+              <button type="button" class="btn btn-small" onclick="triggerAutoDock()">Go to dock</button>
+              <button type="button" class="btn btn-small btn-ghost" onclick="setHome()">Set home</button>
+              <button type="button" class="btn btn-small btn-ghost" onclick="switchTab('navigation')">Navigation</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- NAVIGATION -->
+    <div class="page more-subpage" id="page-navigation">
+      <header class="subpage-head">
+        <div class="subpage-head-main">
+          <p class="subpage-kicker">LROS · NAVIGATION</p>
+          <h2 class="page-title subpage-title">Navigation</h2>
+          <p class="page-lead">Map, waypoints, world &amp; weather context, and mission command deck.</p>
+        </div>
+      </header>
+      <div class="nav-world-strip" role="status" aria-live="polite">
+        <span class="nav-pill nav-pill-dim" id="nav-pill-browser" title="Browser network reachability">Browser: …</span>
+        <span class="nav-pill nav-pill-dim" id="nav-pill-router" title="Robot Wi‑Fi station status">Robot: …</span>
+        <span class="nav-pill nav-pill-dim" id="nav-pill-wan" title="Internet + latency hint">Internet: …</span>
+      </div>
+      <p class="nav-world-hint">Live map &amp; weather use your phone or PC internet connection (not the ESP). Connect the robot to Wi‑Fi for RSSI and station IP below.</p>
+      <div class="nav-layout">
+        <div class="nav-map-wrap">
+          <div class="nav-toolbar">
+            <span class="stat-sub">Planner map · click to add waypoints · wheel zoom · drag pan</span>
+            <span id="nav-eta" class="conn-pill">—</span>
+            <button type="button" class="btn btn-small btn-ghost" id="prox-mute-btn" onclick="toggleProxMute()" title="Proximity beeps">&#128276;</button>
+          </div>
+          <div class="nav-map-real" id="nav-map-real" hidden>
+            <img id="nav-osm-img" class="nav-osm-img" width="640" height="200" alt="" decoding="async" />
+            <div class="nav-osm-placeholder" id="nav-osm-placeholder">OpenStreetMap preview appears when location data is available.</div>
+          </div>
+          <canvas id="nav-map-canvas" width="600" height="320"></canvas>
+          <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+            <button type="button" class="btn btn-small" onclick="navClearWaypoints()">Clear WP</button>
+            <button type="button" class="btn btn-small btn-ghost" onclick="navSendRouteToRobot()">Send route</button>
+            <button type="button" class="btn btn-small btn-ghost" onclick="switchTab('drive')">Manual drive</button>
+          </div>
+        </div>
+        <div class="nav-sidebar">
+          <div class="card nav-world-card">
+            <div class="card-header">World (internet)</div>
+            <div class="card-body">
+              <div class="status-row"><span class="label">Public IP</span><span class="value mono" id="nav-wan-ip">—</span></div>
+              <div class="status-row"><span class="label">Approx. place</span><span class="value" id="nav-wan-loc">—</span></div>
+              <div class="status-row"><span class="label">ISP / org</span><span class="value dim" id="nav-wan-org">—</span></div>
+              <div class="status-row"><span class="label">Weather</span><span class="value" id="nav-weather">—</span></div>
+              <div class="status-row"><span class="label">Lookup RTT</span><span class="value" id="nav-inet-rtt">—</span></div>
+              <div class="status-row"><span class="label">Clock (TZ)</span><span class="value dim" id="nav-local-clock">—</span></div>
+              <button type="button" class="btn btn-small btn-ghost" id="nav-geo-btn">Use this device’s GPS</button>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header">Robot Wi‑Fi</div>
+            <div class="card-body">
+              <div class="status-row"><span class="label">STA IP</span><span class="value mono" id="nav-sta-ip">—</span></div>
+              <div class="status-row"><span class="label">SSID</span><span class="value" id="nav-sta-ssid">—</span></div>
+              <div class="status-row"><span class="label">RSSI</span><span class="value" id="nav-rssi">—</span></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header">Waypoints</div>
+            <div class="card-body">
+              <ul id="nav-waypoint-list" style="list-style:none;padding:0;margin:0;min-height:48px"></ul>
+              <div class="status-row"><span class="label">Home</span><span class="value dim" id="nav-home">Not set</span></div>
+              <div class="status-row"><span class="label">Robot GPS</span><span class="value" id="nav-current">-</span></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header">Obstacles (demo)</div>
+            <div class="card-body">
+              <div class="status-row"><span class="label">LiDAR</span><span class="value" style="color:#e63946">zones</span></div>
+              <div class="status-row"><span class="label">Ultrasonic</span><span class="value" style="color:#f5a623">zones</span></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header">WebSocket</div>
+            <div class="card-body">
+              <div class="form-group"><label>ws:// URL (optional)</label><input type="text" id="ws-url-input" placeholder="ws://192.168.4.1/ws"></div>
+              <button type="button" class="btn btn-small" onclick="saveWsUrl()">Save &amp; reconnect</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <section class="nav-mission-deck" id="nav-mission-deck" aria-label="Mission command">
+        <div class="nav-mission-deck-head">
+          <div>
+            <h2 class="nav-mission-h2">Mission command</h2>
+            <p class="nav-mission-sub" id="nav-mission-sub">Plan waypoints, complete preflight, then Arm.</p>
+          </div>
+          <div class="nav-mission-state-pill state-idle" id="nav-mission-state-pill">IDLE</div>
+        </div>
+
+        <div class="nav-mission-hero-grid">
+          <div class="nav-mission-summary">
+            <p class="nav-mission-plan-summary" id="nav-mission-plan-summary">No waypoints — tap the map to plan.</p>
+            <div class="nav-mission-eta-row">
+              <span class="stat-sub">Planner route</span>
+              <span class="conn-pill mono" id="nav-mission-route-len">—</span>
+              <span class="stat-sub">Path length (same as map)</span>
+              <span class="conn-pill" id="nav-dist">—</span>
+            </div>
+          </div>
+          <div class="nav-mission-ring-wrap" aria-hidden="true">
+            <div class="nav-mission-ring" id="nav-mission-ring-fill" style="--p:0"></div>
+            <div class="nav-mission-ring-center">
+              <span class="nav-mission-pct" id="nav-mission-pct">0%</span>
+              <span class="nav-mission-pct-label">exec</span>
+            </div>
+          </div>
+          <div class="nav-mission-kpi-grid">
+            <div class="nav-mission-kpi"><span class="nav-mission-kpi-label">ETA (plan)</span><span class="nav-mission-kpi-val" id="nav-mission-eta-large">—</span></div>
+            <div class="nav-mission-kpi"><span class="nav-mission-kpi-label">ETA remain</span><span class="nav-mission-kpi-val" id="nav-mission-eta-remain">—</span></div>
+            <div class="nav-mission-kpi"><span class="nav-mission-kpi-label">Waypoints</span><span class="nav-mission-kpi-val" id="nav-mission-wp-count">0</span></div>
+            <div class="nav-mission-kpi"><span class="nav-mission-kpi-label">Segments</span><span class="nav-mission-kpi-val" id="nav-mission-segments">0</span></div>
+            <div class="nav-mission-kpi"><span class="nav-mission-kpi-label">Battery</span><span class="nav-mission-kpi-val" id="nav-mission-battery">—</span></div>
+            <div class="nav-mission-kpi"><span class="nav-mission-kpi-label">Sonar</span><span class="nav-mission-kpi-val" id="nav-mission-sonar">—</span></div>
+            <div class="nav-mission-kpi"><span class="nav-mission-kpi-label">Heading</span><span class="nav-mission-kpi-val" id="nav-mission-heading">—</span></div>
+            <div class="nav-mission-kpi"><span class="nav-mission-kpi-label">Autonomy</span><span class="nav-mission-kpi-val" id="nav-mission-autonomy">—</span></div>
+            <div class="nav-mission-kpi"><span class="nav-mission-kpi-label">Return home</span><span class="nav-mission-kpi-val" id="nav-mission-rth">—</span></div>
+          </div>
+        </div>
+        <p class="nav-mission-batt-warn" id="nav-mission-batt-warn" hidden></p>
+
+        <div class="nav-mission-phase-strip" role="list">
+          <div class="nav-phase nav-phase-pending" id="nav-phase-plan" role="listitem"><span>1</span> Plan</div>
+          <div class="nav-phase nav-phase-pending" id="nav-phase-arm" role="listitem"><span>2</span> Arm</div>
+          <div class="nav-phase nav-phase-pending" id="nav-phase-exec" role="listitem"><span>3</span> Execute</div>
+          <div class="nav-phase nav-phase-pending" id="nav-phase-verify" role="listitem"><span>4</span> Verify</div>
+          <div class="nav-phase nav-phase-pending" id="nav-phase-done" role="listitem"><span>5</span> Done</div>
+        </div>
+
+        <div class="nav-mission-split">
+          <div class="nav-mission-preflight card">
+            <div class="card-header">Preflight</div>
+            <div class="card-body">
+              <label class="nav-pf-row"><input type="checkbox" id="nav-pf-battery" /> Battery sufficient for route</label>
+              <label class="nav-pf-row"><input type="checkbox" id="nav-pf-link" /> Robot link / HTTP OK</label>
+              <label class="nav-pf-row"><input type="checkbox" id="nav-pf-path" /> Path reviewed on map</label>
+              <label class="nav-pf-row"><input type="checkbox" id="nav-pf-clear" /> Area clear / safe to move</label>
+              <p class="nav-mission-hint">Confirm each item before you arm. <strong>Send route</strong> uploads the plan to the Brain as GPS waypoints (<code class="mono">POST /api/navigation/route</code>) when GPS and compass are valid. Mission progress on this page stays a preview until you wire live telemetry into the UI.</p>
+            </div>
+          </div>
+          <div class="nav-mission-log-wrap card">
+            <div class="card-header">Mission log</div>
+            <div class="card-body nav-mission-log" id="nav-mission-log"><div class="nav-mission-log-row dim">Events appear here.</div></div>
+          </div>
+        </div>
+
+        <div class="nav-mission-actions">
+          <button type="button" class="btn btn-small" id="nav-mission-btn-arm">Arm mission</button>
+          <button type="button" class="btn btn-small" id="nav-mission-btn-start" style="display:none">Start</button>
+          <button type="button" class="btn btn-small btn-ghost" id="nav-mission-btn-pause" style="display:none">Pause</button>
+          <button type="button" class="btn btn-small" id="nav-mission-btn-resume" style="display:none">Resume</button>
+          <button type="button" class="btn btn-small btn-ghost" id="nav-mission-btn-abort" style="display:none">Abort</button>
+          <button type="button" class="btn btn-small btn-ghost" id="nav-mission-btn-reset" style="display:none">Reset</button>
+          <button type="button" class="btn btn-small" onclick="triggerAutoDock()">Return home (dock)</button>
+          <button type="button" class="btn btn-small btn-ghost" onclick="switchTab('missions')">Missions page</button>
+        </div>
+      </section>
+    </div>
+
+    <!-- DOCKING -->
+    <div class="page" id="page-docking">
+      <header class="page-head">
+        <h2 class="page-title">Docking station</h2>
+        <p class="page-lead">Align with the charging dock, monitor dock node health, and manage return-home.</p>
+      </header>
+
+      <div class="dock-hero card">
+        <div class="dock-hero-main">
+          <div class="dock-hero-icon" aria-hidden="true">&#128268;</div>
+          <div>
+            <div class="dock-fsm-pill" id="dock-fsm-pill">—</div>
+            <p class="dock-hero-sub" id="dock-hero-sub">Pull live status from the Brain.</p>
+          </div>
+        </div>
+        <div class="dock-hero-metrics">
+          <div class="dock-metric"><span class="dock-metric-label">Dock FSM</span><span class="dock-metric-val mono" id="dock-fsm">—</span></div>
+          <div class="dock-metric"><span class="dock-metric-label">Seek active</span><span class="dock-metric-val" id="dock-active">—</span></div>
+          <div class="dock-metric"><span class="dock-metric-label">Return home</span><span class="dock-metric-val" id="dock-rth">—</span></div>
+          <div class="dock-metric"><span class="dock-metric-label">Dock node</span><span class="dock-metric-val" id="dock-node-online">—</span></div>
+          <div class="dock-metric"><span class="dock-metric-label">Flags</span><span class="dock-metric-val mono dim" id="dock-flags">—</span></div>
+        </div>
+      </div>
+
+      <div class="dock-grid-two">
+        <div class="card">
+          <div class="card-header">Approach &amp; sensors</div>
+          <div class="card-body">
+            <div class="status-row"><span class="label">Autonomy stage</span><span class="value" id="dock-stage">—</span></div>
+            <div class="status-row"><span class="label">IR / beam</span><span class="value dim" id="dock-beam">Awaiting dock telemetry</span></div>
+            <p class="stat-sub" style="margin-top:10px">Beam and IR alignment details will appear here when exposed on <span class="mono">/api/dock/status</span> or ESP-NOW telemetry.</p>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">Power on base</div>
+          <div class="card-body">
+            <div class="status-row"><span class="label">Voltage</span><span class="value" id="dock-voltage">—</span></div>
+            <div class="status-row"><span class="label">Estimate</span><span class="value" id="dock-current">—</span></div>
+            <div class="progress-bar dock-charge-bar-wrap"><div class="progress-fill" id="dock-charge-bar" style="width:0%"></div></div>
+            <p class="stat-sub">Charging hint uses fleet health when the dock reports charge flags.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="card dock-timeline-card">
+        <div class="card-header">Typical sequence</div>
+        <div class="card-body">
+          <ol class="dock-timeline" id="dock-timeline">
+            <li class="dock-step" data-step="seek"><span class="dock-step-n">1</span><span>Seek dock / IR lock</span></li>
+            <li class="dock-step" data-step="align"><span class="dock-step-n">2</span><span>Approach &amp; align</span></li>
+            <li class="dock-step" data-step="seat"><span class="dock-step-n">3</span><span>Seat on contacts</span></li>
+            <li class="dock-step" data-step="charge"><span class="dock-step-n">4</span><span>Charge</span></li>
+          </ol>
+        </div>
+      </div>
+
       <div class="card">
-        <div class="card-header">AI Scene</div>
-        <div class="card-body"><div id="vision-scene" class="value dim">-</div></div>
+        <div class="card-header">Fleet node — dock</div>
+        <div class="card-body dock-node-strip">
+          <span class="node-pill dock-page-node" data-pill="dock" id="dock-page-node-pill" title="Dock ESP">DOCK</span>
+          <span class="stat-sub" id="dock-node-hint">Matches strip above when online.</span>
+        </div>
+      </div>
+
+      <div class="page-actions dock-actions">
+        <button type="button" class="btn" onclick="triggerAutoDock()">Start docking</button>
+        <button type="button" class="btn btn-ghost" onclick="apiCall('/api/dock/cancel')">Cancel homing</button>
+        <button type="button" class="btn btn-ghost" onclick="refreshDockPanel(true)">Refresh status</button>
+        <button type="button" class="btn btn-ghost" onclick="switchTab('network')">Network</button>
+      </div>
+    </div>
+
+    <!-- VISION — camera node (VisionPacket / recognition pipeline) -->
+    <div class="page vision-page" id="page-vision">
+      <header class="vision-page-head">
+        <div class="vision-page-titles">
+          <p class="vision-kicker">NODE · OPTICS</p>
+          <h2 class="page-title vision-cinematic-title">Camera intelligence</h2>
+          <p class="page-lead vision-page-lead">Live snapshot, behaviour engine, and full recognition telemetry from the vision node (motion → blob → classify → events).</p>
+        </div>
+        <div class="vision-head-badges">
+          <span class="vision-pill vision-pill-link" id="vision-link-pill" title="ESP-NOW / UDP link">LINK · …</span>
+          <span class="vision-pill vision-pill-behave" id="vision-behave-pill" title="Base behaviour state">BRAIN · —</span>
+          <span class="vision-pill vision-pill-age" id="vision-age-pill" title="Packet age">Δ — ms</span>
+        </div>
+      </header>
+
+      <section class="vision-fpv-stage" aria-label="Live camera">
+        <div class="vision-fpv-wrap fpv-container" id="vision-fpv-wrap">
+          <img id="fpv-img" class="vision-fpv-img" src="" alt="Camera snapshot" onerror="visionOnImgError()">
+          <div class="vision-hud" id="vision-hud" aria-hidden="true">
+            <div class="vision-hud-frame"></div>
+            <div class="vision-hud-crosshair"></div>
+            <div class="vision-hud-reticle" id="vision-reticle" title="Target"></div>
+            <div class="vision-hud-corner vision-hud-tl"><span>CAM</span></div>
+            <div class="vision-hud-corner vision-hud-tr"><span id="vision-hud-frameid">FR —</span></div>
+            <div class="vision-hud-corner vision-hud-bl"><span id="vision-hud-zone-hud">ZONE —</span></div>
+            <div class="vision-hud-corner vision-hud-br"><span id="vision-hud-lock-hud">LOCK —</span></div>
+          </div>
+          <div id="fpv-placeholder" class="vision-fpv-placeholder">
+            <span class="vision-ph-icon" aria-hidden="true">&#9673;</span>
+            <span class="vision-ph-title">No camera link</span>
+            <span class="vision-ph-hint">Vision node IP will appear when packets arrive on the base.</span>
+          </div>
+        </div>
+        <div class="vision-toolbar">
+          <div class="vision-controls vision-toolbar-sliders">
+            <label class="vision-ctl"><span>Blend</span><input type="range" id="fpv-opacity" min="0.2" max="1" step="0.05" value="1" oninput="setFpvOpacity(this.value)"></label>
+            <label class="vision-ctl"><span>Zoom</span><input type="range" id="fpv-scale" min="0.55" max="1.25" step="0.05" value="1" oninput="setFpvScale(this.value)"></label>
+            <label class="vision-ctl vision-ctl-tight"><span>Refresh</span><input type="range" id="vision-refresh-ms" min="400" max="3000" step="100" value="900" oninput="setVisionRefreshMs(this.value)" title="Snapshot interval"></label>
+          </div>
+          <div class="vision-toolbar-actions">
+            <button type="button" class="btn btn-small vision-btn-primary" onclick="snapshot()">Open snapshot</button>
+            <button type="button" class="btn btn-small btn-ghost" onclick="refreshVisionPanel(true)">Sync telemetry</button>
+            <button type="button" class="btn btn-small btn-ghost" onclick="toggleNightMode()">Night</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="vision-triage" aria-label="Recognition summary">
+        <div class="vision-triage-card vision-triage-event">
+          <span class="vision-triage-label">Event</span>
+          <span class="vision-triage-value" id="vision-event-big">—</span>
+          <span class="vision-triage-sub" id="vision-scene">Awaiting packets…</span>
+        </div>
+        <div class="vision-triage-card vision-triage-class">
+          <span class="vision-triage-label">Classification</span>
+          <span class="vision-triage-value" id="vision-class-big">—</span>
+          <span class="vision-triage-sub" id="vision-colour-line">Colour —</span>
+        </div>
+        <div class="vision-triage-card vision-triage-dist">
+          <span class="vision-triage-label">Distance</span>
+          <span class="vision-triage-value" id="vision-dist-big">—</span>
+          <span class="vision-triage-sub" id="vision-blob-line">Blob —</span>
+        </div>
+      </section>
+
+      <div class="vision-panels-grid">
+        <div class="card vision-card">
+          <div class="card-header vision-card-h">Tracking &amp; motion</div>
+          <div class="card-body vision-metric-grid">
+            <div class="vision-metric"><span class="vm-label">Motion</span><span class="vm-val" id="vision-m-motion">—</span></div>
+            <div class="vision-metric"><span class="vm-label">Intensity</span><span class="vm-val" id="vision-m-int">—</span></div>
+            <div class="vision-metric"><span class="vm-label">Target X/Y</span><span class="vm-val vm-mono" id="vision-m-xy">—</span></div>
+            <div class="vision-metric"><span class="vm-label">Zone</span><span class="vm-val" id="vision-m-zone">—</span></div>
+            <div class="vision-metric"><span class="vm-label">Object size</span><span class="vm-val" id="vision-m-objsz">—</span></div>
+            <div class="vision-metric"><span class="vm-label">BBox W×H</span><span class="vm-val vm-mono" id="vision-m-bbox">—</span></div>
+          </div>
+        </div>
+        <div class="card vision-card">
+          <div class="card-header vision-card-h">Recognition layer</div>
+          <div class="card-body vision-metric-grid">
+            <div class="vision-metric"><span class="vm-label">Class (obj)</span><span class="vm-val" id="vision-m-objclass">—</span></div>
+            <div class="vision-metric"><span class="vm-label">Colour ID</span><span class="vm-val" id="vision-m-colour">—</span></div>
+            <div class="vision-metric"><span class="vm-label">Conf.</span><span class="vm-val" id="vision-m-colourconf">—</span></div>
+            <div class="vision-metric"><span class="vm-label">Blob</span><span class="vm-val" id="vision-m-blobdet">—</span></div>
+            <div class="vision-metric"><span class="vm-label">Blob pos</span><span class="vm-val vm-mono" id="vision-m-blobxy">—</span></div>
+            <div class="vision-metric"><span class="vm-label">Classify</span><span class="vm-val" id="vision-m-classify">—</span></div>
+          </div>
+        </div>
+        <div class="card vision-card vision-card-span">
+          <div class="card-header vision-card-h">Lock &amp; node</div>
+          <div class="card-body vision-metric-grid vision-metric-grid-tight">
+            <div class="vision-metric"><span class="vm-label">Target lock</span><span class="vm-val" id="vision-m-lock">—</span></div>
+            <div class="vision-metric"><span class="vm-label">Lock conf.</span><span class="vm-val" id="vision-m-lockconf">—</span></div>
+            <div class="vision-metric"><span class="vm-label">Vision event</span><span class="vm-val" id="vision-m-vevent">—</span></div>
+            <div class="vision-metric vision-metric-wide"><span class="vm-label">Node IP</span><span class="vm-val vm-mono" id="vision-m-ip">—</span></div>
+            <div class="vision-metric"><span class="vm-label">Engine</span><span class="vm-val" id="vision-m-enabled">—</span></div>
+          </div>
+        </div>
       </div>
     </div>
 
     <!-- AUDIO -->
-    <div class="page" id="page-audio">
-      <div class="card">
-        <div class="card-header">Soundboard</div>
-        <div class="card-body" style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-small" onclick="playSound('beep')">Beep</button>
-          <button class="btn btn-small" onclick="playSound('happy')">Happy</button>
-          <button class="btn btn-small" onclick="playSound('sad')">Sad</button>
-          <button class="btn btn-small" onclick="playSound('curious')">Curious</button>
+    <div class="page more-subpage" id="page-audio">
+      <header class="subpage-head">
+        <div class="subpage-head-main">
+          <p class="subpage-kicker">NODE · AUDIO</p>
+          <h2 class="page-title subpage-title">Audio</h2>
+          <p class="page-lead">Voice commands, soundboard, and output level to the audio node.</p>
         </div>
-      </div>
-      <div class="card">
-        <div class="card-header">Volume</div>
-        <div class="card-body">
-          <input type="range" id="audio-volume" min="0" max="255" value="180" onchange="setVolume(this.value)">
-          <div class="status-row"><span class="label">Level</span><span class="value" id="audio-vol-val">180</span></div>
+      </header>
+      <div class="subpage-deck">
+        <div class="card more-deck-card">
+          <div class="card-header">Voice commands</div>
+          <div class="card-body">
+            <div class="form-group"><label>Speak or type command</label><input type="text" id="voice-cmd" placeholder="e.g. dock, stop, happy" onkeydown="if(event.key==='Enter')sendVoiceCmd()"></div>
+            <button type="button" class="btn btn-small" onclick="sendVoiceCmd()">Send to robot</button>
+            <p class="stat-sub" style="margin-top:8px">Requires /api/audio/command or similar on base.</p>
+          </div>
+        </div>
+        <div class="card more-deck-card">
+          <div class="card-header">Soundboard</div>
+          <div class="card-body soundboard-pad">
+            <button type="button" class="btn btn-small" onclick="playSound('beep')">Beep</button>
+            <button type="button" class="btn btn-small" onclick="playSound('happy')">Happy</button>
+            <button type="button" class="btn btn-small" onclick="playSound('sad')">Sad</button>
+            <button type="button" class="btn btn-small" onclick="playSound('curious')">Curious</button>
+          </div>
+        </div>
+        <div class="card more-deck-card">
+          <div class="card-header">Volume</div>
+          <div class="card-body">
+            <input type="range" id="audio-volume" min="0" max="255" value="180" onchange="setVolume(this.value)">
+            <div class="status-row"><span class="label">Level</span><span class="value" id="audio-vol-val">180</span></div>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- AI / PERSONALITY -->
-    <div class="page" id="page-ai">
-      <div class="card">
-        <div class="card-header">Behaviour Mode</div>
+    <!-- AI / AUTONOMY -->
+    <div class="page more-subpage" id="page-ai">
+      <header class="subpage-head">
+        <div class="subpage-head-main">
+          <p class="subpage-kicker">BRAIN · AUTONOMY</p>
+          <h2 class="page-title subpage-title">AI &amp; autonomy</h2>
+          <p class="page-lead">Unified brain status, assistant chat, behaviour, and personality from the base.</p>
+        </div>
+      </header>
+      <div class="subpage-deck subpage-deck--2col">
+      <div class="card more-deck-card">
+        <div class="card-header">Autonomy &amp; brain</div>
+        <div class="card-body">
+          <div class="ai-brain-strip">
+            <span class="brain-pill" id="ai-pill-unified" title="Unified autonomy state">—</span>
+          </div>
+          <div class="status-row"><span class="label">Autonomy</span><span class="value" id="ai-autonomy-enabled">—</span></div>
+          <div class="status-row"><span class="label">Engine state</span><span class="value" id="ai-autonomy-state">—</span></div>
+          <div class="status-row"><span class="label">Brain (unified)</span><span class="value" id="ai-unified">—</span></div>
+          <div class="status-row"><span class="label">Safety</span><span class="value" id="ai-safety">—</span></div>
+          <div class="status-row"><span class="label">Override</span><span class="value" id="ai-manual">—</span></div>
+          <div class="status-row"><span class="label">Sonar</span><span class="value" id="ai-sonar">—</span></div>
+          <div class="status-row"><span class="label">Interest</span><span class="value" id="ai-interest">—</span></div>
+          <div class="status-row"><span class="label">Heading</span><span class="value" id="ai-heading">—</span></div>
+          <div class="status-row"><span class="label">Emotion</span><span class="value" id="ai-emotion-live">—</span></div>
+          <div class="status-row"><span class="label">Pose</span><span class="value" id="ai-pose-emotion">—</span></div>
+          <div class="status-row"><span class="label">Object seen</span><span class="value" id="ai-object">—</span></div>
+          <div class="status-row"><span class="label">Return home</span><span class="value" id="ai-rth">—</span></div>
+          <div class="status-row"><span class="label">GPS</span><span class="value" id="ai-gps">—</span></div>
+          <div class="status-row"><span class="label">Position</span><span class="value dim" id="ai-gps-detail">—</span></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+            <button type="button" class="btn btn-small" onclick="aiAssistStart()">Start AI</button>
+            <button type="button" class="btn btn-small btn-ghost" onclick="aiAssistStop()">Stop AI</button>
+            <button type="button" class="btn btn-small btn-ghost" onclick="aiAssistTakeOver()">Take over</button>
+            <button type="button" class="btn btn-small" onclick="aiAssistResume()">Resume</button>
+            <button type="button" class="btn btn-small btn-ghost" onclick="setHome()">Set home</button>
+          </div>
+          <p class="stat-sub" style="margin-top:10px">Unified brain runs on the base; use Drive for joystick/tank. Values refresh while this tab is open.</p>
+        </div>
+      </div>
+      <div class="card more-deck-card">
+        <div class="card-header">AI assistant</div>
+        <div class="card-body">
+          <div class="ai-chat-log" id="ai-chat-log">
+            <div class="ai-chat-row bot">WALL-E: Ready. Ask for status or set behaviour.</div>
+          </div>
+          <div class="form-group"><input type="text" id="ai-input" placeholder="Type a command..." onkeydown="if(event.key==='Enter')sendAiChat()"></div>
+          <button type="button" class="btn btn-small" onclick="sendAiChat()">Send</button>
+        </div>
+      </div>
+      <div class="card more-deck-card">
+        <div class="card-header">Behaviour mode</div>
         <div class="card-body">
           <select id="ai-mode" onchange="setBehaviourMode(this.value)">
             <option value="curious">Curious</option><option value="happy">Happy</option><option value="shy">Shy</option>
@@ -198,20 +772,59 @@
           </select>
         </div>
       </div>
-      <div class="card">
-        <div class="card-header">Personality</div>
+      <div class="card more-deck-card">
+        <div class="card-header">Personality (live from base)</div>
         <div class="card-body">
+          <div class="status-row"><span class="label">Curiosity</span><span class="value" id="ai-p-cur">—</span></div>
+          <div class="status-row"><span class="label">Bravery</span><span class="value" id="ai-p-bra">—</span></div>
+          <div class="status-row"><span class="label">Energy</span><span class="value" id="ai-p-nrg">—</span></div>
+          <div class="status-row"><span class="label">Randomness</span><span class="value" id="ai-p-rnd">—</span></div>
+          <p class="stat-sub" style="margin:10px 0 8px">Sliders (local UI; syncs from robot when polling)</p>
           <div class="form-group"><label>Curiosity</label><input type="range" id="ai-curiosity" min="0" max="100" value="50"></div>
           <div class="form-group"><label>Energy</label><input type="range" id="ai-energy" min="0" max="100" value="70"></div>
           <div class="status-row"><span class="label">Learning</span><span class="value"><input type="checkbox" id="ai-learning" checked></span></div>
         </div>
       </div>
+      </div>
     </div>
 
     <!-- MISSIONS -->
-    <div class="page" id="page-missions">
-      <div class="card">
-        <div class="card-header">Mission List</div>
+    <div class="page more-subpage" id="page-missions">
+      <header class="subpage-head">
+        <div class="subpage-head-main">
+          <p class="subpage-kicker">OPS · MISSIONS</p>
+          <h2 class="page-title subpage-title">Missions</h2>
+          <p class="page-lead">Queue missions and run presets — wired when the Brain exposes mission APIs.</p>
+        </div>
+      </header>
+      <div class="subpage-deck">
+      <div class="card more-deck-card">
+        <div class="card-header">New mission</div>
+        <div class="card-body">
+          <div class="form-group"><label>Type</label>
+            <select id="mission-type"><option value="patrol">Patrol</option><option value="waypoint">Waypoint</option><option value="explore">Explore</option><option value="dock">Dock</option></select>
+          </div>
+          <div class="form-group"><label>Repeat</label>
+            <select id="mission-repeat"><option value="once">Once</option><option value="daily">Daily</option><option value="weekly">Weekly</option></select>
+          </div>
+          <button type="button" class="btn btn-small" onclick="queueMission()">Add to queue</button>
+        </div>
+      </div>
+      <div class="card more-deck-card">
+        <div class="card-header">Queue</div>
+        <div class="card-body" id="mission-queue"><div class="log-item value dim">Empty</div></div>
+      </div>
+      <div class="card more-deck-card">
+        <div class="card-header">Timeline</div>
+        <div class="card-body">
+          <div class="mission-timeline">
+            <div class="step">Boot</div>
+            <div class="step">Awaiting mission API</div>
+          </div>
+        </div>
+      </div>
+      <div class="card more-deck-card">
+        <div class="card-header">Presets</div>
         <div class="card-body">
           <div id="mission-list">
             <div class="status-row"><span class="label">Patrol</span><button class="btn btn-small" onclick="runMission('patrol')">Run</button></div>
@@ -219,172 +832,489 @@
           </div>
         </div>
       </div>
+      </div>
     </div>
 
     <!-- TELEMETRY -->
-    <div class="page" id="page-telemetry">
-      <div class="card">
-        <div class="card-header">IMU</div>
+    <div class="page more-subpage" id="page-telemetry">
+      <header class="subpage-head">
+        <div class="subpage-head-main">
+          <p class="subpage-kicker">SENSORS · TELEMETRY</p>
+          <h2 class="page-title subpage-title">Telemetry</h2>
+          <p class="page-lead">IMU, sonar, and GPS — refreshed with the main status poll.</p>
+        </div>
+      </header>
+      <div class="subpage-deck subpage-deck--2col">
+      <div class="card more-deck-card">
+        <div class="card-header">IMU (live)</div>
         <div class="card-body">
           <div class="status-row"><span class="label">Heading</span><span class="value" id="tel-heading">-</span></div>
           <div class="status-row"><span class="label">Pitch/Roll</span><span class="value" id="tel-orient">-</span></div>
+          <canvas id="spark-imu" class="spark-wrap" width="300" height="48"></canvas>
           <button class="btn btn-small btn-ghost" onclick="apiCall('/imu/recalibrate')">Recalibrate</button>
         </div>
       </div>
-      <div class="card">
+      <div class="card more-deck-card">
         <div class="card-header">Obstacle Sensors</div>
         <div class="card-body">
           <div class="status-row"><span class="label">Sonar</span><span class="value" id="tel-sonar">-</span></div>
           <div class="progress-bar" style="margin:8px 0"><div class="progress-fill" id="tel-sonar-bar" style="width:100%"></div></div>
+          <div class="spark-label">Last ~30s @ poll</div>
+          <canvas id="spark-sonar" class="spark-wrap" width="300" height="40"></canvas>
         </div>
       </div>
-      <div class="card">
+      <div class="card more-deck-card">
         <div class="card-header">GPS</div>
         <div class="card-body">
           <div class="status-row"><span class="label">Fix</span><span class="value" id="tel-gps">-</span></div>
           <div class="status-row"><span class="label">Satellites</span><span class="value" id="tel-sats">-</span></div>
         </div>
       </div>
+      </div>
     </div>
 
     <!-- POWER -->
-    <div class="page" id="page-power">
-      <div class="card">
+    <div class="page more-subpage" id="page-power">
+      <header class="subpage-head">
+        <div class="subpage-head-main">
+          <p class="subpage-kicker">ENERGY · POWER</p>
+          <h2 class="page-title subpage-title">Power</h2>
+          <p class="page-lead">Battery detail, trend sparkline, and low-power sleep when supported.</p>
+        </div>
+      </header>
+      <div class="subpage-deck subpage-deck--2col">
+      <div class="card more-deck-card">
         <div class="card-header">Battery</div>
         <div class="card-body">
           <div class="status-row"><span class="label">Voltage</span><span class="value" id="pwr-voltage">-</span></div>
           <div class="status-row"><span class="label">Est. runtime</span><span class="value" id="pwr-runtime">-</span></div>
           <div class="progress-bar" style="margin:8px 0"><div class="progress-fill" id="pwr-bar" style="width:80%"></div></div>
+          <div class="spark-label">Battery % (last ~30s)</div>
+          <canvas id="spark-batt" class="spark-wrap" width="300" height="40"></canvas>
         </div>
       </div>
-      <div class="card">
+      <div class="card more-deck-card">
         <div class="card-header">Sleep</div>
         <div class="card-body">
           <button class="btn btn-ghost" onclick="apiCall('/api/sleep')">Enter Sleep</button>
         </div>
       </div>
+      </div>
     </div>
 
-    <!-- NETWORK -->
-    <div class="page" id="page-network">
-      <div class="card">
-        <div class="card-header">Network Topology</div>
-        <div class="card-body" style="padding:12px">
-          <svg class="topology-svg" id="topology-svg" viewBox="0 0 320 160">
-            <rect width="320" height="160" fill="var(--surface)"/>
-            <circle cx="160" cy="50" r="24" fill="var(--surface2)" stroke="var(--accent)" stroke-width="2"/>
-            <text x="160" y="55" text-anchor="middle" fill="var(--txt)" font-size="10">WALL-E</text>
-            <line x1="120" y1="74" x2="80" y2="120" stroke="var(--border2)" stroke-width="2"/>
-            <line x1="160" y1="74" x2="160" y2="120" stroke="var(--border2)" stroke-width="2"/>
-            <line x1="200" y1="74" x2="240" y2="120" stroke="var(--border2)" stroke-width="2"/>
-            <circle cx="80" cy="130" r="18" fill="var(--surface2)" stroke="var(--ok)" stroke-width="1"/>
-            <text x="80" y="135" text-anchor="middle" fill="var(--txt)" font-size="8">Dock</text>
-            <circle cx="160" cy="130" r="18" fill="var(--surface2)" stroke="var(--ok)" stroke-width="1"/>
-            <text x="160" y="135" text-anchor="middle" fill="var(--txt)" font-size="8">CYD</text>
-            <circle cx="240" cy="130" r="18" fill="var(--surface2)" stroke="var(--txt-dim)" stroke-width="1"/>
-            <text x="240" y="135" text-anchor="middle" fill="var(--txt-dim)" font-size="8">Vision</text>
-          </svg>
+    <!-- NETWORK — Fleet uplink console -->
+    <div class="page net-page" id="page-network" data-net-state="ap">
+      <header class="page-head net-page-head">
+        <p class="net-page-kicker">BnL · Fleet communications</p>
+        <h2 class="page-title">Network</h2>
+        <p class="page-lead">Live uplink, mesh topology, and provisioning — same backbone as the CYD console.</p>
+      </header>
+
+      <section class="net-hero" aria-labelledby="net-hero-title">
+        <div class="net-hero-bg" aria-hidden="true"></div>
+        <div class="net-hero-scan" aria-hidden="true"></div>
+        <div class="net-hero-inner">
+          <div class="net-hero-orbit" id="net-hero-orbit" data-link="ap" aria-hidden="true">
+            <span class="net-hero-core"></span>
+            <span class="net-hero-ring net-hero-ring--1"></span>
+            <span class="net-hero-ring net-hero-ring--2"></span>
+            <span class="net-hero-ring net-hero-ring--3"></span>
+          </div>
+          <div class="net-hero-copy">
+            <p class="net-hero-label" id="net-hero-title">Uplink</p>
+            <p class="net-hero-state" id="net-hero-state">Access point</p>
+            <p class="net-hero-sub" id="net-hero-sub">Broadcasting operator SSID — join to configure STA</p>
+            <div class="net-hero-metrics">
+              <div class="net-metric">
+                <span class="net-metric-lbl">RSSI (STA)</span>
+                <span class="net-metric-val mono" id="net-rssi-hero">—</span>
+              </div>
+              <div class="net-metric">
+                <span class="net-metric-lbl">Station IPv4</span>
+                <span class="net-metric-val mono" id="net-hero-ip">—</span>
+              </div>
+            </div>
+            <div class="net-rssi-track" role="progressbar" aria-label="Signal strength" aria-valuemin="-100" aria-valuemax="-30" aria-valuenow="-80" id="net-rssi-track">
+              <div class="net-rssi-fill" id="net-rssi-hero-bar" style="width:0%"></div>
+            </div>
+            <p class="net-rssi-caption" id="net-rssi-caption">No STA link — RSSI shown when connected</p>
+          </div>
+        </div>
+      </section>
+
+      <div class="net-split">
+        <div class="card net-glass-card net-topology-card">
+          <div class="card-header net-card-head">
+            <span>Fleet topology</span>
+            <span class="net-chip net-chip--dim" id="net-topo-chip">Mesh</span>
+          </div>
+          <div class="card-body net-topology-body">
+            <svg class="net-topology-svg" id="topology-svg" viewBox="0 0 360 200" xmlns="http://www.w3.org/2000/svg" aria-label="Fleet topology diagram">
+              <defs>
+                <linearGradient id="net-glow" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" style="stop-color:var(--accent);stop-opacity:0.35"/>
+                  <stop offset="100%" style="stop-color:var(--rust);stop-opacity:0.08"/>
+                </linearGradient>
+                <filter id="net-blur" x="-20%" y="-20%" width="140%" height="140%">
+                  <feGaussianBlur stdDeviation="1.2" result="b"/>
+                  <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+                </filter>
+              </defs>
+              <rect width="360" height="200" class="net-topo-bg"/>
+              <g class="net-topo-links" stroke="var(--border2)" fill="none" stroke-width="1.5" stroke-linecap="round">
+                <path class="net-link net-link--a" d="M 130 78 L 72 148"/>
+                <path class="net-link net-link--b" d="M 180 72 L 180 148"/>
+                <path class="net-link net-link--c" d="M 230 78 L 288 148"/>
+              </g>
+              <g class="net-topo-nodes">
+                <circle cx="180" cy="48" r="28" class="net-node net-node--hub"/>
+                <text x="180" y="52" text-anchor="middle" class="net-node-txt">BASE</text>
+                <text x="180" y="64" text-anchor="middle" class="net-node-sub">WALL·E</text>
+                <circle cx="72" cy="158" r="22" class="net-node net-node--ok"/>
+                <text x="72" y="162" text-anchor="middle" class="net-node-lbl">Dock</text>
+                <circle cx="180" cy="158" r="22" class="net-node net-node--ok"/>
+                <text x="180" y="162" text-anchor="middle" class="net-node-lbl">CYD</text>
+                <circle cx="288" cy="158" r="22" class="net-node net-node--dim"/>
+                <text x="288" y="162" text-anchor="middle" class="net-node-lbl">Vision</text>
+              </g>
+            </svg>
+          </div>
+        </div>
+
+        <div class="net-spec-col">
+          <div class="card net-glass-card">
+            <div class="card-header net-card-head">
+              <span>Access point</span>
+              <span class="net-chip net-chip--live">Always on</span>
+            </div>
+            <div class="card-body">
+              <div class="net-spec-row"><span class="net-spec-k">SSID</span><span class="net-spec-v mono" id="net-ap">WALL-E-Control</span></div>
+              <div class="net-spec-row"><span class="net-spec-k">IPv4</span><span class="net-spec-v mono" id="net-ap-ip">—</span></div>
+              <div class="net-spec-row"><span class="net-spec-k">Clients</span><span class="net-spec-v mono" id="net-ap-clients">0</span></div>
+            </div>
+          </div>
+          <div class="card net-glass-card">
+            <div class="card-header net-card-head">
+              <span>Station (home)</span>
+              <span class="net-chip" id="net-sta-chip">STA</span>
+            </div>
+            <div class="card-body">
+              <div class="net-spec-row"><span class="net-spec-k">SSID</span><span class="net-spec-v mono" id="net-sta">Not connected</span></div>
+              <div class="net-spec-row"><span class="net-spec-k">IPv4</span><span class="net-spec-v mono" id="net-sta-ip">—</span></div>
+              <button type="button" class="btn btn-small net-btn-provision" onclick="showNetworkForm()">Provision STA link</button>
+            </div>
+          </div>
         </div>
       </div>
-      <div class="card">
-        <div class="card-header">Wi‑Fi Status</div>
-        <div class="card-body">
-          <div class="status-row"><span class="label">AP</span><span class="value" id="net-ap">WALL-E-Control</span></div>
-          <div class="status-row"><span class="label">Home</span><span class="value dim" id="net-sta">Not connected</span></div>
-          <button class="btn btn-small" onclick="showNetworkForm()">Connect to network</button>
+
+      <div class="card net-glass-card net-mission-card" id="network-form-card" style="display:none">
+        <div class="card-header net-card-head">
+          <span>Provisioning</span>
+          <span class="net-chip net-chip--warn">Credentials</span>
         </div>
-      </div>
-      <div class="card" id="network-form-card" style="display:none">
-        <div class="card-header">Connect</div>
         <div class="card-body">
-          <div class="form-group"><label>Network</label><input type="text" id="net-ssid" placeholder="SSID"></div>
-          <div class="form-group"><label>Password</label><input type="password" id="net-pass" placeholder="Password"></div>
-          <div id="network-list" class="net-list"></div>
-          <button class="btn btn-small btn-ghost" onclick="doScan()" style="margin-bottom:8px">Scan</button>
-          <button class="btn" onclick="doConnect()">Connect</button>
+          <p class="net-mission-lead">Scan for SSIDs, select a row, then transmit credentials to the base radio.</p>
+          <div class="form-group"><label for="net-ssid">Network (SSID)</label><input type="text" id="net-ssid" placeholder="SSID" autocomplete="off"></div>
+          <div class="form-group"><label for="net-pass">Password</label><input type="password" id="net-pass" placeholder="Password" autocomplete="off"></div>
+          <div id="network-list" class="net-list net-list--rich"></div>
+          <div class="net-mission-actions">
+            <button type="button" class="btn btn-small btn-ghost" onclick="doScan()">Scan airspace</button>
+            <button type="button" class="btn" id="net-connect-btn" onclick="doConnect()">Establish link</button>
+          </div>
         </div>
       </div>
     </div>
 
     <!-- FILES -->
-    <div class="page" id="page-files">
-      <div class="card">
-        <div class="card-header">Storage</div>
-        <div class="card-body">
-          <div id="file-list" class="log-list">
-            <div class="log-item value dim">No file API - use /api/files/list</div>
+    <div class="page more-subpage" id="page-files">
+      <header class="subpage-head">
+        <div class="subpage-head-main">
+          <p class="subpage-kicker">STORAGE · FILES</p>
+          <h2 class="page-title subpage-title">Files</h2>
+          <p class="page-lead">Onboard storage listing when <span class="mono">/api/files/list</span> is enabled.</p>
+        </div>
+      </header>
+      <div class="subpage-deck">
+        <div class="card more-deck-card">
+          <div class="card-header">Storage</div>
+          <div class="card-body">
+            <div id="file-list" class="log-list">
+              <div class="log-item value dim">No file API - use /api/files/list</div>
+            </div>
+            <button type="button" class="btn btn-small" onclick="refreshFiles()" style="margin-top:8px">Refresh</button>
           </div>
-          <button class="btn btn-small" onclick="refreshFiles()" style="margin-top:8px">Refresh</button>
         </div>
       </div>
     </div>
 
     <!-- SAFETY -->
-    <div class="page" id="page-safety">
-      <div class="card">
+    <div class="page more-subpage" id="page-safety">
+      <header class="subpage-head">
+        <div class="subpage-head-main">
+          <p class="subpage-kicker">OPS · SAFETY</p>
+          <h2 class="page-title subpage-title">Safety</h2>
+          <p class="page-lead">Emergency stop and policy toggles — use E-STOP in the bar for immediate cut.</p>
+        </div>
+      </header>
+      <div class="subpage-deck">
+      <div class="card more-deck-card">
         <div class="card-header">Emergency</div>
         <div class="card-body">
           <button class="btn btn-stop" onclick="doEStop()">Emergency Stop</button>
         </div>
       </div>
-      <div class="card">
+      <div class="card more-deck-card">
         <div class="card-header">Safety</div>
         <div class="card-body">
           <div class="status-row"><span class="label">Child-safe</span><span class="value"><input type="checkbox" id="safety-child"></span></div>
-          <div class="status-row"><span class="label">Geo-fence</span><span class="value dim">-</span></div>
+          <p class="stat-sub" style="margin:0">Geo-fence is configured in the panel below (browser only until firmware adds enforcement).</p>
         </div>
+      </div>
+      <div class="card more-deck-card" id="geofence-card">
+        <div class="card-header">Geo-fence</div>
+        <div class="card-body geofence-panel">
+          <p class="geofence-lead">Circular boundary from a center point. Uses live GPS from <span class="mono">/api/autonomy</span> (same as Navigation). Settings are stored in this browser.</p>
+          <div class="form-group geofence-row">
+            <label class="geofence-check"><input type="checkbox" id="geofence-enabled"> Enable geo-fence monitoring</label>
+          </div>
+          <div class="geofence-grid">
+            <div class="form-group"><label for="geofence-lat">Center latitude</label><input type="number" id="geofence-lat" step="any" placeholder="e.g. 37.7749"></div>
+            <div class="form-group"><label for="geofence-lon">Center longitude</label><input type="number" id="geofence-lon" step="any" placeholder="-122.4194"></div>
+          </div>
+          <div class="form-group">
+            <label for="geofence-radius">Radius <span class="geofence-readout" id="geofence-radius-readout">50 m</span></label>
+            <input type="range" id="geofence-radius" min="5" max="5000" value="50" step="5">
+          </div>
+          <div class="geofence-grid">
+            <div class="form-group"><label for="geofence-margin">Inner margin (buffer)</label><input type="number" id="geofence-margin" min="0" max="500" value="2" step="1" title="Shrinks the allowed disk inward (m)"></div>
+            <div class="form-group"><label for="geofence-mode">When outside boundary</label>
+              <select id="geofence-mode">
+                <option value="warn">Banner warning</option>
+                <option value="soft">Banner + activity log</option>
+                <option value="estop">E-STOP (HTTP /stop)</option>
+              </select>
+            </div>
+          </div>
+          <div class="geofence-actions">
+            <button type="button" class="btn btn-small" id="geofence-use-gps" onclick="geofenceUseRobotGps()">Use robot GPS as center</button>
+            <button type="button" class="btn btn-small btn-ghost" onclick="geofenceSave()">Save</button>
+            <button type="button" class="btn btn-small btn-ghost" onclick="geofenceResetDefaults()">Defaults</button>
+          </div>
+          <div class="geofence-status" id="geofence-status" role="status">
+            <span class="geofence-pill" id="geofence-pill">Off</span>
+            <span class="geofence-detail" id="geofence-detail">—</span>
+          </div>
+        </div>
+      </div>
       </div>
     </div>
 
     <!-- LOGS -->
-    <div class="page" id="page-logs">
-      <div class="card">
-        <div class="card-header">Activity Timeline</div>
+    <div class="page more-subpage" id="page-logs">
+      <header class="subpage-head">
+        <div class="subpage-head-main">
+          <p class="subpage-kicker">DIAG · LOGS</p>
+          <h2 class="page-title subpage-title">Logs</h2>
+          <p class="page-lead">Filter by category and severity, then export for debugging.</p>
+        </div>
+      </header>
+      <div class="subpage-deck">
+      <div class="card more-deck-card">
+        <div class="card-header">System logs</div>
         <div class="card-body">
+          <div class="log-filters">
+            <select id="log-cat" onchange="filterLogs()">
+              <option value="all">All</option><option value="system">System</option><option value="nav">Navigation</option>
+              <option value="ai">AI</option><option value="sensor">Sensor</option><option value="safety">Safety</option>
+              <option value="network">Network</option><option value="user">User</option>
+            </select>
+            <select id="log-sev" onchange="filterLogs()">
+              <option value="all">Any severity</option><option value="info">Info</option><option value="warn">Warning</option>
+              <option value="error">Error</option><option value="critical">Critical</option>
+            </select>
+            <button type="button" class="btn btn-small btn-ghost" onclick="exportLogs()">Export</button>
+          </div>
           <div id="log-list" class="log-list">
-            <div class="log-item"><span class="log-time">--:--</span>System ready</div>
+            <div class="log-item" data-cat="system" data-sev="info"><span class="log-time">--:--</span>[info] System ready</div>
+          </div>
+        </div>
+      </div>
+      </div>
+    </div>
+
+    <!-- SECURITY -->
+    <div class="page more-subpage" id="page-security">
+      <header class="subpage-head">
+        <div class="subpage-head-main">
+          <p class="subpage-kicker">ACCESS · SECURITY</p>
+          <h2 class="page-title subpage-title">Security</h2>
+          <p class="page-lead">Trusted devices and access rules when the firmware adds pairing.</p>
+        </div>
+      </header>
+      <div class="subpage-deck subpage-deck--2col">
+        <div class="card more-deck-card">
+          <div class="card-header">Access</div>
+          <div class="card-body">
+            <div class="status-row"><span class="label">Trusted devices</span><span class="value dim" id="sec-trusted-readout">None (firmware pairing TBD)</span></div>
+            <button type="button" class="btn btn-small btn-ghost" disabled title="Coming soon">Add device</button>
+            <p class="stat-sub" style="margin-top:10px">Pairing and MAC allowlists will bind to the base when exposed on <span class="mono">/api/security</span>.</p>
+          </div>
+        </div>
+        <div class="card more-deck-card">
+          <div class="card-header">Policies</div>
+          <div class="card-body">
+            <div class="status-row"><span class="label">Local console</span><span class="value dim">This browser session</span></div>
+            <div class="status-row"><span class="label">API auth</span><span class="value dim">Open (AP / LAN)</span></div>
+            <div class="status-row"><span class="label">OTA / keys</span><span class="value dim">Configure on device</span></div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- SECURITY -->
-    <div class="page" id="page-security">
-      <div class="card">
-        <div class="card-header">Access</div>
-        <div class="card-body">
-          <div class="status-row"><span class="label">Trusted devices</span><span class="value dim">-</span></div>
-          <button class="btn btn-small btn-ghost">Add device</button>
+    <!-- SETTINGS -->
+    <div class="page more-subpage" id="page-settings">
+      <header class="subpage-head">
+        <div class="subpage-head-main">
+          <p class="subpage-kicker">CONSOLE · SETTINGS</p>
+          <h2 class="page-title subpage-title">Console settings</h2>
+          <p class="page-lead">Connection targets, drive limits, and how this browser UI behaves. Stored locally except speed profile (robot).</p>
+        </div>
+      </header>
+
+      <div class="settings-layout">
+        <div class="card settings-feature more-deck-card">
+          <div class="card-header">Connection</div>
+          <div class="card-body settings-section">
+            <div class="form-group"><label for="set-base-url">Base URL</label><input type="text" id="set-base-url" placeholder="http://192.168.4.1" autocomplete="url"><span class="field-hint">Empty = same origin as this page.</span></div>
+            <div class="form-group"><label for="set-ws-url">WebSocket</label><input type="text" id="set-ws-url" placeholder="ws://192.168.4.1/ws" autocomplete="off"><span class="field-hint">Optional telemetry / command stream.</span></div>
+            <div class="settings-btn-row">
+              <button type="button" class="btn btn-small" onclick="applySettings()">Apply &amp; reconnect</button>
+              <button type="button" class="btn btn-small btn-ghost" onclick="testConnectionPing()">Test HTTP</button>
+              <button type="button" class="btn btn-small btn-ghost" onclick="copyBaseUrl()">Copy base URL</button>
+            </div>
+            <div class="settings-ping" id="settings-ping" role="status"></div>
+          </div>
+        </div>
+
+        <div class="card settings-feature">
+          <div class="card-header">Drive limits (robot)</div>
+          <div class="card-body">
+            <p class="stat-sub" style="margin:0 0 10px">Maps to <span class="mono">/settings</span> · max motor command cap.</p>
+            <div class="form-group"><label for="set-speed-profile">Speed profile</label>
+              <select id="set-speed-profile" onchange="applySpeedFromSettings()">
+                <option value="low">Low (128)</option>
+                <option value="normal" selected>Normal (200)</option>
+                <option value="high">High (255)</option>
+              </select>
+            </div>
+            <div class="status-row"><span class="label">Current max</span><span class="value mono" id="set-max-speed-readout">—</span></div>
+          </div>
+        </div>
+
+        <div class="card settings-feature more-deck-card">
+          <div class="card-header">Display &amp; comfort</div>
+          <div class="card-body">
+            <label class="settings-check"><input type="checkbox" id="set-dense"> <strong>Dense layout</strong> — tighter spacing on large screens.</label>
+            <label class="settings-check"><input type="checkbox" id="set-reduced-motion"> <strong>Reduce motion</strong> — fewer transitions.</label>
+            <div class="form-group" style="margin-top:12px"><label for="set-ui-scale">UI scale</label>
+              <select id="set-ui-scale">
+                <option value="1">Default</option>
+                <option value="1.05">105%</option>
+                <option value="1.1">110%</option>
+              </select>
+            </div>
+            <button type="button" class="btn btn-small" onclick="saveUiPreferences()">Save display prefs</button>
+          </div>
+        </div>
+
+        <div class="card settings-feature more-deck-card">
+          <div class="card-header">Nodes snapshot</div>
+          <div class="card-body">
+            <p class="stat-sub" style="margin:0 0 10px">Same fleet pills as the top strip; useful when tuning Wi‑Fi.</p>
+            <div class="settings-node-grid" aria-label="Node status">
+              <span class="node-pill off" data-pill="base">BASE</span>
+              <span class="node-pill off" data-pill="master">CYD</span>
+              <span class="node-pill off" data-pill="audio">AUD</span>
+              <span class="node-pill off" data-pill="dock">DOCK</span>
+              <span class="node-pill off" data-pill="vision">VIS</span>
+            </div>
+            <p class="stat-sub" id="settings-node-updated">Updated with <span class="mono">/api/system/health</span>.</p>
+          </div>
+        </div>
+
+        <div class="card settings-feature settings-wide more-deck-card">
+          <div class="card-header">About</div>
+          <div class="card-body">
+            <div class="status-row"><span class="label">Console</span><span class="value">WALL-E LROS web</span></div>
+            <div class="status-row"><span class="label">Storage</span><span class="value dim" id="settings-ls-hint">localStorage for URLs &amp; UI</span></div>
+            <button type="button" class="btn btn-small btn-ghost" onclick="restoreDismissedPanels()">Restore hidden panels</button>
+            <button type="button" class="btn btn-small btn-ghost" onclick="clearLocalConsolePrefs()">Reset local UI prefs</button>
+          </div>
         </div>
       </div>
     </div>
 
     <!-- DEVELOPER -->
-    <div class="page" id="page-developer">
-      <div class="card">
-        <div class="card-header">API Endpoints</div>
-        <div class="card-body" style="font-size:0.75rem;font-family:monospace">
-          <div>/drive?left=&right=</div><div>/stop</div><div>/speed?value=</div><div>/wifi/status</div><div>/wifi/scan</div><div>/wifi/connect</div>
-          <div>/api/autonomy</div><div>/api/autonomy/enable</div><div>/api/autonomy/set_home</div>
-          <div>/imu/status</div><div>/battery/status</div><div>/servo/set</div><div>/settings</div>
+    <div class="page more-subpage" id="page-developer">
+      <header class="subpage-head">
+        <div class="subpage-head-main">
+          <p class="subpage-kicker">DEV · TOOLS</p>
+          <h2 class="page-title subpage-title">Developer</h2>
+          <p class="page-lead">Diagnostics, simulated console, API reference, and raw HTTP GET helper.</p>
         </div>
-      </div>
-      <div class="card">
-        <div class="card-header">Raw Command</div>
-        <div class="card-body">
-          <input type="text" id="dev-cmd" placeholder="/api/autonomy" style="margin-bottom:8px">
-          <button class="btn btn-small" onclick="devFetch()">GET</button>
+      </header>
+      <div class="subpage-deck subpage-deck--2col">
+        <div class="card more-deck-card">
+          <div class="card-header">Hardware diagnostics</div>
+          <div class="card-body">
+            <div class="status-row"><span class="label">MCU</span><span class="value dim">ESP32-S3 (client)</span></div>
+            <div class="status-row"><span class="label">Firmware</span><span class="value dim" id="dev-fw">—</span></div>
+          </div>
+        </div>
+        <div class="card more-deck-card">
+          <div class="card-header">Serial console (simulated)</div>
+          <div class="card-body">
+            <div class="dev-console" id="dev-console"></div>
+            <button type="button" class="btn btn-small" onclick="devConsoleSim()">Add line</button>
+          </div>
+        </div>
+        <div class="card more-deck-card subpage-card-span">
+          <div class="card-header">API endpoints</div>
+          <div class="card-body">
+            <div class="dev-api-grid" aria-label="Common REST paths">
+              <code>/drive?left=&amp;right=</code><code>/stop</code><code>/speed?value=</code><code>/wifi/status</code><code>/wifi/scan</code><code>/wifi/connect</code>
+              <code>/api/autonomy</code><code>/api/autonomy/enable</code><code>/api/autonomy/set_home</code>
+              <code>/api/navigation/route</code><code>/api/navigation/status</code><code>/api/navigation/stop</code>
+              <code>/imu/status</code><code>/battery/status</code><code>/servo/set</code><code>/settings</code>
+            </div>
+          </div>
+        </div>
+        <div class="card more-deck-card subpage-card-span">
+          <div class="card-header">Raw command</div>
+          <div class="card-body">
+            <div class="dev-raw-row">
+              <input type="text" id="dev-cmd" placeholder="/api/autonomy" autocomplete="off">
+              <button type="button" class="btn btn-small" onclick="devFetch()">GET</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
 
     <!-- MORE (nav grid) -->
-    <div class="page" id="page-more">
-      <div class="nav-grid">
+    <div class="page more-hub-page" id="page-more">
+      <header class="subpage-head">
+        <div class="subpage-head-main">
+          <p class="subpage-kicker">LROS · MENU</p>
+          <h2 class="page-title subpage-title">More</h2>
+          <p class="page-lead">Secondary screens — navigation, vision, audio, AI, missions, telemetry, power, and tools.</p>
+        </div>
+      </header>
+      <div class="nav-grid more-hub-grid">
         <a class="nav-tile" href="#" onclick="switchTab('navigation');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>Navigation</a>
         <a class="nav-tile" href="#" onclick="switchTab('vision');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>Vision</a>
         <a class="nav-tile" href="#" onclick="switchTab('audio');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>Audio</a>
-        <a class="nav-tile" href="#" onclick="switchTab('ai');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 2a10 10 0 0 1 10 10c0 5.5-4.5 10-10 10S2 17.5 2 12 6.5 2 12 2z"/><circle cx="12" cy="12" r="2"/></svg>AI</a>
+        <a class="nav-tile" href="#" onclick="switchTab('ai');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 2a10 10 0 0 1 10 10c0 5.5-4.5 10-10 10S2 17.5 2 12 6.5 2 12 2z"/><circle cx="12" cy="12" r="2"/></svg>AI &amp; Auto</a>
         <a class="nav-tile" href="#" onclick="switchTab('missions');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Missions</a>
         <a class="nav-tile" href="#" onclick="switchTab('telemetry');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>Telemetry</a>
         <a class="nav-tile" href="#" onclick="switchTab('power');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>Power</a>
@@ -393,17 +1323,33 @@
         <a class="nav-tile" href="#" onclick="switchTab('logs');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>Logs</a>
         <a class="nav-tile" href="#" onclick="switchTab('security');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Security</a>
         <a class="nav-tile" href="#" onclick="switchTab('developer');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>Developer</a>
+        <a class="nav-tile" href="#" onclick="switchTab('settings');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2"/></svg>Settings</a>
       </div>
     </div>
   </main>
 
   <footer id="estop-bar">
-    <button id="estop-btn" type="button" onclick="doEStop()">E-STOP</button>
+    <span class="estop-hint">Hold to stop · releases motors</span>
+    <button id="estop-btn" type="button" aria-label="Hold to emergency stop">E-STOP</button>
   </footer>
+</div>
+
+<div id="feedback-toast" class="feedback-toast" role="status" aria-live="polite"></div>
+
+<div id="command-hud" class="command-hud" aria-live="polite">
+  <span class="hud-pill" id="hud-latency" title="Last command RTT">— ms</span>
+  <span class="hud-pill hud-cmd" id="hud-last-cmd" title="Last API command">Ready</span>
+  <span class="hud-pill" id="hud-queue" title="Commands in flight">In flight: 0</span>
 </div>
 
 <div id="toast-stack" aria-live="polite"></div>
 
+<script src="js/walleConnection.js"></script>
+<script src="js/pathPlanner.js"></script>
+<script src="js/proximityAlert.js"></script>
+<script src="js/navWorldContext.js"></script>
+<script src="js/lros-navigation.js"></script>
+<script src="js/navMissionPanel.js"></script>
 <script src="js/lros.js"></script>
 </body>
 </html>

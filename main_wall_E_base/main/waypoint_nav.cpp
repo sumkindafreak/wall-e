@@ -136,6 +136,11 @@ void waypointClearAll() {
     s_waypoints[i].active = false;
   }
   s_waypointCount = 0;
+  s_navState.currentWaypointIndex = 0;
+  s_navState.waypointActive = false;
+  s_navState.navigationActive = false;
+  s_navState.distanceToWaypoint = 0.0f;
+  s_navState.bearingToWaypoint = 0.0f;
   Serial.println(F("[Waypoint] Cleared all"));
 }
 

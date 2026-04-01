@@ -37,6 +37,9 @@ static uint32_t g_clear_since = 0;              /* Clear this long in CHARGING �
 static uint32_t g_obstacles_clear_since = 0;   /* No obstacles this long → robot left (NOT_DOCKED) */
 static uint32_t g_beam_broken_since = 0;   /* Beam broken debounce: NOT_DOCKED -> DOCKED_IDLE */
 static uint32_t g_beam_clear_since = 0;    /* Beam clear debounce: docked -> NOT_DOCKED */
+static uint32_t g_boot_started_at = 0;     /* BOOT settle timer */
+static bool     g_bay_idle = false;        /* NOT_DOCKED + quiet for BAY_IDLE_AFTER_MS */
+static uint32_t g_quiet_bay_since = 0;     /* When !beam in NOT_DOCKED started */
 
 DockState dockStateGet(void) {
   return g_state;
@@ -79,9 +82,35 @@ bool dockIsIdleMode(void) {
   return g_idle_mode;
 }
 
+bool dockIsBayIdle(void) {
+  return g_bay_idle;
+}
+
+void dockStateClearBayIdle(void) {
+  g_bay_idle = false;
+  g_quiet_bay_since = 0;
+}
+
+const char* dockStateNameForSerial(void) {
+  switch (g_state) {
+    case STATE_BOOT: return "BOOT";
+    case STATE_NOT_DOCKED: return g_bay_idle ? "STANDBY" : "NOT_DOCKED";
+    case STATE_DOCKED_IDLE: return "DOCKED_IDLE";
+    case STATE_CHARGING: return "CHARGING";
+    case STATE_CHARGED: return "CHARGED";
+    case STATE_FAULT: return "FAULT";
+    default: return "?";
+  }
+}
+
 bool dockStateUpdate(void) {
   DockState prev = g_state;
-  bool beam = dockDockDetected();  /* beam or sonar fallback when USE_SONAR */
+  bool beam = dockRobotInSlot();  /* ToF/mouth only — PIR excluded so DOCKED_IDLE does not flicker with motion */
+
+  if (g_state != STATE_NOT_DOCKED) {
+    g_bay_idle = false;
+    g_quiet_bay_since = 0;
+  }
   /* Charging only when at least OBSTACLES_REQUIRED_FOR_CHARGE (e.g. 3) obstacles blocked */
   bool blocked = dockAtLeastNObstaclesBlocked(OBSTACLES_REQUIRED_FOR_CHARGE);
   float i = dockCurrentAmps();
@@ -98,8 +127,15 @@ bool dockStateUpdate(void) {
   }
 #endif
 
-  /* --- STATE_BOOT: transition to NOT_DOCKED after first sensor read --- */
+  /* --- STATE_BOOT: wait BOOT_SETTLE_MS for sensors, then pick DOCKED_IDLE vs NOT_DOCKED --- */
   if (g_state == STATE_BOOT) {
+    uint32_t tnow = millis();
+    if (g_boot_started_at == 0) {
+      g_boot_started_at = tnow;
+    }
+    if ((BOOT_SETTLE_MS > 0) && ((tnow - g_boot_started_at) < (uint32_t)BOOT_SETTLE_MS)) {
+      return false;
+    }
     setState(beam ? STATE_DOCKED_IDLE : STATE_NOT_DOCKED);
     if (beam) {
       g_dock_detected_at = millis();
@@ -109,19 +145,33 @@ bool dockStateUpdate(void) {
 
   /* --- STATE_NOT_DOCKED --- */
   if (g_state == STATE_NOT_DOCKED) {
+    uint32_t now = millis();
     g_charge_enabled = false;
     g_charge_requested = false;
     g_idle_mode = false;
     g_beam_clear_since = 0;
     dockChargeGateWrite(false);
+#if (BAY_IDLE_AFTER_MS > 0)
+    if (!beam) {
+      if (g_quiet_bay_since == 0) {
+        g_quiet_bay_since = now;
+      } else if ((now - g_quiet_bay_since) >= (uint32_t)BAY_IDLE_AFTER_MS) {
+        g_bay_idle = true;
+      }
+    } else {
+      g_quiet_bay_since = 0;
+      g_bay_idle = false;
+    }
+#endif
     if (beam) {
-      uint32_t now = millis();
       if (g_beam_broken_since == 0)
         g_beam_broken_since = now;
       else if ((now - g_beam_broken_since) >= (uint32_t)BEAM_BROKEN_DEBOUNCE_MS) {
         g_dock_detected_at = now;
         g_had_charge_enable_debounce = false;
         g_beam_broken_since = 0;
+        g_bay_idle = false;
+        g_quiet_bay_since = 0;
         setState(STATE_DOCKED_IDLE);
       }
     } else {
@@ -304,7 +354,7 @@ void dockStateForceOff(void) {
 }
 
 void dockStateRequestCharge(void) {
-  if (g_state == STATE_DOCKED_IDLE && dockDockDetected()) {
+  if (g_state == STATE_DOCKED_IDLE && dockRobotInSlot()) {
     g_charge_requested = true;
   }
 }
@@ -314,7 +364,7 @@ void dockStateResetFault(void) {
   g_charge_enabled = false;
   g_fault_code = FAULT_NONE;
   dockChargeGateWrite(false);
-  if (dockDockDetected()) {
+  if (dockRobotInSlot()) {
     g_dock_detected_at = millis();
     g_had_charge_enable_debounce = false;
     setState(STATE_DOCKED_IDLE);

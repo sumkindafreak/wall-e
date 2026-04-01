@@ -1,7 +1,8 @@
 // ============================================================
-//  NOTE (Arduino IDE): Open the folder "main_wall_E_base/main" and use
-//  main.ino there — sketch folder name must match the .ino name ("main").
-//  This root main.ino is kept for PlatformIO; see ARDUINO_IDE_QUICK_START.md
+//  PlatformIO: this file is the sketch entry (see platformio.ini).
+//  Arduino IDE: open folder "main_wall_E_base/main" and use main.ino
+//  there — sketch folder name must match the .ino name ("main").
+//  See ARDUINO_IDE_QUICK_START.md
 // ============================================================
 //  WALL-E Simple WebUI + Tank Drive Controller
 //  Platform:   ESP32-S3 Dev Module
@@ -23,12 +24,12 @@
 #include "dock_sensors.h"
 #include "dock_homing.h"
 #include "autonomous_docking.h"
-#include "dock_config.h"
 #include "dock_controller.h"
-#include "ir_beacon_receivers.h"
+#include "dock_ir_transmitters.h"
+#include "dock_config.h"
+#include "vision_behaviour.h"
 #include "audio_espnow.h"
 #include "node_health_registry.h"
-#include "vision_behaviour.h"
 #include "walle_emotion_pose_bridge.h"
 #include "walle_emotion_pose.h"
 
@@ -43,11 +44,13 @@
 #include "memory_engine.h"
 #include "return_home_engine.h"
 #include "autonomy_engine.h"
+#include "unified_autonomy_engine.h"
+#include "laser_control.h"
 
 // ============================================================
 //  Failsafe
 // ============================================================
-#define FAILSAFE_TIMEOUT_MS 2000UL  // Increased to 2 seconds for stability
+#define FAILSAFE_TIMEOUT_MS 500UL
 
 unsigned long lastCommandMillis = 0;
 
@@ -74,79 +77,79 @@ void setup() {
   beginIMU();
   Serial.println("[IMU] Init complete");
 
-  // NEW: Initialize autonomy sensors (TEMPORARILY DISABLED FOR TESTING)
-  Serial.println("[Autonomy] SKIPPING initialization for boot test...");
-  
-  // TODO: Re-enable after confirming boot works
-  // if (!sonarInit()) {
-  //   Serial.println("[Sonar] ⚠️  Not available - continuing without");
-  // } else {
-  //   Serial.println("[Sonar] ✓ Ready");
-  // }
-  // 
-  // if (!compassInit()) {
-  //   Serial.println("[Compass] ⚠️  Not available - continuing without");
-  // } else {
-  //   Serial.println("[Compass] ✓ Ready");
-  // }
-  // 
-  // if (!gpsInit()) {
-  //   Serial.println("[GPS] ⚠️  Not available - continuing without");
-  // } else {
-  //   Serial.println("[GPS] ✓ Ready");
-  // }
-  // 
-  // waypointInit();
-  // Serial.println("[Waypoint] ✓ Ready");
-  // 
-  // // NEW: Initialize behavioral brain engines (must be before autonomyInit)
-  // Serial.println("[Autonomy] Initializing behavioral engines...");
-  // 
-  // personalityInit();
-  // Serial.println("[Personality] ✓ Ready");
-  // 
-  // emotionInit();
-  // Serial.println("[Emotion] ✓ Ready");
-  // 
-  // interestInit();
-  // Serial.println("[Interest] ✓ Ready");
-  // 
-  // memoryInit();
-  // Serial.println("[Memory] ✓ Ready");
-  // 
-  // returnHomeInit();
-  // Serial.println("[ReturnHome] ✓ Ready");
-  // 
-  // // Initialize main autonomy engine (uses all above engines)
-  // autonomyInit();
-  // Serial.println("[Autonomy] ✓ Engine ready");
+  // Autonomy stack: sensors + behavioural engines (safe if compass/GPS absent)
+  if (!sonarInit()) {
+    Serial.println(F("[Sonar] WARN: init failed"));
+  } else {
+    Serial.println(F("[Sonar] Ready"));
+  }
+  if (!compassInit()) {
+    Serial.println(F("[Compass] WARN: not available (continuing)"));
+  } else {
+    Serial.println(F("[Compass] Ready"));
+  }
+  if (!gpsInit()) {
+    Serial.println(F("[GPS] WARN: init failed"));
+  } else {
+    Serial.println(F("[GPS] Ready"));
+  }
+  waypointInit();
+  Serial.println(F("[Waypoint] Ready"));
+  personalityInit();
+  emotionInit();
+  interestInit();
+  memoryInit();
+  returnHomeInit();
+  autonomyInit();
+  unifiedAutonomyInit();
+  Serial.println(F("[Autonomy] Engine ready"));
 
   // Battery monitor
   batteryInit();
+  Serial.println("[Setup] Post-battery");
   displayUpdateBattery();
 
-  // Dock system: sensors first. ToF lazy-init from loop (can block if sensor absent)
+  // Dock system: sensors, homing. ToF deferred (can block if sensor absent)
   dockSensorsBegin();
+  Serial.println("[Setup] Post-dockSensors");
 
   // WiFi — AP starts immediately
   wifiManagerInit();
   displayUpdateWifi();
+  Serial.println("[Setup] Post-wifi");
 
   // Web server
   webServerInit();
+  Serial.println("[Setup] Post-webServer");
 
   // ESP-NOW receiver (CYD controller)
   espnowReceiverInit();
+  Serial.println("[Setup] Post-espnow");
   audioEspNowInit();
+  Serial.println("[Setup] Post-audioEspNow");
   nodeHealthInit();
+  Serial.println("[Setup] Post-nodeHealth");
   walleEmotionPoseBridgeInit();
+  Serial.println("[Setup] Post-emotionPoseBridge");
+
+  // Vision behaviour (servo tracking from camera node ESP-NOW packets)
   visionBehaviourInit();
+  Serial.println("[Setup] Post-visionBehaviour");
+
+  // Dock controller (ESP-NOW commands to dock, e.g. REQUEST_CHARGE)
   dockControllerInit();
-  irBeaconInit();
+  Serial.println("[Setup] Post-dockController");
+
+  dockIrTransmittersInit();
+  Serial.println("[Setup] Post-dockIrTx");
+
+  // Autonomous docking state machine
   autonomousDockingInit();
+  Serial.println("[Setup] Post-autonomousDocking");
 
   // LDR + MOSFET flashlight (on when dark)
   flashlightInit();
+  Serial.println("[Setup] Post-flashlight");
 
   lastCommandMillis = millis();
   Serial.println("[WALL-E] Ready");
@@ -159,9 +162,9 @@ unsigned long lastTelemSendMs = 0;
 #define TELEM_SEND_INTERVAL_MS 100  // 10 Hz telemetry updates
 
 void loop() {
-  delay(1);
-  yield();
+  delay(1);  /* Yield first — prevents TG1WDT before any blocking */
   unsigned long now = millis();
+  yield();
   
   // WiFi state polling
   WiFiState prevState = wifiGetState();
@@ -173,73 +176,87 @@ void loop() {
 
   // Servo velocity interpolation
   servoHandle();
+  laserUpdate(now);
 
+  // Vision behaviour (scan/timeouts when no motion; uses packets from ESP-NOW callback)
   visionBehaviourUpdate(now);
 
   // IMU: update (runs calibration until done, then provides offset-corrected data)
   updateIMU();
   // Behaviour that uses imuGetData() should check isIMUCalibrated() before use
 
-  // NEW: Update autonomy sensors (TEMPORARILY DISABLED FOR TESTING)
-  // TODO: Re-enable after confirming boot works
-  // sonarUpdate(now);
-  // compassUpdate(now);
-  // gpsUpdate(now);
-  // 
-  // // Update waypoint navigation and feed GPS to memory when we have fix
-  // if (gpsHasFix()) {
-  //   waypointUpdate(gpsGetLatitude(), gpsGetLongitude(), compassGetHeading());
-  //   gpsFeedToMemory(now);
-  // }
-  // 
-  // // Personality update (lightweight)
-  // personalityUpdate(now);
-  // 
-  // // Get autonomy drive commands
-  // int8_t autoLeft = 0, autoRight = 0;
-  // autonomyUpdate(now, &autoLeft, &autoRight);
-  // 
-  // // Check if manual control is active (from ESP-NOW)
-  // bool manualActive = espnowIsManualControlActive();
-  // autonomySetManualOverride(manualActive);
-  // 
-  // // Apply motor commands (autonomy or manual - manual always wins)
-  // if (autonomyIsEnabled() && !manualActive) {
-  //   motorSetLeftRight(autoLeft, autoRight);
-  //   lastCommandMillis = now;  // Keep alive while autonomy active
-  // }
-  // // else: motors controlled by ESP-NOW receiver callbacks
+  // Autonomy: sensors + engine (drive applied after docking when not manually overridden)
+  sonarUpdate(now);
+  compassUpdate(now);
+  gpsUpdate(now);
+  if (gpsHasFix()) {
+    waypointUpdate(gpsGetLatitude(), gpsGetLongitude(), compassGetHeading());
+    gpsFeedToMemory(now);
+  }
+  personalityUpdate(now);
+
+  bool manualFromControl = espnowIsManualControlActive() || webServerIsManualOverrideActive();
+  autonomySetManualOverride(manualFromControl);
+
+  int8_t autoLeft = 0, autoRight = 0;
+  autonomyUpdate(now, &autoLeft, &autoRight);
 
   // Battery polling (rate-limited internally to 10s); refresh TFT when we have a new reading
   if (batteryHandle()) displayUpdateBattery();
 
-  // Dock: ToF lazy-init, sensors, auto-return, homing
+  // Dock: ToF (lazy init on first call), sensors
   static bool tofTried = false;
   if (!tofTried) { tofTried = true; tofInit(); }
   tofUpdate(now);
   dockSensorsUpdate();
-  irBeaconUpdate(now);
+  dockIrTransmittersUpdate(now);
+
+  bool dockDriving = false;
+#if USE_AUTONOMOUS_DOCKING
+  // Autonomous docking FSM (IDLE→SEARCH→ALIGN→APPROACH→DOCKED→CHARGING)
+  autonomousDockingUpdate(now);
+#else
+  // Legacy dock homing (RSSI-based)
+  dockHomingCheckAutoReturn(now);
+  dockHomingUpdate(now);
+#endif
+
+  // Unified autonomy brain: one state machine view + safety gate (non-blocking)
+  unifiedAutonomyTick(now, manualFromControl);
+  const bool safetyBlock = unifiedAutonomySafetyActive();
+  if (safetyBlock) {
+    motorStop();
+    lastCommandMillis = now;
+  }
 
 #if USE_AUTONOMOUS_DOCKING
-  autonomousDockingUpdate(now);
-  if (autonomousDockingIsActive()) {
+  if (!safetyBlock && autonomousDockingIsActive()) {
     int16_t left, right;
     if (autonomousDockingGetMotorOutput(&left, &right)) {
       motorSetLeftRight(left, right);
       lastCommandMillis = now;
+      dockDriving = true;
     }
   }
 #else
-  dockHomingCheckAutoReturn(now);
-  dockHomingUpdate(now);
-  if (dockHomingIsActive()) {
+  if (!safetyBlock && dockHomingIsActive()) {
     int16_t left, right;
     if (dockHomingGetMotorOutput(&left, &right)) {
       motorSetLeftRight(left, right);
       lastCommandMillis = now;
+      dockDriving = true;
     }
   }
 #endif
+
+  if (!safetyBlock && !dockDriving && autonomyIsEnabled() && !manualFromControl) {
+    int16_t ml = (int16_t)((int32_t)autoLeft * 255 / 100);
+    int16_t mr = (int16_t)((int32_t)autoRight * 255 / 100);
+    ml = (int16_t)constrain((int)ml, -255, 255);
+    mr = (int16_t)constrain((int)mr, -255, 255);
+    motorSetLeftRight(ml, mr);
+    lastCommandMillis = now;
+  }
 
   // LDR: turn flashlight on when dark
   flashlightHandle();
@@ -257,21 +274,13 @@ void loop() {
   walleEmotionPoseBridgeTick();
   walleEmotionPoseApplyToServosStub();
 
-  // Failsafe: stop drive motors if no command received (AUTONOMY TEMPORARILY DISABLED)
+  // Failsafe: stop drive motors if no command received (includes autonomy + dock keepalive)
   if ((now - lastCommandMillis) > FAILSAFE_TIMEOUT_MS) {
     motorStop();
     displaySetCommand(CMD_IDLE);
-    
-    // Debug: Log failsafe trigger
-    static unsigned long lastFailsafeLog = 0;
-    if (now - lastFailsafeLog >= 1000) {
-      Serial.printf("[FAILSAFE] No command for %lums - motors stopped\n", 
-        now - lastCommandMillis);
-      lastFailsafeLog = now;
-    }
-    
     lastCommandMillis = now;
   }
-  delay(1);
+
+  delay(1);  /* Yield — prevents TG1WDT_SYS_RST */
   yield();
 }
