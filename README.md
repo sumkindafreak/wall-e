@@ -102,8 +102,8 @@ flowchart TB
 
 | Node | Folder | Responsibility |
 |------|--------|------------------|
-| **Master controller** | `wall_e_master_controller/` | Touch UI, `ControlPacket` TX, `TelemetryPacket` RX. |
-| **Base (locomotion)** | `main_wall_E_base/` | Motors, servos, Wi-Fi AP, HTTP, ESP-NOW RX/TX, docking FSM, node health registry. |
+| **Master controller** | `wall_e_master_controller/` | Touch UI, `ControlPacket` TX, `TelemetryPacket` RX; optional **SD card** (SPI) for macros, logs, profiles — see [wall_e_master_controller/README.md](wall_e_master_controller/README.md). |
+| **Base (locomotion)** | `main_wall_E_base/` | Motors, servos, Wi-Fi AP, HTTP (LROS, motion policy, sequences, optional EVE UART bridge), ESP-NOW RX/TX, docking FSM, node health registry. |
 | **Audio** | `audio_esp/` | Audio / DFPlayer path; ESP-NOW side channel to base. |
 | **Vision** | `vision_node/` or `vision_node_arduino/` | Camera + motion; `VisionPacket_t` to base. |
 | **Dock** | `dock_station/` | Charging, sensors, IR alignment receivers, dock beacon + `ir_align_hint`. |
@@ -220,7 +220,7 @@ Create `docs/media/` when you add assets, or host externally and link here.
 
 | Document | Content |
 |----------|---------|
-| [ARCHITECTURE.md](ARCHITECTURE.md) | Design philosophy, protocols, docking, OTA, WebUI chain. |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Design philosophy, protocols, docking, OTA, WebUI chain, motion authority (LROS vs CYD). |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Branches, commits, conventions, new nodes, LROS. |
 | [FOLDER_STRUCTURE.md](FOLDER_STRUCTURE.md) | Optional repo reorganization (no code moves yet). |
 | [REPO_AUDIT.md](REPO_AUDIT.md) | Gaps, naming, refactors to consider. |

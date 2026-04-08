@@ -20,6 +20,71 @@
 #include <Arduino.h>
 
 // ============================================================
+//  Remote-tunable detection (defaults match DETECT_* in header)
+// ============================================================
+
+static float s_cfgDetectClose = DETECT_CLOSE_CM;
+static float s_cfgDetectInterest = DETECT_INTEREST_CM;
+
+float autonomyGetDetectCloseCm(void) {
+  return s_cfgDetectClose;
+}
+
+float autonomyGetDetectInterestCm(void) {
+  return s_cfgDetectInterest;
+}
+
+void autonomyApplyRemoteConfig(uint8_t key, uint8_t val) {
+  switch (key) {
+    case 1: { /* close cm */
+      float v = (float)val;
+      if (v < 10.0f) v = 10.0f;
+      if (v > 150.0f) v = 150.0f;
+      s_cfgDetectClose = v;
+      if (s_cfgDetectInterest <= s_cfgDetectClose) {
+        s_cfgDetectInterest = s_cfgDetectClose + 5.0f;
+      }
+      Serial.printf("[Autonomy] Remote: close=%.0fcm\n", s_cfgDetectClose);
+      break;
+    }
+    case 2: { /* interest cm */
+      float v = (float)val;
+      if (v < s_cfgDetectClose + 5.0f) v = s_cfgDetectClose + 5.0f;
+      if (v > 250.0f) v = 250.0f;
+      s_cfgDetectInterest = v;
+      Serial.printf("[Autonomy] Remote: interest=%.0fcm\n", s_cfgDetectInterest);
+      break;
+    }
+    case 10:
+      personalitySetCuriosity(val / 100.0f);
+      Serial.printf("[Autonomy] Remote: curiosity=%.2f\n", personalityGetCuriosity());
+      break;
+    case 11:
+      personalitySetBravery(val / 100.0f);
+      break;
+    case 12:
+      personalitySetEnergy(val / 100.0f);
+      break;
+    case 13:
+      personalitySetRandomness(val / 100.0f);
+      break;
+    case 20:
+      autonomySetWaypointMode(val != 0);
+      Serial.printf("[Autonomy] Remote: waypointMode=%d\n", val != 0);
+      break;
+    case 30:
+      if (val <= 3) {
+        personalityLoadPreset((PersonalityPreset)val);
+        personalitySave();
+        Serial.printf("[Autonomy] Remote: preset %u\n", (unsigned)val);
+      }
+      break;
+    default:
+      break;
+  }
+}
+
+// ============================================================
 //  Internal State
 // ============================================================
 
@@ -188,7 +253,7 @@ static void updateWaypointNavigation(uint32_t now) {
   
   // Check for obstacles
   float dist = sonarGetDistanceCm();
-  if (sonarIsValid() && dist < DETECT_CLOSE_CM) {
+  if (sonarIsValid() && dist < autonomyGetDetectCloseCm()) {
     Serial.printf("[Autonomy] Obstacle at %.1fcm - pausing waypoint nav\n", dist);
     transitionToState(AUTO_AVOID, now);
     return;
@@ -226,7 +291,7 @@ static void updateWaypointNavigation(uint32_t now) {
 
 static void updateExploration(uint32_t now) {
   // Object detected while exploring -> track it and build interest
-  if (sonarIsObjectDetected(DETECT_INTEREST_CM)) {
+  if (sonarIsObjectDetected(autonomyGetDetectInterestCm())) {
     s_context.scanBestHeading = s_neckAngle;
     emotionTriggerDiscovery();
     transitionToState(AUTO_TRACK_OBJECT, now);
@@ -348,9 +413,9 @@ static void updateScanState(uint32_t now) {
 // ============================================================
 
 static void updateEvaluateState(uint32_t now) {
-  if (s_context.scanMinDistance < DETECT_CLOSE_CM) {
+  if (s_context.scanMinDistance < autonomyGetDetectCloseCm()) {
     transitionToState(AUTO_AVOID, now);
-  } else if (s_context.scanMinDistance < DETECT_INTEREST_CM) {
+  } else if (s_context.scanMinDistance < autonomyGetDetectInterestCm()) {
     s_context.objectDetected = true;
     // Point head toward detected object (convert heading to 0-100 scale)
     uint8_t neckPos = (uint8_t)constrain(50 + (s_context.scanBestHeading * 50 / 90), 0, 100);
@@ -379,12 +444,12 @@ static void updateEvaluateState(uint32_t now) {
 static void updateApproachState(uint32_t now) {
   float dist = sonarGetDistanceCm();
   
-  if (!sonarIsValid() || dist > DETECT_INTEREST_CM) {
+  if (!sonarIsValid() || dist > autonomyGetDetectInterestCm()) {
     transitionToState(AUTO_SCAN, now);
     return;
   }
   
-  if (dist < (DETECT_CLOSE_CM * personalityGetBravery())) {
+  if (dist < (autonomyGetDetectCloseCm() * personalityGetBravery())) {
     transitionToState(AUTO_REACT, now);
     return;
   }
@@ -414,7 +479,7 @@ static void updateReactState(uint32_t now) {
 
 static void updateTrackObjectState(uint32_t now) {
   float dist = sonarGetDistanceCm();
-  bool objectThere = sonarIsObjectDetected(DETECT_INTEREST_CM);
+  bool objectThere = sonarIsObjectDetected(autonomyGetDetectInterestCm());
   
   if (!objectThere) {
     interestReset();
@@ -522,7 +587,7 @@ void autonomyUpdate(uint32_t now, int8_t* outLeftSpeed, int8_t* outRightSpeed) {
   // Update sensor data
   float dist = sonarGetDistanceCm();
   s_context.detectedDistance = dist;
-  s_context.objectDetected = sonarIsObjectDetected(DETECT_INTEREST_CM);
+  s_context.objectDetected = sonarIsObjectDetected(autonomyGetDetectInterestCm());
   
   // Update location from sensors
   s_location.heading = compassGetHeading();
@@ -593,7 +658,7 @@ void autonomyUpdate(uint32_t now, int8_t* outLeftSpeed, int8_t* outRightSpeed) {
   }
   
   // Emergency obstacle detection
-  if (sonarIsObjectClose(DETECT_CLOSE_CM) && 
+  if (sonarIsObjectClose(autonomyGetDetectCloseCm()) && 
       s_context.state != AUTO_AVOID && s_context.state != AUTO_REACT) {
     Serial.printf("[Autonomy] ⚠️  Obstacle: %.1fcm\n", dist);
     transitionToState(AUTO_REACT, now);

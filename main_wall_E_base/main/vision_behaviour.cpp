@@ -34,6 +34,23 @@ static float s_tiltTarget = 50.0f;
 static float s_neckTarget = 50.0f;
 
 static uint8_t s_lastObjectClass = OBJ_CLASS_NONE;
+static uint8_t s_lastVisionEvent = VEVENT_NONE;
+
+#define VISION_EVT_RING 16
+static struct {
+  uint32_t t_ms;
+  uint8_t code;
+} s_visEvtRing[VISION_EVT_RING];
+static uint8_t s_visEvtNext = 0;
+static uint8_t s_visEvtCount = 0;
+
+static void visionPushEvent(uint8_t code) {
+  if (code == VEVENT_NONE) return;
+  s_visEvtRing[s_visEvtNext].t_ms = millis();
+  s_visEvtRing[s_visEvtNext].code = code;
+  s_visEvtNext = (uint8_t)((s_visEvtNext + 1) % VISION_EVT_RING);
+  if (s_visEvtCount < VISION_EVT_RING) s_visEvtCount++;
+}
 
 static void setServoSmooth(uint8_t ch, float* current, float target) {
   float d = target - *current;
@@ -242,4 +259,26 @@ bool visionBehaviourIsEngaged(void) {
   if (millis() - s_lastVisionMs > 3000) return false;
   if (s_lastPacket.motionDetected) return true;
   return (s_state == VBEHAVE_TRACKING || s_state == VBEHAVE_FOLLOWING || s_state == VBEHAVE_CURIOUS);
+}
+
+uint8_t visionGetLastEventCode(void) {
+  return s_hasPacket ? s_lastPacket.visionEvent : VEVENT_NONE;
+}
+
+String visionGetEventsJSON(void) {
+  String j = "[";
+  bool first = true;
+  if (s_visEvtCount > 0) {
+    uint8_t start = (uint8_t)((s_visEvtNext + VISION_EVT_RING - s_visEvtCount) % VISION_EVT_RING);
+    for (uint8_t k = 0; k < s_visEvtCount; k++) {
+      uint8_t idx = (uint8_t)((start + k) % VISION_EVT_RING);
+      if (!first) j += ',';
+      first = false;
+      j += "{\"t_ms\":"; j += (uint32_t)s_visEvtRing[idx].t_ms;
+      j += ",\"code\":"; j += (unsigned)s_visEvtRing[idx].code;
+      j += "}";
+    }
+  }
+  j += "]";
+  return j;
 }

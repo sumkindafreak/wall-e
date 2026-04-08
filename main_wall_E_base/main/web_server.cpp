@@ -27,6 +27,13 @@
 #include "sonar_sensor.h"
 #include "gps_module.h"
 #include "navigation_api.h"
+#include "sequence_api.h"
+#include "motion_layer.h"
+#include "motion_authority.h"
+#include "api_security.h"
+#include "eve_uart_bridge.h"
+#include "espnow_receiver.h"
+#include "dock_homing.h"
 #include <WebServer.h>
 #include <Arduino.h>
 #include <Preferences.h>
@@ -48,6 +55,119 @@ static bool _webManualSticky = false;
 
 // Updated every time a valid command arrives — used by failsafe
 extern unsigned long lastCommandMillis;
+#ifndef FAILSAFE_TIMEOUT_MS
+#define FAILSAFE_TIMEOUT_MS 500UL
+#endif
+
+static void addCORS(void);
+
+static bool webMotionAllowedOr403(void) {
+  if (motionAuthorityAllowWeb()) return true;
+  addCORS();
+  server.send(403, "application/json", "{\"ok\":false,\"error\":\"motion_policy_denies_web\"}");
+  return false;
+}
+
+static const char* mapMotionUiFromLayer(MotionLayerMode m) {
+  switch (m) {
+    case MOTION_MODE_EMERGENCY: return "E_STOP";
+    case MOTION_MODE_IDLE_STANDBY: return "IDLE";
+    case MOTION_MODE_MANUAL: return "MANUAL";
+    case MOTION_MODE_AUTONOMY_ROAM: return "AUTONOMOUS";
+    case MOTION_MODE_OBSTACLE_AVOID: return "AUTONOMOUS";
+    case MOTION_MODE_EXPRESSIVE_REACT: return "EXPRESSIVE";
+    case MOTION_MODE_DOCK_SEARCH: return "HOMING";
+    case MOTION_MODE_DOCK_ALIGN: return "DOCK_ALIGN";
+    case MOTION_MODE_DOCK_APPROACH: return "DOCK_APPROACH";
+    case MOTION_MODE_DOCK_CHARGING: return "IDLE";
+    case MOTION_MODE_DOCK_LEGACY_HOMING: return "HOMING";
+    default: return "UNKNOWN";
+  }
+}
+
+/** LROS WebUI: global authority + motion + drive profile (HTTP link is always LIVE from server POV). */
+static void handleMotionOperatorApi() {
+  const MotionLayerSnapshot* snap = motionLayerGetSnapshot();
+  const char* motionUi = mapMotionUiFromLayer(snap->mode);
+  if (unifiedAutonomySafetyActive()) {
+    motionUi = "E_STOP";
+  } else if (unifiedAutonomyGetState() == UA_ERROR) {
+    motionUi = "FAULT";
+  }
+
+  bool dockBusy = false;
+#if USE_AUTONOMOUS_DOCKING
+  dockBusy = autonomousDockingIsActive();
+#else
+  dockBusy = dockHomingIsActive();
+#endif
+
+  const char* authority = "UNKNOWN";
+  if (unifiedAutonomySafetyActive()) {
+    authority = "SAFETY";
+  } else if (motionAuthorityGet() == MOTION_AUTH_WEB_ONLY && espnowIsManualControlActive()) {
+    authority = "POLICY";
+  } else if (espnowIsManualControlActive() && motionAuthorityAllowCyd()) {
+    authority = "CYD";
+  } else if (webServerIsManualOverrideActive() && motionAuthorityAllowWeb()) {
+    authority = "WEBUI";
+  } else if (dockBusy) {
+    authority = "DOCKING";
+  } else if (autonomyIsEnabled()) {
+    authority = "AI";
+  }
+
+  unsigned long now = millis();
+  uint32_t age = (now >= lastCommandMillis) ? (uint32_t)(now - lastCommandMillis) : 0;
+  bool stale = (age > FAILSAFE_TIMEOUT_MS);
+
+  String lock = "";
+  bool driveLocked = false;
+  if (unifiedAutonomySafetyActive()) {
+    lock = "Safety stop latched — drive disabled";
+    driveLocked = true;
+  } else if (!motionAuthorityAllowWeb() && webServerIsManualOverrideActive()) {
+    lock = "Motion policy: CYD only — browser drive disabled";
+    driveLocked = true;
+  } else if (!motionAuthorityAllowCyd() && espnowIsManualControlActive()) {
+    lock = "Motion policy: browser only — CYD drive ignored";
+    driveLocked = true;
+  } else if (espnowIsManualControlActive() && motionAuthorityAllowCyd()) {
+    lock = "CYD touchscreen has control";
+    driveLocked = true;
+  } else if (dockBusy) {
+    lock = "Docking controller owns drive";
+    driveLocked = true;
+  } else if (autonomyIsEnabled() && !webServerIsManualOverrideActive() && !espnowIsManualControlActive()) {
+    lock = "AI assist active — manual override available";
+    driveLocked = true;
+  } else if (stale) {
+    lock = "Connection stale — commands may be ignored";
+  }
+
+  const char* prof = motorGetActiveDriveProfileName();
+
+  String json = "{";
+  json += "\"authority\":\""; json += authority; json += "\"";
+  json += ",\"motion\":\""; json += motionUi; json += "\"";
+  json += ",\"motion_raw\":\""; json += motionLayerGetModeNameCurrent(); json += "\"";
+  json += ",\"drive_profile\":\""; json += prof; json += "\"";
+  json += ",\"link\":\"HTTP\"";
+  json += ",\"motion_policy\":\""; json += motionAuthorityModeName(motionAuthorityGet()); json += "\"";
+  json += ",\"motion_policy_allows_cyd\":"; json += motionAuthorityAllowCyd() ? "true" : "false";
+  json += ",\"motion_policy_allows_web\":"; json += motionAuthorityAllowWeb() ? "true" : "false";
+  json += ",\"last_command_age_ms\":"; json += String(age);
+  json += ",\"failsafe_timeout_ms\":"; json += String((uint32_t)FAILSAFE_TIMEOUT_MS);
+  json += ",\"command_stale\":"; json += stale ? "true" : "false";
+  json += ",\"drive_locked\":"; json += driveLocked ? "true" : "false";
+  json += ",\"lock_reason\":\""; json += lock; json += "\"";
+  json += ",\"unifiedState\":\""; json += unifiedAutonomyGetStateName(); json += "\"";
+  json += ",\"unifiedSafety\":"; json += unifiedAutonomySafetyActive() ? "true" : "false";
+  json += "}";
+
+  addCORS();
+  server.send(200, "application/json", json);
+}
 
 // Helper: add CORS headers so browser fetch() works across IPs
 static void addCORS() {
@@ -62,7 +182,9 @@ static void handleRoot() {
 }
 
 static void handleForward() {
+  if (!webMotionAllowedOr403()) return;
   lastCommandMillis = millis();
+  motorSetDriveProfile(DRIVE_PROFILE_NORMAL, "WebUI forward");
   motorForward(motorGetSpeed());
   displaySetCommand(CMD_FORWARD);
   addCORS();
@@ -70,7 +192,9 @@ static void handleForward() {
 }
 
 static void handleReverse() {
+  if (!webMotionAllowedOr403()) return;
   lastCommandMillis = millis();
+  motorSetDriveProfile(DRIVE_PROFILE_NORMAL, "WebUI reverse");
   motorReverse(motorGetSpeed());
   displaySetCommand(CMD_REVERSE);
   addCORS();
@@ -78,7 +202,9 @@ static void handleReverse() {
 }
 
 static void handleLeft() {
+  if (!webMotionAllowedOr403()) return;
   lastCommandMillis = millis();
+  motorSetDriveProfile(DRIVE_PROFILE_NORMAL, "WebUI left");
   motorLeft(motorGetSpeed());
   displaySetCommand(CMD_LEFT);
   addCORS();
@@ -86,7 +212,9 @@ static void handleLeft() {
 }
 
 static void handleRight() {
+  if (!webMotionAllowedOr403()) return;
   lastCommandMillis = millis();
+  motorSetDriveProfile(DRIVE_PROFILE_NORMAL, "WebUI right");
   motorRight(motorGetSpeed());
   displaySetCommand(CMD_RIGHT);
   addCORS();
@@ -119,6 +247,7 @@ static void handleSpeed() {
 // Tank drive: left and right in -255..255. Smoother diagonals and curves.
 // When both zero, call motorStop() so robot always stops when joystick/sliders return to centre.
 static void handleDrive() {
+  if (!webMotionAllowedOr403()) return;
   if (!server.hasArg("left") || !server.hasArg("right")) {
     server.send(400, "text/plain", "Missing left or right");
     return;
@@ -134,6 +263,7 @@ static void handleDrive() {
     motorStop();
     displaySetCommand(CMD_STOP);
   } else {
+    motorSetDriveProfile(DRIVE_PROFILE_NORMAL, "WebUI tank drive");
     motorSetLeftRight((int16_t)left, (int16_t)right);
   }
   float jx = (right - left) / 255.0f;
@@ -570,6 +700,80 @@ static void handleAiChatApi() {
   server.send(200, "text/plain", "OK");
 }
 
+static void handleMotionAuthorityGet(void) {
+  addCORS();
+  String j = "{\"ok\":true,\"mode\":\"";
+  j += motionAuthorityModeName(motionAuthorityGet());
+  j += "\"}";
+  server.send(200, "application/json", j);
+}
+
+static void handleMotionAuthoritySet(void) {
+  if (apiSecurityRejectIfBadToken()) return;
+  if (!server.hasArg("mode")) {
+    addCORS();
+    server.send(400, "application/json", "{\"ok\":false,\"error\":\"missing mode\"}");
+    return;
+  }
+  String m = server.arg("mode");
+  MotionAuthorityMode mm = MOTION_AUTH_ANY;
+  if (m == "cyd_only") mm = MOTION_AUTH_CYD_ONLY;
+  else if (m == "web_only") mm = MOTION_AUTH_WEB_ONLY;
+  else if (m != "any") {
+    addCORS();
+    server.send(400, "application/json", "{\"ok\":false,\"error\":\"bad mode\"}");
+    return;
+  }
+  motionAuthoritySet(mm);
+  apiSecurityAudit("[motion] policy set");
+  addCORS();
+  server.send(200, "application/json", "{\"ok\":true}");
+}
+
+static void handleEveStatusApi(void) {
+  addCORS();
+  server.send(200, "application/json", eveUartBridgeGetJSON());
+}
+
+static void handleVisionEventsApi(void) {
+  addCORS();
+  String j = "{\"ok\":true,\"events\":";
+  j += visionGetEventsJSON();
+  j += "}";
+  server.send(200, "application/json", j);
+}
+
+static void handleDashboardApi(void) {
+  addCORS();
+  server.send(200, "application/json", apiSecurityGetDashboardJSON());
+}
+
+static void handleAuditApi(void) {
+  if (apiSecurityRejectIfBadToken()) return;
+  addCORS();
+  server.send(200, "application/json", apiSecurityGetAuditJSON());
+}
+
+static void handleApiTokenPost(void) {
+  if (!server.hasArg("plain")) {
+    addCORS();
+    server.send(400, "application/json", "{\"ok\":false,\"error\":\"expected JSON body\"}");
+    return;
+  }
+  String body = server.arg("plain");
+  char err[48];
+  if (!apiSecurityApplyTokenBody(body.c_str(), body.length(), err, sizeof(err))) {
+    addCORS();
+    String j = "{\"ok\":false,\"error\":\"";
+    j += err;
+    j += "\"}";
+    server.send(400, "application/json", j);
+    return;
+  }
+  addCORS();
+  server.send(200, "application/json", "{\"ok\":true}");
+}
+
 // --- Public Functions ---
 
 void webServerInit() {
@@ -627,10 +831,20 @@ void webServerInit() {
   server.on("/api/autonomy/enable", HTTP_GET, handleAutonomyEnable);
   server.on("/api/autonomy/manual", HTTP_GET, handleAutonomyManual);
   server.on("/api/autonomy/set_home", HTTP_GET, handleMemorySetHome);
+  server.on("/api/motion/operator", HTTP_GET, handleMotionOperatorApi);
+  server.on("/api/motion/authority", HTTP_GET, handleMotionAuthorityGet);
+  server.on("/api/motion/authority/set", HTTP_GET, handleMotionAuthoritySet);
+
+  server.on("/api/eve/status", HTTP_GET, handleEveStatusApi);
+  server.on("/api/vision/events", HTTP_GET, handleVisionEventsApi);
+  server.on("/api/dashboard", HTTP_GET, handleDashboardApi);
+  server.on("/api/audit", HTTP_GET, handleAuditApi);
+  server.on("/api/security/token", HTTP_POST, handleApiTokenPost);
 
   server.on("/api/navigation/route", HTTP_POST, navigationHandleRoutePost);
   server.on("/api/navigation/status", HTTP_GET, navigationHandleStatusGet);
   server.on("/api/navigation/stop", HTTP_GET, navigationHandleStopGet);
+  sequenceRegisterWebRoutes();
 
   server.on("/api/laser/on",        HTTP_GET, handleLaserOn);
   server.on("/api/laser/off",       HTTP_GET, handleLaserOff);

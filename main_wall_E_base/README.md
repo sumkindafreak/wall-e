@@ -65,6 +65,21 @@ pio run -e wall_e_brain_s3 -t upload
 | **Dock** | `DockBeaconPacket_t`, dock commands — [main/dock_protocol.h](main/dock_protocol.h) |
 | **Audio** | Audio-specific (see `audio_espnow` / protocols) |
 | **Browser** | HTTP — see `web_server.cpp` |
+| **EVE (optional UART)** | Framed UART (same framing as `eve/`) — [main/eve_uart_bridge.cpp](main/eve_uart_bridge.cpp); status **`GET /api/eve/status`** |
+
+### HTTP / LROS (selected endpoints)
+
+Implemented in **`main/web_server.cpp`** (and related modules). Highlights:
+
+| Area | Notes |
+|------|--------|
+| **Motion policy** | `motion_authority` — **`any`** / **`cyd_only`** / **`web_only`** (CYD ESP-NOW vs LROS HTTP). **`GET /api/motion/authority`**, **`GET /api/motion/authority/set?mode=...`** (token if configured). **`GET /api/motion/operator`** reports policy + `motion_policy_allows_cyd` / `motion_policy_allows_web`. |
+| **Sequences** | `sequence_engine` / `sequence_api` — LROS timelines; steps may include optional **`when`** (battery, dock FSM, vision event). |
+| **Navigation** | `/api/navigation/*` — POST route may require API token if set. |
+| **Vision** | **`GET /api/vision/events`** — recent vision lifecycle events (ring buffer). |
+| **Security / ops** | Optional **`X-Wall-E-Token`** (or `?token=`) when a token is stored in NVS; **`POST /api/security/token`** (JSON body). **`GET /api/audit`**, **`GET /api/dashboard`** (aggregated status). |
+
+ESP-NOW **E-stop** from the master is not suppressed by motion policy; HTTP drive is gated when policy denies web.
 
 ---
 
@@ -94,7 +109,7 @@ pio run -e wall_e_brain_s3 -t upload
 
 - **`build_src_filter`** may exclude some `walle_emotion_pose` sources to avoid duplicate symbols — check `platformio.ini` before adding second copies.
 - **Autonomy** — Some engine init may be commented in `main.ino` during bring-up; verify before expecting full auto behavior.
-- **HTTP API** — Intended for **trusted LAN**; do not expose raw to the public internet without auth.
+- **HTTP API** — Intended for **trusted LAN**; optional **`POST /api/security/token`** sets a shared token for mutating routes (see table above). Do not expose unauthenticated control to the public internet.
 
 ---
 

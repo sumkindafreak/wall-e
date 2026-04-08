@@ -829,6 +829,44 @@ body.lros-app-revealed #app {
   from { opacity: 0.92; filter: saturate(0.85); }
   to { opacity: 1; filter: none; }
 }
+/* MapLibre navigation map (mirrors css/lros.css nav map section) */
+.nav-toolbar--split { justify-content: space-between; align-items: flex-start; }
+.nav-toolbar-right { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.nav-map-stage { display: flex; flex-direction: column; border-radius: var(--radius); border: 1px solid var(--border); overflow: hidden; background: #0b0f14; margin-bottom: 8px; }
+.nav-map-body { position: relative; flex: 1; min-height: min(48vh, 480px); width: 100%; }
+.nav-map-controls { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 8px 10px; background: linear-gradient(180deg, rgba(22, 27, 36, 0.95) 0%, rgba(15, 18, 25, 0.85) 100%); border-bottom: 1px solid var(--border); }
+.nav-map-check { display: inline-flex; align-items: center; gap: 6px; font-size: 0.72rem; color: var(--txt-mid); cursor: pointer; }
+.nav-map-field { display: inline-flex; align-items: center; gap: 6px; font-size: 0.68rem; color: var(--txt-dim); }
+.nav-map-select { max-width: 200px; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface2); color: var(--txt); font-size: 0.72rem; }
+.nav-map-hud { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--border); background: rgba(0, 0, 0, 0.2); }
+.nav-hud-chip { display: inline-flex; flex-direction: column; gap: 2px; padding: 6px 8px; min-width: 0; background: rgba(0, 0, 0, 0.25); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.nav-hud-lbl { font-size: 0.52rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--txt-dim); }
+.nav-hud-val { font-family: 'Orbitron', ui-monospace, monospace; font-size: 0.68rem; color: var(--accent); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-map-fallback { padding: 12px 14px; font-size: 0.78rem; color: var(--warn); background: rgba(230, 57, 70, 0.08); border-bottom: 1px solid var(--border); }
+.nav-map-container { position: absolute; inset: 0; z-index: 2; }
+.nav-map-container .maplibregl-map { font-family: 'Inter', sans-serif; }
+.nav-map-help { margin: 6px 0 0; line-height: 1.4; }
+#nav-map-canvas { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; background: #0a0e14; border: none; border-radius: 0; display: block; cursor: crosshair; touch-action: none; }
+/* Sequence generator — coming soon (mirrors css/lros.css) */
+.coming-soon-panel { position: relative; overflow: hidden; min-height: 260px; }
+.coming-soon-panel::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse 85% 55% at 50% 0%, rgba(245, 166, 35, 0.14) 0%, transparent 58%); pointer-events: none; }
+.coming-soon-panel-inner { position: relative; z-index: 1; padding: 10px 8px 6px; text-align: center; }
+.coming-soon-badge { display: inline-block; font-family: 'Orbitron', ui-monospace, monospace; font-size: 0.72rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); border: 1px solid rgba(245, 166, 35, 0.42); border-radius: 999px; padding: 6px 14px; margin-bottom: 14px; background: rgba(0, 0, 0, 0.35); box-shadow: 0 0 24px rgba(245, 166, 35, 0.08); }
+.coming-soon-lead { color: var(--txt-mid); font-size: 0.9rem; line-height: 1.55; margin: 0 0 14px; max-width: 36em; margin-left: auto; margin-right: auto; }
+.coming-soon-list { text-align: left; max-width: 22em; margin: 0 auto 16px; padding-left: 1.15em; color: var(--txt-dim); font-size: 0.84rem; line-height: 1.65; }
+.coming-soon-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-items: center; }
+.seq-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+.seq-select { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface2); color: var(--txt); font-size: 0.85rem; }
+.seq-meta-row { display: grid; grid-template-columns: auto 1fr; gap: 8px 12px; align-items: center; }
+.seq-name-input, .seq-id-input { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface2); color: var(--txt); font-size: 0.85rem; }
+.seq-table-wrap { overflow-x: auto; margin: 10px 0; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.seq-editor-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+.seq-editor-table th, .seq-editor-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.seq-editor-table th { text-align: left; color: var(--txt-dim); font-weight: 600; text-transform: uppercase; font-size: 0.62rem; letter-spacing: 0.06em; }
+.seq-editor-table .input-compact { width: 100%; min-width: 72px; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--txt); }
+.seq-editor-table textarea { width: 100%; min-width: 160px; min-height: 44px; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--accent); resize: vertical; }
+.seq-editor-table select { max-width: 160px; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface2); color: var(--txt); }
+.seq-status-line { font-family: 'Orbitron', ui-monospace, monospace; font-size: 0.8rem; color: var(--accent); margin: 0; }
 </style>
 </head>
 <body>
@@ -1160,16 +1198,60 @@ body.lros-app-revealed #app {
       <p class="nav-world-hint">Live map &amp; weather use your phone or PC internet connection (not the ESP). Connect the robot to Wi‑Fi for RSSI and station IP below.</p>
       <div class="nav-layout">
         <div class="nav-map-wrap">
-          <div class="nav-toolbar">
-            <span class="stat-sub">Planner map · click to add waypoints · wheel zoom · drag pan</span>
-            <span id="nav-eta" class="conn-pill">—</span>
-            <button type="button" class="btn btn-small btn-ghost" id="prox-mute-btn" onclick="toggleProxMute()" title="Proximity beeps">&#128276;</button>
+          <div class="nav-toolbar nav-toolbar--split">
+            <span class="stat-sub">MapLibre field map · click adds waypoints (or home/dock) · pan/zoom · planner canvas fallback if tiles fail</span>
+            <span class="nav-toolbar-right">
+              <span id="nav-eta" class="conn-pill">—</span>
+              <button type="button" class="btn btn-small btn-ghost" id="prox-mute-btn" onclick="toggleProxMute()" title="Proximity beeps">&#128276;</button>
+            </span>
           </div>
           <div class="nav-map-real" id="nav-map-real" hidden>
             <img id="nav-osm-img" class="nav-osm-img" width="640" height="200" alt="" decoding="async" />
             <div class="nav-osm-placeholder" id="nav-osm-placeholder">OpenStreetMap preview appears when location data is available.</div>
           </div>
-          <canvas id="nav-map-canvas" width="600" height="320"></canvas>
+
+          <div class="nav-map-stage" id="nav-map-stage">
+            <div class="nav-map-controls">
+              <button type="button" class="btn btn-small" id="nav-map-center" title="Center camera on robot">Center robot</button>
+              <label class="nav-map-check" title="Keep camera on robot">
+                <input type="checkbox" id="nav-map-follow" /> Follow
+              </label>
+              <label class="nav-map-check" title="Rotate map with IMU heading">
+                <input type="checkbox" id="nav-map-heading-up" /> Heading-up
+              </label>
+              <label class="nav-map-field">Click
+                <select id="nav-map-click-mode" class="nav-map-select">
+                  <option value="waypoint">Adds waypoint</option>
+                  <option value="home">Sets home marker (local)</option>
+                  <option value="dock">Sets dock marker (local)</option>
+                </select>
+              </label>
+              <label class="nav-map-field">Base layer
+                <select id="nav-map-layer-preset" class="nav-map-select" title="Reloads page when changed">
+                  <option value="embed" selected>Embedded (offline)</option>
+                  <option value="demo">MapLibre demo style (online)</option>
+                </select>
+              </label>
+            </div>
+            <div class="nav-map-hud" id="nav-map-hud" aria-label="Mission HUD">
+              <span class="nav-hud-chip"><span class="nav-hud-lbl">Autonomy</span><span class="nav-hud-val" id="nav-hud-autonomy">—</span></span>
+              <span class="nav-hud-chip"><span class="nav-hud-lbl">Motion</span><span class="nav-hud-val" id="nav-hud-motion">—</span></span>
+              <span class="nav-hud-chip"><span class="nav-hud-lbl">Drive</span><span class="nav-hud-val" id="nav-hud-profile">—</span></span>
+              <span class="nav-hud-chip"><span class="nav-hud-lbl">Next WP</span><span class="nav-hud-val" id="nav-hud-next-wp">—</span></span>
+              <span class="nav-hud-chip"><span class="nav-hud-lbl">Route</span><span class="nav-hud-val" id="nav-hud-route-m">—</span></span>
+              <span class="nav-hud-chip"><span class="nav-hud-lbl">ETA</span><span class="nav-hud-val" id="nav-hud-eta">—</span></span>
+              <span class="nav-hud-chip"><span class="nav-hud-lbl">GPS</span><span class="nav-hud-val" id="nav-hud-gps">—</span></span>
+              <span class="nav-hud-chip"><span class="nav-hud-lbl">Heading</span><span class="nav-hud-val" id="nav-hud-hdg">—</span></span>
+              <span class="nav-hud-chip"><span class="nav-hud-lbl">Tel age</span><span class="nav-hud-val" id="nav-hud-tel-age">—</span></span>
+            </div>
+            <div class="nav-map-fallback" id="nav-map-fallback" role="status" hidden></div>
+            <div class="nav-map-body">
+              <div id="nav-map-container" class="nav-map-container" aria-label="MapLibre map"></div>
+              <canvas id="nav-map-canvas" width="600" height="320"></canvas>
+            </div>
+          </div>
+
+          <p class="nav-map-help stat-sub">Configure <span class="mono">localStorage</span> keys <span class="mono">lros_map_style_url</span> (style.json) and/or <span class="mono">lros_map_raster_url</span> (raster <span class="mono">{z}/{x}/{y}</span> template) for LAN or offline tiles. No Google tiles.</p>
           <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
             <button type="button" class="btn btn-small" onclick="navClearWaypoints()">Clear WP</button>
             <button type="button" class="btn btn-small btn-ghost" onclick="navSendRouteToRobot()">Send route</button>
@@ -1629,6 +1711,67 @@ body.lros-app-revealed #app {
           </div>
         </div>
       </div>
+      </div>
+    </div>
+
+    <!-- SEQUENCE GENERATOR -->
+    <div class="page more-subpage" id="page-sequence">
+      <header class="subpage-head">
+        <div class="subpage-head-main">
+          <p class="subpage-kicker">SHOW · SEQUENCER</p>
+          <h2 class="page-title subpage-title">Sequence generator</h2>
+          <p class="page-lead">Timed cue stacks stored on the Brain (flash). Edit steps, save, then run — navigation_route needs GPS + compass like the Navigation page.</p>
+        </div>
+      </header>
+      <div class="subpage-deck subpage-deck--2col">
+        <div class="card more-deck-card">
+          <div class="card-header">Library</div>
+          <div class="card-body">
+            <div class="form-group"><label>On robot</label>
+              <select id="seq-library-select" class="seq-select"></select>
+            </div>
+            <div class="seq-toolbar">
+              <button type="button" class="btn btn-small" id="seq-btn-refresh">Refresh</button>
+              <button type="button" class="btn btn-small btn-ghost" id="seq-btn-load">Load</button>
+              <button type="button" class="btn btn-small btn-ghost" id="seq-btn-delete">Delete</button>
+              <button type="button" class="btn btn-small btn-ghost" id="seq-btn-new">New</button>
+            </div>
+            <p class="stat-sub">API: <span class="mono">/api/sequences/*</span> — persisted in NVS.</p>
+          </div>
+        </div>
+        <div class="card more-deck-card">
+          <div class="card-header">Transport</div>
+          <div class="card-body">
+            <div class="seq-toolbar">
+              <button type="button" class="btn btn-small" id="seq-btn-save">Save to robot</button>
+              <button type="button" class="btn btn-small" id="seq-btn-run">Run</button>
+              <button type="button" class="btn btn-small btn-ghost" id="seq-btn-stop">Stop</button>
+            </div>
+            <p class="seq-status-line" id="seq-run-status">—</p>
+            <div class="coming-soon-actions" style="margin-top:10px">
+              <button type="button" class="btn btn-small btn-ghost" onclick="switchTab('missions')">Missions</button>
+              <button type="button" class="btn btn-small btn-ghost" onclick="switchTab('navigation')">Navigation</button>
+              <button type="button" class="btn btn-small" onclick="switchTab('more')">Back to menu</button>
+            </div>
+          </div>
+        </div>
+        <div class="card more-deck-card subpage-card-span">
+          <div class="card-header">Editor</div>
+          <div class="card-body">
+            <div class="form-group seq-meta-row">
+              <label>Name</label><input type="text" id="seq-name" class="seq-name-input" placeholder="Show opener" />
+              <label>Id</label><input type="text" id="seq-id" class="mono seq-id-input" readonly />
+            </div>
+            <p class="stat-sub">Each row: time <span class="mono">at_ms</span> from start, <span class="mono">kind</span>, then extra fields as JSON.</p>
+            <div class="seq-table-wrap">
+              <table class="seq-editor-table">
+                <thead><tr><th>at_ms</th><th>kind</th><th>params (JSON)</th><th></th></tr></thead>
+                <tbody id="seq-steps-tbody"></tbody>
+              </table>
+            </div>
+            <button type="button" class="btn btn-small btn-ghost" id="seq-add-step">+ Add step</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -2104,7 +2247,7 @@ body.lros-app-revealed #app {
         <div class="subpage-head-main">
           <p class="subpage-kicker">LROS · MENU</p>
           <h2 class="page-title subpage-title">More</h2>
-          <p class="page-lead">Secondary screens — navigation, vision, audio, AI, missions, telemetry, power, and tools.</p>
+          <p class="page-lead">Secondary screens — navigation, vision, audio, AI, missions, sequence generator, telemetry, power, and tools.</p>
         </div>
       </header>
       <div class="nav-grid more-hub-grid">
@@ -2113,6 +2256,7 @@ body.lros-app-revealed #app {
         <a class="nav-tile" href="#" onclick="switchTab('audio');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>Audio</a>
         <a class="nav-tile" href="#" onclick="switchTab('ai');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 2a10 10 0 0 1 10 10c0 5.5-4.5 10-10 10S2 17.5 2 12 6.5 2 12 2z"/><circle cx="12" cy="12" r="2"/></svg>AI &amp; Auto</a>
         <a class="nav-tile" href="#" onclick="switchTab('missions');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Missions</a>
+        <a class="nav-tile" href="#" onclick="switchTab('sequence');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="1"/><line x1="7" y1="5" x2="7" y2="19"/><line x1="17" y1="5" x2="17" y2="19"/><path d="M10 9h1M13 9h1M10 12h1M13 12h1M10 15h1M13 15h1" stroke-linecap="round"/></svg>Sequence</a>
         <a class="nav-tile" href="#" onclick="switchTab('telemetry');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>Telemetry</a>
         <a class="nav-tile" href="#" onclick="switchTab('power');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>Power</a>
         <a class="nav-tile" href="#" onclick="switchTab('files');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>Files</a>
@@ -2132,8 +2276,12 @@ body.lros-app-revealed #app {
 
 <div id="toast-stack" aria-live="polite"></div>
 
+<script src="js/pathPlanner.js"></script>
+<script src="js/lros-navigation.js"></script>
+<script src="js/lros-maplibre-nav.js"></script>
 <script src="js/navWorldContext.js"></script>
 <script src="js/navMissionPanel.js"></script>
+<script src="js/lros-sequences.js"></script>
 <script>/**
  * WALL-E LROS - Living Robot Operating System
  * Full Web Console JavaScript
@@ -2166,13 +2314,19 @@ function switchTab(name) {
   document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + name));
   if (name === 'network') { fetchStatus(); showNetworkForm(false); }
   if (name === 'vision') initVision();
-  if (name === 'navigation') {
-    drawMap();
-    if (window.NavWorldContext) {
-      NavWorldContext.bindGeoButton();
-      NavWorldContext.refresh({}, { force: true });
-    }
-    if (window.NavMissionPanel) NavMissionPanel.init();
+  if (name === 'navigation' && window.LrosNavigation) {
+    setTimeout(function () {
+      LrosNavigation.init();
+      if (window.LrosMapNav && typeof LrosMapNav.onTabShow === 'function') LrosMapNav.onTabShow();
+      if (window.NavWorldContext) {
+        NavWorldContext.bindGeoButton();
+        NavWorldContext.refresh({}, { force: true });
+      }
+      if (window.NavMissionPanel) NavMissionPanel.init();
+    }, 0);
+  }
+  if (name === 'sequence' && window.LrosSequences) {
+    setTimeout(function () { LrosSequences.onTabShow(); }, 0);
   }
   if (name === 'telemetry' || name === 'power') fetchStatus();
   if (name === 'safety' && typeof refreshGeofenceDisplay === 'function') refreshGeofenceDisplay();
@@ -2779,6 +2933,10 @@ async function fetchStatus() {
     setById('nav-battery', battery.voltage != null ? battery.voltage.toFixed(2) + ' V' : '—');
     if (window.NavWorldContext) NavWorldContext.refresh(wifi);
     if (window.NavMissionPanel) NavMissionPanel.syncFromState(stateCache);
+    if (window.LrosNavigation && typeof LrosNavigation.syncFromState === 'function') {
+      LrosNavigation.syncFromState(stateCache);
+    }
+    updateNavMapHud();
 
     evaluateGeofence(auto);
 
@@ -2852,23 +3010,7 @@ function setHome() {
 }
 
 // â”€â”€â”€ Map â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-function drawMap() {
-  const c = document.getElementById('map-canvas');
-  if (!c) return;
-  const ctx = c.getContext('2d');
-  const w = c.width, h = c.height;
-  ctx.fillStyle = '#0f1219';
-  ctx.fillRect(0,0,w,h);
-  ctx.strokeStyle = '#252d3a';
-  ctx.strokeRect(0,0,w,h);
-  ctx.fillStyle = '#f5a623';
-  ctx.beginPath();
-  ctx.arc(w/2, h/2, 8, 0, Math.PI*2);
-  ctx.fill();
-  ctx.fillStyle = '#fff';
-  ctx.font = '10px sans-serif';
-  ctx.fillText('WALL-E', w/2 - 20, h/2 - 12);
-}
+function drawMap() {}
 
 // â”€â”€â”€ Vision â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 var _visionRefreshTimer = null;

@@ -4,6 +4,7 @@
 // ============================================================
 
 #include "ui_draw.h"
+#include "ui_sd_explorer.h"
 #include "ui_draw_laser.h"
 #include "animation_system.h"
 #include "espnow_control.h"
@@ -33,6 +34,41 @@ static const int DOT_R = 8;  // Larger dot for single joystick
 
 void uiDrawInit(TFT_eSPI* tft) {
   g_tft = tft;
+}
+
+int uiBannerTotalHeight(void) {
+  return g_topBannerCollapsed ? BANNER_MINI_H : (TOP_BAR_HEIGHT + TELEM_STRIP_H);
+}
+
+int uiContentTop(void) {
+  return uiBannerTotalHeight();
+}
+
+int uiContentHeight(void) {
+  return BOTTOM_BAR_Y - uiContentTop();
+}
+
+void uiBannerInvalidateTelemetryCache(void) {
+  s_lastBatV = -999.0f;
+  s_lastBatPct = -1;
+  s_lastCurrent = -999.0f;
+  s_lastTemp = -999.0f;
+  s_lastPacketRate = 9999;
+  s_lastModeStr = nullptr;
+  s_lastEmoStr[0] = '\0';
+}
+
+void uiDrawBannerBackground(void) {
+  if (!g_tft) return;
+  if (g_topBannerCollapsed) {
+    g_tft->fillRect(0, 0, SCREEN_W, BANNER_MINI_H, C_BG_DARK);
+    g_tft->drawFastHLine(0, BANNER_MINI_H - 1, SCREEN_W, C_BORDER);
+    return;
+  }
+  g_tft->fillRect(0, 0, SCREEN_W, TOP_BAR_HEIGHT, C_BG_DARK);
+  g_tft->drawFastHLine(0, TOP_BAR_HEIGHT - 1, SCREEN_W, C_BORDER);
+  g_tft->fillRect(0, TOP_BAR_HEIGHT, SCREEN_W, TELEM_STRIP_H, C_BG_DARK);
+  g_tft->drawFastHLine(0, TOP_BAR_HEIGHT + TELEM_STRIP_H - 1, SCREEN_W, C_BORDER);
 }
 
 // ============================================================
@@ -94,6 +130,12 @@ void uiDrawCurrentPage(void) {
     case PAGE_WAYPOINTS:
       uiDrawPageAutonomy();  // Placeholder - same as autonomy for now
       break;
+    case PAGE_HELP:
+      uiDrawPageHelp();
+      break;
+    case PAGE_SD_EXPLORER:
+      uiDrawPageSdExplorer();
+      break;
   }
 }
 
@@ -108,17 +150,13 @@ void uiDrawStaticDrive(void) {
   for (int y = 0; y < SCREEN_H; y += GRID_SPACING)
     g_tft->drawFastHLine(0, y, SCREEN_W, C_GRID);
 
-  g_tft->fillRect(0, 0, SCREEN_W, TOP_BAR_HEIGHT, C_BG_DARK);
-  g_tft->drawFastHLine(0, TOP_BAR_HEIGHT - 1, SCREEN_W, C_BORDER);
-  g_tft->setTextColor(C_WHITE, C_BG_DARK);
-  g_tft->setTextSize(2);
-  g_tft->drawString("WALL-E", 10, 6);
-  
-  // Control authority indicator (drawn in top bar initially)
-  uiDrawControlAuthority(packetTelemetryValid());
-
-  g_tft->fillRect(0, TOP_BAR_HEIGHT, SCREEN_W, TELEM_STRIP_H, C_BG_DARK);
-  g_tft->drawFastHLine(0, TOP_BAR_HEIGHT + TELEM_STRIP_H - 1, SCREEN_W, C_BORDER);
+  uiDrawBannerBackground();
+  if (!g_topBannerCollapsed) {
+    g_tft->setTextColor(C_WHITE, C_BG_DARK);
+    g_tft->setTextSize(2);
+    g_tft->drawString("WALL-E", 10, 6);
+    uiDrawControlAuthority(packetTelemetryValid());
+  }
   
   // Force initial telemetry and control authority draw
   s_lastBatV = -999.0f;
@@ -192,18 +230,19 @@ void uiDrawStaticSystem(void) {
 
 #if USE_PHYSICAL_JOYSTICKS
 void uiDrawPhysicalJoystickLayout(void) {
-  const int cTop = TOP_BAR_HEIGHT + TELEM_STRIP_H;
+  const int cTop = uiContentTop();
   if (!g_tft) return;
   g_tft->fillScreen(C_BG);
-  g_tft->fillRect(0, 0, SCREEN_W, TOP_BAR_HEIGHT, C_BG_DARK);
-  g_tft->fillRect(0, TOP_BAR_HEIGHT, SCREEN_W, TELEM_STRIP_H, C_BG_DARK);
-  g_tft->drawFastHLine(0, TOP_BAR_HEIGHT + TELEM_STRIP_H - 1, SCREEN_W, C_BORDER);
-  g_tft->setTextColor(C_WHITE, C_BG_DARK);
-  g_tft->setTextSize(2);
-  g_tft->drawString("WALL-E Console", 10, 6);
+  uiDrawBannerBackground();
+  if (!g_topBannerCollapsed) {
+    g_tft->setTextColor(C_WHITE, C_BG_DARK);
+    g_tft->setTextSize(2);
+    g_tft->drawString("WALL-E Console", 10, 6);
+    uiDrawControlAuthority(packetTelemetryValid());
+  }
 
   int midX = SCREEN_W / 2;
-  g_tft->drawFastVLine(midX, cTop, CONTENT_H, C_BORDER);
+  g_tft->drawFastVLine(midX, cTop, uiContentHeight(), C_BORDER);
   /* "Battery" / "Behaviour" labels drawn in uiDrawTelemetryStrip (telemetry row) */
 
   // Get animation names based on current profile's favorites
@@ -276,6 +315,42 @@ void uiDrawPhysicalJoystickLayout(void) {
 // ------------------------------------------------------------
 void uiDrawTelemetryStrip(const TelemetryStripData* telem) {
   if (!g_tft || !telem) return;
+
+  if (g_topBannerCollapsed) {
+    int batPct = telem->batteryPct;
+    if (batPct < 0) batPct = 0;
+    if (batPct > 100) batPct = 100;
+    const char* emo = telem->emotionStr ? telem->emotionStr : "";
+    bool changed = (telem->batteryV != s_lastBatV || batPct != s_lastBatPct ||
+                    telem->currentA != s_lastCurrent || telem->tempC != s_lastTemp ||
+                    telem->packetRate != s_lastPacketRate || telem->modeStr != s_lastModeStr ||
+                    strcmp(s_lastEmoStr, emo) != 0);
+    if (!changed) return;
+    s_lastBatV = telem->batteryV;
+    s_lastBatPct = batPct;
+    s_lastCurrent = telem->currentA;
+    s_lastTemp = telem->tempC;
+    s_lastPacketRate = telem->packetRate;
+    s_lastModeStr = telem->modeStr;
+    strncpy(s_lastEmoStr, emo, sizeof(s_lastEmoStr) - 1);
+    s_lastEmoStr[sizeof(s_lastEmoStr) - 1] = '\0';
+
+    g_tft->fillRect(0, 0, SCREEN_W, BANNER_MINI_H, C_BG_DARK);
+    g_tft->drawFastHLine(0, BANNER_MINI_H - 1, SCREEN_W, C_BORDER);
+    char line[44];
+    const char* mode = telem->modeStr ? telem->modeStr : "--";
+    snprintf(line, sizeof(line), "%d%% %.1fV %u/s %s", batPct,
+             (double)telem->batteryV, (unsigned)telem->packetRate, mode);
+    if (strlen(line) > 38) line[38] = '\0';
+    g_tft->setTextColor(telem->connected ? C_WHITE : C_TEXT_DIM, C_BG_DARK);
+    g_tft->setTextSize(1);
+    g_tft->setCursor(4, 4);
+    g_tft->print(line);
+    g_tft->setTextColor(C_ACCENT, C_BG_DARK);
+    g_tft->setCursor(SCREEN_W - 44, 4);
+    g_tft->print("v");
+    return;
+  }
 
   int w = 60, h = 8;
   int batPct = telem->batteryPct;
@@ -433,7 +508,9 @@ void uiDrawUpdateDynamic(const TelemetryStripData* telem, const DriveState* ds,
   }
 
   if (telem) uiDrawTelemetryStrip(telem);
-  uiDrawControlAuthority(telem && telem->connected);
+  if (!g_topBannerCollapsed) {
+    uiDrawControlAuthority(telem && telem->connected);
+  }
 }
 
 void uiDrawEStopRegion(bool highlighted) {
@@ -453,10 +530,12 @@ void uiDrawPageBehaviour(void) {
     g_tft->drawFastVLine(x, 0, SCREEN_H, C_GRID);
   for (int y = 0; y < SCREEN_H; y += GRID_SPACING)
     g_tft->drawFastHLine(0, y, SCREEN_W, C_GRID);
-  g_tft->fillRect(0, 0, SCREEN_W, TOP_BAR_HEIGHT, C_BG_DARK);
-  g_tft->setTextColor(C_WHITE, C_BG_DARK);
-  g_tft->setTextSize(2);
-  g_tft->drawString("Animations", 10, 6);
+  uiDrawBannerBackground();
+  if (!g_topBannerCollapsed) {
+    g_tft->setTextColor(C_WHITE, C_BG_DARK);
+    g_tft->setTextSize(2);
+    g_tft->drawString("Animations", 10, 6);
+  }
   
   // Display all available animations (6 total)
   // Animation names from animation_data.h
@@ -524,10 +603,12 @@ void uiDrawPageSystem(void) {
     g_tft->drawFastVLine(x, 0, SCREEN_H, C_GRID);
   for (int y = 0; y < SCREEN_H; y += GRID_SPACING)
     g_tft->drawFastHLine(0, y, SCREEN_W, C_GRID);
-  g_tft->fillRect(0, 0, SCREEN_W, TOP_BAR_HEIGHT, C_BG_DARK);
-  g_tft->setTextColor(C_WHITE, C_BG_DARK);
-  g_tft->setTextSize(2);
-  g_tft->drawString("System", 10, 6);
+  uiDrawBannerBackground();
+  if (!g_topBannerCollapsed) {
+    g_tft->setTextColor(C_WHITE, C_BG_DARK);
+    g_tft->setTextSize(2);
+    g_tft->drawString("System", 10, 6);
+  }
   g_tft->setTextColor(C_TEXT_DIM, C_BG);
   g_tft->setTextSize(1);
   g_tft->drawString("Battery: -- V", 16, 56);
@@ -543,9 +624,16 @@ void uiDrawPageSystem(void) {
   g_tft->fillRect(130, 130, 100, 32, C_ACCENT);
   g_tft->drawString("Servos", 150, 140);
   
-  // NEW: Autonomy button
-  g_tft->fillRect(16, 168, 100, 32, C_GREEN);
-  g_tft->drawString("Autonomy", 28, 178);
+  // Row 2: Autonomy | Help | SD (touch zones must match touch_input page 2)
+  g_tft->fillRect(4, 168, 100, 32, C_GREEN);
+  g_tft->setTextColor(C_WHITE, C_GREEN);
+  g_tft->drawString("Autonomy", 16, 178);
+  g_tft->fillRect(110, 168, 100, 32, C_ACCENT);
+  g_tft->setTextColor(C_BG, C_ACCENT);
+  g_tft->drawString("Help", 138, 178);
+  g_tft->fillRect(216, 168, 100, 32, C_YELLOW);
+  g_tft->setTextColor(C_BG, C_YELLOW);
+  g_tft->drawString("Mem", 244, 178);
   
   // Back button
   g_tft->fillRect(SCREEN_W / 2 - 50, BOTTOM_BAR_Y + 4, 100, 32, C_ACCENT);
@@ -554,70 +642,289 @@ void uiDrawPageSystem(void) {
 }
 
 // ============================================================
-//  Autonomy Page
+//  Autonomy Page — Live telemetry + Tune (remote config to Base)
 // ============================================================
+/* Tune row layout — labels left, − / value / + ; touch_input PAGE_AUTONOMY must match x */
+#define AU_TUNE_X_MINUS   84
+#define AU_TUNE_X_VAL    124
+#define AU_TUNE_X_PLUS   264
+#define AU_TUNE_BTN_W     36
+
+static void drawAutonomyTuneRow(const char* label, int y, uint8_t val, const char* suffix) {
+  if (!g_tft) return;
+  g_tft->setTextColor(C_TEXT_DIM, C_BG);
+  g_tft->setTextSize(1);
+  g_tft->drawString(label, 4, y + 3);
+  g_tft->fillRect(AU_TUNE_X_MINUS, y, AU_TUNE_BTN_W, 16, C_BG_DARK);
+  g_tft->drawRect(AU_TUNE_X_MINUS, y, AU_TUNE_BTN_W, 16, C_BORDER);
+  g_tft->setTextColor(C_WHITE, C_BG_DARK);
+  g_tft->setCursor(AU_TUNE_X_MINUS + 12, y + 4);
+  g_tft->print("-");
+  char vb[16];
+  snprintf(vb, sizeof(vb), "%u%s", (unsigned)val, suffix);
+  g_tft->setTextColor(C_ACCENT, C_BG);
+  g_tft->setCursor(AU_TUNE_X_VAL, y + 3);
+  g_tft->print(vb);
+  g_tft->fillRect(AU_TUNE_X_PLUS, y, AU_TUNE_BTN_W, 16, C_BG_DARK);
+  g_tft->drawRect(AU_TUNE_X_PLUS, y, AU_TUNE_BTN_W, 16, C_BORDER);
+  g_tft->setTextColor(C_WHITE, C_BG_DARK);
+  g_tft->setCursor(AU_TUNE_X_PLUS + 12, y + 4);
+  g_tft->print("+");
+}
+
 void uiDrawPageAutonomy(void) {
   if (!g_tft) return;
   g_tft->fillScreen(C_BG);
   
-  // Grid
   for (int x = 0; x < SCREEN_W; x += GRID_SPACING)
     g_tft->drawFastVLine(x, 0, SCREEN_H, C_GRID);
   for (int y = 0; y < SCREEN_H; y += GRID_SPACING)
     g_tft->drawFastHLine(0, y, SCREEN_W, C_GRID);
   
-  // Top bar
-  g_tft->fillRect(0, 0, SCREEN_W, TOP_BAR_HEIGHT, C_BG_DARK);
-  g_tft->setTextColor(C_WHITE, C_BG_DARK);
-  g_tft->setTextSize(2);
-  g_tft->drawString("Autonomy", 10, 6);
+  uiDrawBannerBackground();
+  if (!g_topBannerCollapsed) {
+    g_tft->setTextColor(C_WHITE, C_BG_DARK);
+    g_tft->setTextSize(2);
+    g_tft->drawString("Autonomy", 10, 6);
+  }
   
-  // Get telemetry
   TelemetryPacket telem;
   packetGetTelemetry(&telem);
-  
-  // Enable/Disable toggle button
-  bool enabled = telem.autonomyEnabled;
-  uint16_t btnColor = enabled ? C_GREEN : C_RED;
-  g_tft->fillRect(200, 50, 100, 32, btnColor);
-  g_tft->setTextColor(C_WHITE, btnColor);
+
+  const int c = uiContentTop();
+  /* Tabs — must match touch_input PAGE_AUTONOMY */
+  g_tft->fillRect(4, c + 4, 150, 22, g_autonomyUiTab == 0 ? C_ACCENT : C_BG_DARK);
+  g_tft->drawRect(4, c + 4, 150, 22, C_BORDER);
+  g_tft->setTextColor(g_autonomyUiTab == 0 ? C_BG : C_ACCENT, g_autonomyUiTab == 0 ? C_ACCENT : C_BG_DARK);
   g_tft->setTextSize(1);
-  g_tft->drawString(enabled ? "ENABLED" : "DISABLED", 215, 60);
-  
-  // State
-  g_tft->setTextColor(C_ACCENT, C_BG);
-  char buf[64];
-  snprintf(buf, sizeof(buf), "State: %s", getAutonomyStateName(telem.autonomyState));
-  g_tft->drawString(buf, 16, 56);
-  
-  // Sonar
-  snprintf(buf, sizeof(buf), "Sonar: %.1fcm", telem.sonarDistanceCm);
-  g_tft->drawString(buf, 16, 80);
-  
-  // Compass
-  snprintf(buf, sizeof(buf), "Heading: %.0f°", telem.compassHeading);
-  g_tft->drawString(buf, 16, 104);
-  
-  // GPS
-  if (telem.gpsValid) {
-    snprintf(buf, sizeof(buf), "GPS: %.5f,%.5f", telem.gpsLatitude, telem.gpsLongitude);
+  g_tft->drawString("Status", 58, c + 10);
+  g_tft->fillRect(166, c + 4, 150, 22, g_autonomyUiTab == 1 ? C_ACCENT : C_BG_DARK);
+  g_tft->drawRect(166, c + 4, 150, 22, C_BORDER);
+  g_tft->setTextColor(g_autonomyUiTab == 1 ? C_BG : C_ACCENT, g_autonomyUiTab == 1 ? C_ACCENT : C_BG_DARK);
+  g_tft->drawString("Adjust", 220, c + 10);
+
+  const int body = c + 30;
+  char buf[48];
+
+  if (g_autonomyUiTab == 0) {
+    g_tft->setTextColor(C_TEXT_DIM, C_BG);
+    g_tft->setCursor(4, body);
+    g_tft->print("Allow robot self-drive");
+    uint16_t armCol = g_remoteAutonomyArm ? C_GREEN : C_RED;
+    g_tft->fillRect(200, body + 2, 110, 28, armCol);
+    g_tft->setTextColor(C_WHITE, armCol);
+    g_tft->setTextSize(1);
+    g_tft->drawString(g_remoteAutonomyArm ? "ON" : "OFF", 236, body + 10);
+
+    snprintf(buf, sizeof(buf), "Brain auto: %s", telem.autonomyEnabled ? "running" : "off");
+    g_tft->setTextColor(C_ACCENT, C_BG);
+    g_tft->drawString(buf, 4, body + 36);
+    snprintf(buf, sizeof(buf), "Behavior: %s", getAutonomyStateName(telem.autonomyState));
+    g_tft->drawString(buf, 4, body + 52);
+    snprintf(buf, sizeof(buf), "Front distance: %.0f cm", telem.sonarDistanceCm);
+    g_tft->drawString(buf, 4, body + 68);
+    snprintf(buf, sizeof(buf), "Compass: %.0f deg", telem.compassHeading);
+    g_tft->drawString(buf, 4, body + 84);
+    if (telem.gpsValid) {
+      snprintf(buf, sizeof(buf), "GPS: locked");
+    } else {
+      snprintf(buf, sizeof(buf), "GPS: searching");
+    }
+    g_tft->drawString(buf, 4, body + 100);
+    if (telem.waypointMode) {
+      snprintf(buf, sizeof(buf), "Route pt %u/%u  %.1f m", (unsigned)(telem.currentWaypoint + 1),
+               (unsigned)telem.totalWaypoints, telem.waypointDistanceM);
+      g_tft->drawString(buf, 4, body + 116);
+    }
   } else {
-    snprintf(buf, sizeof(buf), "GPS: No fix");
+    g_tft->setTextColor(C_TEXT_DIM, C_BG);
+    g_tft->setCursor(4, body - 2);
+    g_tft->print("Send to robot over radio");
+    int y = body + 8;
+    const int rh = 16;
+    /* Sonar thresholds: “react” = backup/avoid, “look at” = investigate */
+    drawAutonomyTuneRow("React dist", y, g_auCloseCm, "cm");
+    y += rh;
+    drawAutonomyTuneRow("Look dist", y, g_auInterestCm, "cm");
+    y += rh;
+    drawAutonomyTuneRow("Curiosity", y, g_auCuriosityPct, "%");
+    y += rh;
+    drawAutonomyTuneRow("Bravery", y, g_auBraveryPct, "%");
+    y += rh;
+    g_tft->setTextColor(C_TEXT_DIM, C_BG);
+    g_tft->drawString("Follow GPS route", 4, y + 3);
+    g_tft->fillRect(128, y, 72, 16, g_auWaypointFollow ? C_GREEN : C_BG_DARK);
+    g_tft->drawRect(128, y, 72, 16, C_BORDER);
+    g_tft->setTextColor(C_WHITE, g_auWaypointFollow ? C_GREEN : C_BG_DARK);
+    g_tft->setCursor(140, y + 4);
+    g_tft->print(g_auWaypointFollow ? "ON" : "OFF");
+    y += rh + 4;
+    g_tft->setTextColor(C_TEXT_DIM, C_BG);
+    g_tft->drawString("Personality", 4, y + 2);
+    const char* plab[] = {"Careful", "Balanced", "Explorer", "Playful"};
+    for (int i = 0; i < 4; i++) {
+      int bx = 52 + i * 66;
+      g_tft->fillRect(bx, y, 62, 16, C_BG_DARK);
+      g_tft->drawRect(bx, y, 62, 16, C_BORDER);
+      g_tft->setTextColor(C_ACCENT, C_BG_DARK);
+      int tw = (int)strlen(plab[i]) * 6;
+      int tx = bx + (62 - tw) / 2;
+      if (tx < bx + 2) tx = bx + 2;
+      g_tft->setCursor(tx, y + 4);
+      g_tft->print(plab[i]);
+    }
   }
-  g_tft->drawString(buf, 16, 128);
   
-  // Waypoint info
-  if (telem.waypointMode) {
-    snprintf(buf, sizeof(buf), "WP: %d/%d", telem.currentWaypoint + 1, telem.totalWaypoints);
-    g_tft->drawString(buf, 16, 152);
-    snprintf(buf, sizeof(buf), "Dist: %.1fm @ %.0f°", telem.waypointDistanceM, telem.waypointBearingDeg);
-    g_tft->drawString(buf, 16, 176);
-  }
-  
-  // Back button
   g_tft->fillRect(SCREEN_W / 2 - 50, BOTTOM_BAR_Y + 4, 100, 32, C_ACCENT);
   g_tft->setTextColor(C_BG, C_ACCENT);
   g_tft->drawString("Back", SCREEN_W / 2 - 18, BOTTOM_BAR_Y + 14);
+}
+
+// ============================================================
+//  Help — topic index + short reference pages
+// ============================================================
+void uiDrawPageHelp(void) {
+  if (!g_tft) return;
+  g_tft->fillScreen(C_BG);
+  for (int x = 0; x < SCREEN_W; x += GRID_SPACING)
+    g_tft->drawFastVLine(x, 0, SCREEN_H, C_GRID);
+  for (int y = 0; y < SCREEN_H; y += GRID_SPACING)
+    g_tft->drawFastHLine(0, y, SCREEN_W, C_GRID);
+  uiDrawBannerBackground();
+  if (!g_topBannerCollapsed) {
+    g_tft->setTextColor(C_WHITE, C_BG_DARK);
+    g_tft->setTextSize(2);
+    g_tft->drawString("Help", 10, 6);
+  }
+
+  const int c = uiContentTop();
+
+  if (g_helpSection == 0) {
+    g_tft->setTextColor(C_TEXT_DIM, C_BG);
+    g_tft->setTextSize(1);
+    g_tft->setCursor(8, c + 4);
+    g_tft->print("Choose a topic:");
+    const char* labs[] = {
+      "Drive & safety",
+      "Self-drive & autonomy",
+      "Animations",
+      "System & radio link"
+    };
+    for (int i = 0; i < 4; i++) {
+      int y = c + 22 + i * 38;
+      g_tft->fillRect(10, y, 300, 32, C_BG_DARK);
+      g_tft->drawRect(10, y, 300, 32, C_BORDER);
+      g_tft->setTextColor(C_ACCENT, C_BG_DARK);
+      int tw = (int)strlen(labs[i]) * 6;
+      int tx = 10 + (300 - tw) / 2;
+      if (tx < 14) tx = 14;
+      g_tft->setCursor(tx, y + 12);
+      g_tft->print(labs[i]);
+    }
+  } else {
+    const char* title = "?";
+    const char* lines[10];
+    int n = 0;
+    switch (g_helpSection) {
+      case 1:
+        title = "Drive & safety";
+        lines[n++] = "Joystick / arrows move tracks.";
+        lines[n++] = "E-STOP cuts motor power at once.";
+        lines[n++] = "Dock & Cancel control charging";
+        lines[n++] = "homing when the Brain supports it.";
+        lines[n++] = "Bottom row: Sys, Beh, profiles,";
+        lines[n++] = "Autonomy. CTRL shows who steers.";
+        lines[n++] = "You need a radio link for drive.";
+        break;
+      case 2:
+        title = "Self-drive";
+        lines[n++] = "Status: allow robot self-drive.";
+        lines[n++] = "Adjust: send tuning over radio.";
+        lines[n++] = "React / Look = sonar distances.";
+        lines[n++] = "Curiosity & Bravery shape style.";
+        lines[n++] = "Personality = quick presets.";
+        lines[n++] = "Follow GPS = route following.";
+        break;
+      case 3:
+        title = "Animations";
+        lines[n++] = "Tap a tile to play on the robot.";
+        lines[n++] = "Hold to star a favorite.";
+        lines[n++] = "Favorites show a second border.";
+        break;
+      case 4:
+        title = "System & link";
+        lines[n++] = "Profiles store servo curves.";
+        lines[n++] = "Servos opens the servo test page.";
+        lines[n++] = "Autonomy opens self-drive tools.";
+        lines[n++] = "OFFLINE = no recent Brain link.";
+        lines[n++] = "Tap banner edge to shrink status.";
+        break;
+      default:
+        title = "Help";
+        lines[n++] = "Use Back to return.";
+        break;
+    }
+    if (n > 0) {
+      g_tft->setTextColor(C_ACCENT, C_BG);
+      g_tft->setTextSize(2);
+      g_tft->drawString(title, 8, c + 4);
+      g_tft->setTextSize(1);
+      g_tft->setTextColor(C_TEXT_DIM, C_BG);
+      for (int i = 0; i < n; i++) {
+        g_tft->setCursor(8, c + 32 + i * 14);
+        g_tft->print(lines[i]);
+      }
+      g_tft->setTextColor(C_TEXT_DIM, C_BG);
+      g_tft->setCursor(8, BOTTOM_BAR_Y - 16);
+      g_tft->print("Back = topic list");
+    }
+  }
+
+  g_tft->fillRect(SCREEN_W / 2 - 50, BOTTOM_BAR_Y + 4, 100, 32, C_ACCENT);
+  g_tft->setTextColor(C_BG, C_ACCENT);
+  g_tft->drawString("Back", SCREEN_W / 2 - 18, BOTTOM_BAR_Y + 14);
+}
+
+// ------------------------------------------------------------
+//  Bottom toast: Base autonomy in a “busy mind” state
+// ------------------------------------------------------------
+void uiDrawThinkingStrip(const TelemetryPacket* tm, bool linkOk) {
+  if (!g_tft) return;
+
+  static uint8_t s_wasOn = 0;
+
+  const char* line = nullptr;
+  if (linkOk && tm && tm->autonomyEnabled) {
+    switch (tm->autonomyState) {
+      case 1:  line = "WALL·E is looking around…"; break;
+      case 2:  line = "WALL·E is thinking…"; break;
+      case 4:  line = "WALL·E is inspecting…"; break;
+      case 8:  line = "WALL·E is finding the way…"; break;
+      default: break;
+    }
+  }
+
+  if (!line) {
+    if (s_wasOn) {
+      g_needStaticRedraw = true;
+      s_wasOn = 0;
+    }
+    return;
+  }
+  s_wasOn = 1;
+
+  const int y = UI_THINKING_STRIP_Y;
+  const int h = UI_THINKING_STRIP_H;
+  const uint16_t panel = 0x2103;
+  g_tft->fillRoundRect(4, y, SCREEN_W - 8, h, 5, panel);
+  g_tft->drawRoundRect(4, y, SCREEN_W - 8, h, 5, C_ACCENT_DIM);
+  g_tft->setTextSize(1);
+  g_tft->setTextColor(C_ACCENT, panel);
+  int lw = (int)strlen(line) * 6;
+  int tx = (SCREEN_W - lw) / 2;
+  if (tx < 6) tx = 6;
+  g_tft->setCursor(tx, y + 9);
+  g_tft->print(line);
 }
 
 // ------------------------------------------------------------
@@ -628,19 +935,19 @@ void uiDrawStaticProfile(void) {
   
   g_tft->fillScreen(C_BG);
   
-  // Top bar
-  g_tft->fillRect(0, 0, SCREEN_W, TOP_BAR_HEIGHT, C_BG_DARK);
-  g_tft->drawFastHLine(0, TOP_BAR_HEIGHT - 1, SCREEN_W, C_BORDER);
-  g_tft->setTextColor(C_WHITE, C_BG_DARK);
-  g_tft->setTextSize(2);
-  g_tft->drawString("Profile", 10, 6);
+  uiDrawBannerBackground();
+  if (!g_topBannerCollapsed) {
+    g_tft->setTextColor(C_WHITE, C_BG_DARK);
+    g_tft->setTextSize(2);
+    g_tft->drawString("Profile", 10, 6);
+  }
   
   // Profile cards (3 profiles)
   const int cardW = 90;
   const int cardH = 120;
   const int cardSpacing = 10;
   const int startX = (SCREEN_W - (cardW * 3 + cardSpacing * 2)) / 2;
-  const int startY = 50;
+  const int startY = uiContentTop() + 10;
   
   // Get current profile
   Profile* currentProfile = profileGet();
@@ -707,19 +1014,18 @@ void uiDrawStaticServoEditor(void) {
   
   g_tft->fillScreen(C_BG);
   
-  // Top bar with profile name
-  g_tft->fillRect(0, 0, SCREEN_W, TOP_BAR_HEIGHT, C_BG_DARK);
-  g_tft->drawFastHLine(0, TOP_BAR_HEIGHT - 1, SCREEN_W, C_BORDER);
-  g_tft->setTextColor(C_WHITE, C_BG_DARK);
-  g_tft->setTextSize(2);
-  
+  uiDrawBannerBackground();
   Profile* p = profileGet();
   char titleBuf[32];
   snprintf(titleBuf, sizeof(titleBuf), "%s Tuning", p->name);
-  g_tft->drawString(titleBuf, 10, 6);
+  if (!g_topBannerCollapsed) {
+    g_tft->setTextColor(C_WHITE, C_BG_DARK);
+    g_tft->setTextSize(2);
+    g_tft->drawString(titleBuf, 10, 6);
+  }
   
   // Adjustment sliders
-  const int startY = 45;
+  const int startY = uiContentTop() + 8;
   const int sliderH = 24;
   const int spacing = 28;
   const int labelX = 10;
@@ -804,12 +1110,12 @@ void uiDrawStaticServoTest(void) {
   
   g_tft->fillScreen(C_BG);
   
-  // Top bar
-  g_tft->fillRect(0, 0, SCREEN_W, TOP_BAR_HEIGHT, C_BG_DARK);
-  g_tft->drawFastHLine(0, TOP_BAR_HEIGHT - 1, SCREEN_W, C_BORDER);
-  g_tft->setTextColor(C_WHITE, C_BG_DARK);
-  g_tft->setTextSize(2);
-  g_tft->drawString("Servo Test", 10, 6);
+  uiDrawBannerBackground();
+  if (!g_topBannerCollapsed) {
+    g_tft->setTextColor(C_WHITE, C_BG_DARK);
+    g_tft->setTextSize(2);
+    g_tft->drawString("Servo Test", 10, 6);
+  }
   
   // Get current servo positions
   uint8_t servoTargets[SERVO_COUNT];
@@ -822,7 +1128,7 @@ void uiDrawStaticServoTest(void) {
   };
   
   // Draw servo sliders (2 columns)
-  const int startY = 40;
+  const int startY = uiContentTop() + 4;
   const int sliderH = 16;
   const int spacing = 18;
   const int col1X = 10;
@@ -907,7 +1213,7 @@ void uiDrawQuickActionOverlay(void) {
 
 void uiDrawAdvancedModeOverlay(void) {
   if (!g_tft || !g_advancedMode) return;
-  int x = 4, y = TOP_BAR_HEIGHT + TELEM_STRIP_H + 4;
+  int x = 4, y = uiContentTop() + 4;
   g_tft->fillRect(x, y, 120, 52, C_BG_DARK);
   g_tft->drawRect(x, y, 120, 52, C_ACCENT_DIM);
   g_tft->setTextColor(C_YELLOW, C_BG_DARK);

@@ -16,6 +16,15 @@ function api(path) {
   var b = getBaseUrl();
   return (b || '') + p;
 }
+/** Attach X-Wall-E-Token from localStorage when set (optional API token on base). */
+function apiAuthHeaders() {
+  var h = {};
+  try {
+    var t = localStorage.getItem('walle_api_token');
+    if (t) h['X-Wall-E-Token'] = t;
+  } catch (e) {}
+  return h;
+}
 const TOAST_DURATION = 4000;
 const TOAST_MAX_VISIBLE = 2;
 const FAILSAFE_MS = 440;
@@ -30,6 +39,8 @@ let stateCache = {};
 var missionQueue = [];
 var _imuHist = [];
 let cydOverride = false;
+var _operatorLastOk = 0;
+var _operatorPayload = null;
 var _lastToastState = { lowBattery: false, rth: false, interest: false };
 var _docReleaseBound = false;
 
@@ -82,11 +93,15 @@ function switchTab(name) {
   if (name === 'navigation' && window.LrosNavigation) {
     setTimeout(function () {
       LrosNavigation.init();
+      if (window.LrosMapNav && typeof LrosMapNav.onTabShow === 'function') LrosMapNav.onTabShow();
       if (window.NavWorldContext) {
         NavWorldContext.bindGeoButton();
         NavWorldContext.refresh({}, { force: true });
       }
     }, 0);
+  }
+  if (name === 'sequence' && window.LrosSequences) {
+    setTimeout(function () { LrosSequences.onTabShow(); }, 0);
   }
   if (name === 'telemetry' || name === 'power') fetchStatus();
   if (name === 'drive') {
@@ -104,6 +119,7 @@ function switchTab(name) {
     initJoystick();
     initHeadPad();
     initTankSliders();
+    applyDriveLockUI(_operatorPayload);
   }
   refreshAutonomyPolling();
 }
@@ -156,8 +172,237 @@ function setTheme(theme) {
   document.documentElement.dataset.theme = theme || '';
 }
 
-function setOverrideBanner(visible) {
-  document.getElementById('override-banner').classList.toggle('visible', !!visible);
+/** Optional opts: { text, severity: 'info'|'warn'|'danger' } */
+function setOverrideBanner(visible, opts) {
+  var el = document.getElementById('override-banner');
+  if (!el) return;
+  el.classList.toggle('visible', !!visible);
+  el.classList.remove('severity--info', 'severity--warn', 'severity--danger');
+  if (visible && opts && opts.severity) el.classList.add('severity--' + opts.severity);
+  if (opts && opts.text) el.textContent = opts.text;
+  else if (!visible) el.textContent = 'Local Control Active - CYD touchscreen has control';
+}
+
+function computeOperatorLinkState(j) {
+  if (!navigator.onLine) return 'OFFLINE';
+  if (!j) {
+    if (_operatorLastOk <= 0) return 'TIMEOUT';
+    return Date.now() - _operatorLastOk > 12000 ? 'OFFLINE' : 'TIMEOUT';
+  }
+  if (j._linkDegraded) return 'TIMEOUT';
+  if (j.command_stale) return 'STALE';
+  var ws = window.WalleConnection && WalleConnection.getState();
+  if (ws === 'ws') return 'LIVE';
+  return 'HTTP FALLBACK';
+}
+
+function deriveBannerFromOperator(j, linkState) {
+  if (!j) {
+    if (linkState === 'OFFLINE' || linkState === 'TIMEOUT') {
+      return { visible: true, text: 'Connection lost — operator state unavailable', severity: 'danger' };
+    }
+    return { visible: false };
+  }
+  if (linkState === 'OFFLINE') {
+    return { visible: true, text: 'Browser offline — commands will not reach the base', severity: 'danger' };
+  }
+  if (j.unifiedSafety || j.authority === 'SAFETY') {
+    return { visible: true, text: j.lock_reason || 'Safety stop latched — drive disabled', severity: 'danger' };
+  }
+  if (j.authority === 'POLICY') {
+    return { visible: true, text: j.lock_reason || 'Motion policy limits CYD vs browser', severity: 'warn' };
+  }
+  if (j.authority === 'CYD') {
+    return { visible: true, text: j.lock_reason || 'CYD touchscreen has control', severity: 'warn' };
+  }
+  if (j.authority === 'DOCKING') {
+    return { visible: true, text: j.lock_reason || 'Docking controller owns drive', severity: 'info' };
+  }
+  if (j.drive_locked && j.authority === 'AI') {
+    return { visible: true, text: j.lock_reason || 'AI assist active — manual override available', severity: 'info' };
+  }
+  if (j.command_stale) {
+    return { visible: true, text: j.lock_reason || 'Connection stale — commands may be ignored', severity: 'warn' };
+  }
+  if (linkState === 'TIMEOUT') {
+    return { visible: true, text: 'Operator link interrupted — retrying', severity: 'warn' };
+  }
+  return { visible: false };
+}
+
+function applyDriveLockUI(j) {
+  var pd = document.getElementById('page-drive');
+  var msg = document.getElementById('drive-lock-msg');
+  if (!pd) return;
+  var locked = !!(j && j.drive_locked);
+  pd.classList.toggle('drive-console-locked', locked);
+  if (j && j.authority) pd.dataset.authority = String(j.authority).toLowerCase();
+  else pd.removeAttribute('data-authority');
+  if (msg) {
+    if (locked && j && j.lock_reason) {
+      msg.hidden = false;
+      msg.textContent = j.lock_reason;
+    } else if (locked) {
+      msg.hidden = false;
+      msg.textContent = 'Drive controls are locked by the base.';
+    } else {
+      msg.hidden = true;
+      msg.textContent = '';
+    }
+  }
+}
+
+function updateOperatorConsoleOffline() {
+  var strip = document.getElementById('operator-strip');
+  if (strip) {
+    strip.classList.add('operator-strip--offline', 'operator-strip--stale');
+    strip.classList.remove('operator-strip--locked');
+  }
+  setById('op-authority-val', 'UNKNOWN');
+  setById('op-policy-val', '—');
+  setById('op-motion-val', 'OFFLINE');
+  setById('op-profile-val', '—');
+  setById('op-link-val', 'OFFLINE');
+  setById('op-fresh-val', '—');
+  setById('op-lock-val', 'Robot offline or link lost');
+  document.body.classList.add('lros-operator-offline');
+  try {
+    window.__lrosOperatorSnapshot = null;
+  } catch (e) {}
+  applyDriveLockUI(null);
+  var b = deriveBannerFromOperator(null, 'OFFLINE');
+  setOverrideBanner(b.visible, b.visible ? { text: b.text, severity: b.severity } : {});
+}
+
+function updateOperatorConsole(j, linkStateOverride) {
+  if (!j) return;
+  var strip = document.getElementById('operator-strip');
+  if (strip) {
+    strip.classList.remove('operator-strip--offline');
+    strip.classList.toggle('operator-strip--stale', !!j.command_stale || !!j._linkDegraded);
+    strip.classList.toggle('operator-strip--locked', !!j.drive_locked);
+  }
+  document.body.classList.remove('lros-operator-offline');
+
+  var linkState = linkStateOverride !== undefined && linkStateOverride !== null
+    ? linkStateOverride
+    : computeOperatorLinkState(j);
+  setById('op-authority-val', j.authority || 'UNKNOWN');
+  setById('op-policy-val', j.motion_policy || '—');
+  setById('op-motion-val', j.motion || '—');
+  setById('op-profile-val', j.drive_profile || '—');
+  setById('op-link-val', linkState);
+  var age = j.last_command_age_ms != null ? Number(j.last_command_age_ms) : null;
+  var fs = j.failsafe_timeout_ms != null ? Number(j.failsafe_timeout_ms) : null;
+  var freshStr = age != null ? age + ' ms' : '—';
+  if (fs != null) freshStr += ' / ' + fs + ' ms failsafe';
+  setById('op-fresh-val', freshStr);
+  var lockShow = j.lock_reason || (!j.drive_locked ? '—' : 'locked');
+  setById('op-lock-val', lockShow);
+
+  applyDriveLockUI(j);
+
+  var b = deriveBannerFromOperator(j, linkState);
+  setOverrideBanner(b.visible, b.visible ? { text: b.text, severity: b.severity } : {});
+
+  if (typeof console !== 'undefined' && console.debug) {
+    console.debug('[LROS operator]', j.authority, j.motion, j.drive_profile, linkState, 'drive_locked=', j.drive_locked);
+  }
+  try {
+    window.__lrosOperatorSnapshot = j;
+  } catch (e) {}
+  if (typeof updateNavMapHud === 'function') updateNavMapHud();
+}
+
+var _lastVisionEvtMs = 0;
+var _visionEventsInited = false;
+
+function pollVisionEvents() {
+  fetch(api('/api/vision/events'), { cache: 'no-store', headers: apiAuthHeaders() })
+    .then(function (r) {
+      return r.json();
+    })
+    .then(function (j) {
+      if (!j || !j.events || !j.events.length) return;
+      var maxT = 0;
+      j.events.forEach(function (ev) {
+        if (ev && ev.t_ms > maxT) maxT = ev.t_ms;
+      });
+      if (!_visionEventsInited) {
+        _lastVisionEvtMs = maxT;
+        _visionEventsInited = true;
+        return;
+      }
+      j.events.forEach(function (ev) {
+        if (ev && ev.t_ms > _lastVisionEvtMs && ev.code) {
+          if (typeof showToast === 'function') showToast('\uD83D\uDCF9', 'Vision event ' + ev.code);
+        }
+      });
+      if (maxT > _lastVisionEvtMs) _lastVisionEvtMs = maxT;
+    })
+    .catch(function () {});
+}
+
+function pollMotionOperator() {
+  fetch(api('/api/motion/operator'), { cache: 'no-store' })
+    .then(function (r) {
+      if (!r.ok) throw new Error('bad status');
+      return r.json();
+    })
+    .then(function (j) {
+      _operatorLastOk = Date.now();
+      delete j._linkDegraded;
+      _operatorPayload = j;
+      if (window.WalleConnection) WalleConnection.markHttpOk();
+      updateOperatorConsole(j);
+    })
+    .catch(function (e) {
+      if (typeof console !== 'undefined' && console.debug) console.debug('[LROS operator] poll failed', e);
+      if (_operatorPayload) {
+        var degraded = Object.assign({}, _operatorPayload, { _linkDegraded: true });
+        if (!degraded.lock_reason) degraded.lock_reason = 'Connection stale — commands may be ignored';
+        updateOperatorConsole(degraded, 'TIMEOUT');
+      } else {
+        updateOperatorConsoleOffline();
+      }
+    });
+}
+
+/** Navigation page — mission HUD chips (MapLibre deck). */
+function updateNavMapHud() {
+  try {
+    var page = document.getElementById('page-navigation');
+    if (!page || !page.classList.contains('active')) return;
+    var auto = stateCache.auto || {};
+    var imu = stateCache.imu || {};
+    var op = window.__lrosOperatorSnapshot;
+    var set = function (id, t) {
+      var el = document.getElementById(id);
+      if (el) el.textContent = t;
+    };
+    set('nav-hud-autonomy', auto.state != null ? String(auto.state) : '—');
+    set('nav-hud-motion', op && op.motion ? String(op.motion) : '—');
+    set('nav-hud-profile', op && op.drive_profile ? String(op.drive_profile) : '—');
+    if (op && op.last_command_age_ms != null) set('nav-hud-tel-age', String(op.last_command_age_ms) + ' ms');
+    else set('nav-hud-tel-age', '—');
+    set('nav-hud-gps', auto.gpsValid ? 'Fix' : 'No fix');
+    set('nav-hud-hdg', imu.heading != null ? imu.heading + '\u00B0' : '—');
+    var ri = window.LrosNavigation && LrosNavigation.getRouteInfo ? LrosNavigation.getRouteInfo() : {};
+    set('nav-hud-route-m', ri.pathLength != null ? '~' + ri.pathLength.toFixed(1) + ' u' : '—');
+    set('nav-hud-eta', ri.etaSeconds != null && ri.etaSeconds ? '~' + ri.etaSeconds + ' s' : '—');
+    if (window.LrosNavigation && typeof LrosNavigation.getMapSnapshot === 'function') {
+      var s = LrosNavigation.getMapSnapshot();
+      if (s.waypoints && s.waypoints.length && auto.gpsValid && auto.lat != null && auto.lon != null) {
+        var w = s.waypoints[0];
+        var d = haversineMeters(Number(auto.lat), Number(auto.lon), w.lat, w.lng);
+        set('nav-hud-next-wp', Math.round(d) + ' m');
+      } else {
+        set('nav-hud-next-wp', '—');
+      }
+    }
+  } catch (e) {
+    if (typeof console !== 'undefined' && console.debug) console.debug('[LROS] nav HUD', e);
+  }
 }
 
 let _pillState = {};
@@ -1416,6 +1661,7 @@ async function fetchStatus() {
     if (window.LrosNavigation && typeof LrosNavigation.syncFromState === 'function') {
       LrosNavigation.syncFromState(stateCache);
     }
+    updateNavMapHud();
 
     if (window.WalleConnection) WalleConnection.markHttpOk();
 
@@ -2478,8 +2724,11 @@ function initAll() {
   if (window.ProximityAlert) ProximityAlert.setMuted(ProximityAlert.isMuted());
   fetchStatus();
   pollNodeHealth();
+  pollMotionOperator();
   setInterval(fetchStatus, 5000);
   setInterval(pollNodeHealth, 1500);
+  setInterval(pollMotionOperator, 1500);
+  setInterval(pollVisionEvents, 2500);
   try { fetch(api('/stop')); } catch(_) {}
   pushActivity('Dashboard ready', '\uD83C\uDFE0');
   setTimeout(function () { showToast('\uD83D\uDE0A', "Hi! I'm WALL-E"); }, 3000);

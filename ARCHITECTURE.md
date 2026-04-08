@@ -62,7 +62,7 @@ sequenceDiagram
 | **Vision → Base** | **ESP-NOW** `VisionPacket_t` | Vision does not talk to the master directly |
 | **Audio ↔ Base** | **ESP-NOW** (audio-specific packets / status) | See `audio_esp` and `audio_protocol.h` |
 
-**Operational caution:** If **both** LROS and the master can command motion, define an explicit **mode** (manual vs HTTP) or you risk conflicting drive commands.
+**Operational caution:** If **both** LROS and the master can command motion, conflicting drive commands are possible. The base implements **`motion_authority`** (`any` / `cyd_only` / `web_only`) in `main_wall_E_base/main/motion_authority.cpp` and exposes it via **`GET /api/motion/operator`** and **`/api/motion/authority*`** — see [main_wall_E_base/README.md](main_wall_E_base/README.md).
 
 ```mermaid
 flowchart LR

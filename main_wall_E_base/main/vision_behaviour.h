@@ -18,3 +18,9 @@ bool visionIsEnabled(void);
 
 /** Recent vision activity suitable for pose "human / interest" (motion or active track). */
 bool visionBehaviourIsEngaged(void);
+
+/** Last VEVENT_* code from vision packet (0 = none). */
+uint8_t visionGetLastEventCode(void);
+
+/** JSON array of recent { "t_ms", "code" } vision lifecycle events (newest last). */
+String visionGetEventsJSON(void);

@@ -56,47 +56,64 @@ static bool ensureDirectory(const char* path) {
 
 bool sdInit() {
   Serial.println("[SD] Initializing...");
-  
-  // Initialize SPI for SD card
-  SPI.begin(SD_SCK_PIN, SD_MISO_PIN, SD_MOSI_PIN, SD_CS_PIN);
-  
-  // Mount SD card
-  if (!SD.begin(SD_CS_PIN)) {
-    Serial.println("[SD] ⚠️  Mount failed - continuing without SD");
-    s_sdAvailable = false;
-    return false;
+
+  const int kMaxAttempts = 3;
+  for (int attempt = 1; attempt <= kMaxAttempts; attempt++) {
+    if (attempt > 1) {
+      Serial.printf("[SD] Retry %d/%d...\n", attempt, kMaxAttempts);
+      delay(150);
+    }
+
+    SPI.begin(SD_SCK_PIN, SD_MISO_PIN, SD_MOSI_PIN, SD_CS_PIN);
+
+    if (!SD.begin(SD_CS_PIN)) {
+      Serial.printf("[SD] Mount failed (attempt %d/%d)\n", attempt, kMaxAttempts);
+      s_sdAvailable = false;
+      if (attempt == kMaxAttempts) {
+        Serial.println("[SD] Giving up — continuing without SD");
+      }
+      continue;
+    }
+
+    uint8_t cardType = SD.cardType();
+    if (cardType == CARD_NONE) {
+      Serial.printf("[SD] No card (attempt %d/%d)\n", attempt, kMaxAttempts);
+      s_sdAvailable = false;
+      if (attempt == kMaxAttempts) {
+        Serial.println("[SD] Giving up — continuing without SD");
+      }
+      continue;
+    }
+
+    s_sdAvailable = true;
+
+    Serial.print("[SD] Card Type: ");
+    if (cardType == CARD_MMC) Serial.println("MMC");
+    else if (cardType == CARD_SD) Serial.println("SDSC");
+    else if (cardType == CARD_SDHC) Serial.println("SDHC");
+    else Serial.println("UNKNOWN");
+
+    uint64_t cardSize = SD.cardSize() / (1024 * 1024);
+    Serial.printf("[SD] Size: %lluMB\n", cardSize);
+    Serial.printf("[SD] Free: %uMB\n", sdGetFreeSpaceMB());
+
+    ensureDirectory(SD_ROOT);
+    ensureDirectory(SD_MACROS);
+    ensureDirectory(SD_ANIMATIONS);
+    ensureDirectory(SD_STORY);
+    ensureDirectory(SD_LOGS);
+    ensureDirectory(SD_PROFILES);
+    ensureDirectory(SD_MEMORY_DIR);
+    ensureDirectory(SD_CONFIG_DIR);
+    ensureDirectory(SD_MISSIONS_DIR);
+    ensureDirectory(SD_DIAG_DIR);
+    ensureDirectory(SD_EVENTS_DIR);
+
+    Serial.println("[SD] Ready");
+    return true;
   }
-  
-  uint8_t cardType = SD.cardType();
-  if (cardType == CARD_NONE) {
-    Serial.println("[SD] ⚠️  No SD card detected");
-    s_sdAvailable = false;
-    return false;
-  }
-  
-  s_sdAvailable = true;
-  
-  // Print card info
-  Serial.print("[SD] Card Type: ");
-  if (cardType == CARD_MMC) Serial.println("MMC");
-  else if (cardType == CARD_SD) Serial.println("SDSC");
-  else if (cardType == CARD_SDHC) Serial.println("SDHC");
-  else Serial.println("UNKNOWN");
-  
-  uint64_t cardSize = SD.cardSize() / (1024 * 1024);
-  Serial.printf("[SD] Size: %lluMB\n", cardSize);
-  Serial.printf("[SD] Free: %uMB\n", sdGetFreeSpaceMB());
-  
-  // Create directory structure
-  ensureDirectory(SD_ROOT);
-  ensureDirectory(SD_MACROS);
-  ensureDirectory(SD_ANIMATIONS);
-  ensureDirectory(SD_STORY);
-  ensureDirectory(SD_LOGS);
-  ensureDirectory(SD_PROFILES);
-  
-  Serial.println("[SD] ✓ Ready");
-  return true;
+
+  return false;
 }
 
 bool sdIsAvailable() {
@@ -108,6 +125,11 @@ uint32_t sdGetFreeSpaceMB() {
   uint64_t total = SD.totalBytes();
   uint64_t used = SD.usedBytes();
   return (uint32_t)((total - used) / (1024 * 1024));
+}
+
+uint32_t sdGetTotalSpaceMB(void) {
+  if (!s_sdAvailable) return 0;
+  return (uint32_t)(SD.totalBytes() / (1024 * 1024));
 }
 
 // ============================================================

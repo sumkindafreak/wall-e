@@ -997,10 +997,108 @@ html[data-reduced-motion="1"] .card-max-backdrop {
 
 /* E-Stop base — extended below (fixed, pulse, hold) */
 
-/* Override banner */
+/* Override banner — authority warnings (severity variants) */
 #override-banner { display: none; position: fixed; top: 0; left: 0; right: 0; z-index: 999;
-  padding: 10px 16px; background: var(--warn); color: #000; font-size: 0.8rem; font-weight: 600; text-align: center; }
+  padding: 10px 16px; background: var(--warn); color: #000; font-size: 0.8rem; font-weight: 600; text-align: center;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35); }
 #override-banner.visible { display: block; }
+#override-banner.severity--info { background: rgba(59, 130, 246, 0.92); color: #fff; }
+#override-banner.severity--warn { background: var(--warn); color: #000; }
+#override-banner.severity--danger { background: var(--stop); color: #fff; }
+#app:has(#override-banner.visible) { padding-top: 42px; }
+
+/* Global operator strip — control authority + motion (always visible) */
+#operator-strip {
+  flex-shrink: 0;
+  display: flex;
+  align-items: stretch;
+  padding: 8px 12px;
+  background: linear-gradient(180deg, #1a1612 0%, #141210 100%);
+  border-bottom: 1px solid var(--border);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+.operator-strip-inner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  align-items: center;
+  width: 100%;
+  row-gap: 8px;
+}
+.operator-chip {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 6px 10px;
+  min-height: 44px;
+  min-width: 0;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-sizing: border-box;
+}
+.operator-chip--wide { flex: 1 1 120px; }
+.operator-chip--lock { flex: 2 1 200px; }
+.operator-chip-lbl {
+  font-size: 0.55rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--txt-dim);
+}
+.operator-chip-val {
+  font-family: 'Orbitron', monospace;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--accent);
+  text-shadow: 0 0 12px rgba(245, 166, 35, 0.2);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#operator-strip.operator-strip--stale .operator-chip-val { color: var(--warn); }
+#operator-strip.operator-strip--stale #op-link-val { color: var(--accent); }
+#operator-strip.operator-strip--offline .operator-chip-val { color: var(--txt-dim); }
+#operator-strip.operator-strip--offline #op-authority-val { color: var(--stop); }
+#operator-strip.operator-strip--locked .operator-chip--lock { border-color: rgba(239, 68, 68, 0.5); }
+
+/* Drive page: dim controls when base reports drive locked (E-stop stays in footer, outside this page) */
+.drive-lock-msg {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  font-size: 0.75rem;
+  color: var(--warn);
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+#page-drive.drive-console-locked .drive-manual-zone,
+#page-drive.drive-console-locked #drive-joystick,
+#page-drive.drive-console-locked #drive-tank {
+  pointer-events: none;
+  opacity: 0.55;
+  filter: grayscale(0.2);
+}
+#page-drive.drive-console-locked #drive-deck {
+  pointer-events: none;
+  opacity: 0.95;
+}
+#page-drive.drive-console-locked #drive-deck .drive-mode-btn {
+  pointer-events: auto;
+  opacity: 1;
+  filter: none;
+}
+#page-drive.drive-console-locked #drive-ai-panel {
+  opacity: 0.55;
+  pointer-events: none;
+  filter: grayscale(0.15);
+}
+#page-drive.drive-console-locked[data-authority="ai"] #drive-ai-panel {
+  pointer-events: auto;
+  opacity: 1;
+  filter: none;
+}
 
 /* Grid of nav tiles */
 .nav-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
@@ -1202,9 +1300,128 @@ input[type=range]::-webkit-slider-thumb {
 .nav-toolbar {
   display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px;
 }
+.nav-toolbar--split {
+  justify-content: space-between;
+  align-items: flex-start;
+}
+.nav-toolbar-right {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.nav-map-stage {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  background: #0b0f14;
+  margin-bottom: 8px;
+}
+.nav-map-body {
+  position: relative;
+  flex: 1;
+  min-height: min(48vh, 480px);
+  width: 100%;
+}
+.nav-map-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  padding: 8px 10px;
+  background: linear-gradient(180deg, rgba(22, 27, 36, 0.95) 0%, rgba(15, 18, 25, 0.85) 100%);
+  border-bottom: 1px solid var(--border);
+}
+.nav-map-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  color: var(--txt-mid);
+  cursor: pointer;
+}
+.nav-map-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.68rem;
+  color: var(--txt-dim);
+}
+.nav-map-select {
+  max-width: 200px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--txt);
+  font-size: 0.72rem;
+}
+.nav-map-hud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.2);
+}
+.nav-hud-chip {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  min-width: 0;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.nav-hud-lbl {
+  font-size: 0.52rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--txt-dim);
+}
+.nav-hud-val {
+  font-family: 'Orbitron', ui-monospace, monospace;
+  font-size: 0.68rem;
+  color: var(--accent);
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nav-map-fallback {
+  padding: 12px 14px;
+  font-size: 0.78rem;
+  color: var(--warn);
+  background: rgba(230, 57, 70, 0.08);
+  border-bottom: 1px solid var(--border);
+}
+.nav-map-container {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+}
+.nav-map-container .maplibregl-map {
+  font-family: 'Inter', sans-serif;
+}
+.nav-map-help {
+  margin: 6px 0 0;
+  line-height: 1.4;
+}
 #nav-map-canvas {
-  width: 100%; background: #0a0e14; border: 1px solid var(--border); border-radius: var(--radius);
-  display: block; cursor: crosshair; touch-action: none;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  background: #0a0e14;
+  border: none;
+  border-radius: 0;
+  display: block;
+  cursor: crosshair;
+  touch-action: none;
 }
 .waypoint-item { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 0.78rem; }
 .waypoint-item button { padding: 2px 8px; }
@@ -1798,7 +2015,7 @@ input[type=range]::-webkit-slider-thumb {
   .log-list { max-height: min(360px, 50vh); }
   .joystick-container:not(.drive-head-joy) { width: 180px; height: 180px; }
   .joystick-container:not(.drive-head-joy) .joystick-stick { width: 56px; height: 56px; margin: -28px 0 0 -28px; }
-  #nav-map-canvas { max-height: min(55vh, 520px); }
+  .nav-map-body { max-height: min(55vh, 520px); }
   .ai-chat-log { min-height: 140px; max-height: min(280px, 40vh); }
   .dev-console { max-height: min(280px, 45vh); }
 }
@@ -2075,6 +2292,160 @@ body[data-mood="scared"] { --accent: #d14b4b; }
     grid-column: 1 / -1;
   }
 }
+
+/* Sequence generator — coming soon */
+.coming-soon-panel {
+  position: relative;
+  overflow: hidden;
+  min-height: 260px;
+}
+.coming-soon-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 85% 55% at 50% 0%, rgba(245, 166, 35, 0.14) 0%, transparent 58%);
+  pointer-events: none;
+}
+.coming-soon-panel-inner {
+  position: relative;
+  z-index: 1;
+  padding: 10px 8px 6px;
+  text-align: center;
+}
+.coming-soon-badge {
+  display: inline-block;
+  font-family: 'Orbitron', ui-monospace, monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  border: 1px solid rgba(245, 166, 35, 0.42);
+  border-radius: 999px;
+  padding: 6px 14px;
+  margin-bottom: 14px;
+  background: rgba(0, 0, 0, 0.35);
+  box-shadow: 0 0 24px rgba(245, 166, 35, 0.08);
+}
+.coming-soon-lead {
+  color: var(--txt-mid);
+  font-size: 0.9rem;
+  line-height: 1.55;
+  margin: 0 0 14px;
+  max-width: 36em;
+  margin-left: auto;
+  margin-right: auto;
+}
+.coming-soon-list {
+  text-align: left;
+  max-width: 22em;
+  margin: 0 auto 16px;
+  padding-left: 1.15em;
+  color: var(--txt-dim);
+  font-size: 0.84rem;
+  line-height: 1.65;
+}
+.coming-soon-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Sequence generator editor */
+.seq-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.seq-select {
+  width: 100%;
+  max-width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--txt);
+  font-size: 0.85rem;
+}
+.seq-meta-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 12px;
+  align-items: center;
+}
+.seq-name-input,
+.seq-id-input {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--txt);
+  font-size: 0.85rem;
+}
+.seq-table-wrap {
+  overflow-x: auto;
+  margin: 10px 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.seq-editor-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+.seq-editor-table th,
+.seq-editor-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.seq-editor-table th {
+  text-align: left;
+  color: var(--txt-dim);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+}
+.seq-editor-table .input-compact {
+  width: 100%;
+  min-width: 72px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--txt);
+}
+.seq-editor-table textarea {
+  width: 100%;
+  min-width: 160px;
+  min-height: 44px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--accent);
+  resize: vertical;
+}
+.seq-editor-table select {
+  max-width: 160px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--txt);
+}
+.seq-status-line {
+  font-family: 'Orbitron', ui-monospace, monospace;
+  font-size: 0.8rem;
+  color: var(--accent);
+  margin: 0;
+}
+
 .more-subpage .more-deck-card,
 .more-hub-page .more-deck-card {
   border-color: rgba(245, 166, 35, 0.14);
@@ -3304,6 +3675,39 @@ body.lros-app-revealed #app {
 <div id="app">
   <div id="override-banner" aria-live="polite">Local Control Active - CYD touchscreen has control</div>
 
+  <div id="operator-strip" role="region" aria-label="Control authority and motion">
+    <div class="operator-strip-inner">
+      <div class="operator-chip" title="Who currently owns drive / motion authority">
+        <span class="operator-chip-lbl">Authority</span>
+        <span class="operator-chip-val" id="op-authority-val">—</span>
+      </div>
+      <div class="operator-chip" title="CYD vs browser drive policy (any / cyd_only / web_only)">
+        <span class="operator-chip-lbl">Policy</span>
+        <span class="operator-chip-val" id="op-policy-val">—</span>
+      </div>
+      <div class="operator-chip" title="High-level motion state from base">
+        <span class="operator-chip-lbl">Motion</span>
+        <span class="operator-chip-val" id="op-motion-val">—</span>
+      </div>
+      <div class="operator-chip" title="Drive profile ramp / limits">
+        <span class="operator-chip-lbl">Drive profile</span>
+        <span class="operator-chip-val" id="op-profile-val">—</span>
+      </div>
+      <div class="operator-chip" title="Browser ↔ base link (HTTP + optional WebSocket)">
+        <span class="operator-chip-lbl">Link</span>
+        <span class="operator-chip-val" id="op-link-val">—</span>
+      </div>
+      <div class="operator-chip operator-chip--wide" title="Last command freshness">
+        <span class="operator-chip-lbl">Command age</span>
+        <span class="operator-chip-val" id="op-fresh-val">—</span>
+      </div>
+      <div class="operator-chip operator-chip--lock" title="Why controls may be disabled">
+        <span class="operator-chip-lbl">Lock</span>
+        <span class="operator-chip-val" id="op-lock-val">—</span>
+      </div>
+    </div>
+  </div>
+
   <div id="status-strip" role="region" aria-label="Fleet status">
     <div class="status-eye-wrap" title="Heartbeat">
       <div id="status-eye" class="status-eye"><span class="status-eye-lens"></span></div>
@@ -3436,6 +3840,8 @@ body.lros-app-revealed #app {
         <h2 class="page-title">Drive</h2>
         <p class="page-lead">CYD-style control: head pan/tilt + drive mix, dual tread rollers, or AI assist with manual override.</p>
       </header>
+
+      <div class="drive-lock-msg" id="drive-lock-msg" role="status" aria-live="polite" hidden></div>
 
       <div class="drive-hero card">
         <div class="card-body drive-hero-top">
@@ -3608,16 +4014,60 @@ body.lros-app-revealed #app {
       <p class="nav-world-hint">Live map &amp; weather use your phone or PC internet connection (not the ESP). Connect the robot to Wi‑Fi for RSSI and station IP below.</p>
       <div class="nav-layout">
         <div class="nav-map-wrap">
-          <div class="nav-toolbar">
-            <span class="stat-sub">Planner map · click to add waypoints · wheel zoom · drag pan</span>
-            <span id="nav-eta" class="conn-pill">—</span>
-            <button type="button" class="btn btn-small btn-ghost" id="prox-mute-btn" onclick="toggleProxMute()" title="Proximity beeps">&#128276;</button>
+          <div class="nav-toolbar nav-toolbar--split">
+            <span class="stat-sub">MapLibre field map · click adds waypoints (or home/dock) · pan/zoom · planner canvas fallback if tiles fail</span>
+            <span class="nav-toolbar-right">
+              <span id="nav-eta" class="conn-pill">—</span>
+              <button type="button" class="btn btn-small btn-ghost" id="prox-mute-btn" onclick="toggleProxMute()" title="Proximity beeps">&#128276;</button>
+            </span>
           </div>
           <div class="nav-map-real" id="nav-map-real" hidden>
             <img id="nav-osm-img" class="nav-osm-img" width="640" height="200" alt="" decoding="async" />
             <div class="nav-osm-placeholder" id="nav-osm-placeholder">OpenStreetMap preview appears when location data is available.</div>
           </div>
-          <canvas id="nav-map-canvas" width="600" height="320"></canvas>
+
+          <div class="nav-map-stage" id="nav-map-stage">
+            <div class="nav-map-controls">
+              <button type="button" class="btn btn-small" id="nav-map-center" title="Center camera on robot">Center robot</button>
+              <label class="nav-map-check" title="Keep camera on robot">
+                <input type="checkbox" id="nav-map-follow" /> Follow
+              </label>
+              <label class="nav-map-check" title="Rotate map with IMU heading">
+                <input type="checkbox" id="nav-map-heading-up" /> Heading-up
+              </label>
+              <label class="nav-map-field">Click
+                <select id="nav-map-click-mode" class="nav-map-select">
+                  <option value="waypoint">Adds waypoint</option>
+                  <option value="home">Sets home marker (local)</option>
+                  <option value="dock">Sets dock marker (local)</option>
+                </select>
+              </label>
+              <label class="nav-map-field">Base layer
+                <select id="nav-map-layer-preset" class="nav-map-select" title="Reloads page when changed">
+                  <option value="embed" selected>Embedded (offline)</option>
+                  <option value="demo">MapLibre demo style (online)</option>
+                </select>
+              </label>
+            </div>
+            <div class="nav-map-hud" id="nav-map-hud" aria-label="Mission HUD">
+              <span class="nav-hud-chip"><span class="nav-hud-lbl">Autonomy</span><span class="nav-hud-val" id="nav-hud-autonomy">—</span></span>
+              <span class="nav-hud-chip"><span class="nav-hud-lbl">Motion</span><span class="nav-hud-val" id="nav-hud-motion">—</span></span>
+              <span class="nav-hud-chip"><span class="nav-hud-lbl">Drive</span><span class="nav-hud-val" id="nav-hud-profile">—</span></span>
+              <span class="nav-hud-chip"><span class="nav-hud-lbl">Next WP</span><span class="nav-hud-val" id="nav-hud-next-wp">—</span></span>
+              <span class="nav-hud-chip"><span class="nav-hud-lbl">Route</span><span class="nav-hud-val" id="nav-hud-route-m">—</span></span>
+              <span class="nav-hud-chip"><span class="nav-hud-lbl">ETA</span><span class="nav-hud-val" id="nav-hud-eta">—</span></span>
+              <span class="nav-hud-chip"><span class="nav-hud-lbl">GPS</span><span class="nav-hud-val" id="nav-hud-gps">—</span></span>
+              <span class="nav-hud-chip"><span class="nav-hud-lbl">Heading</span><span class="nav-hud-val" id="nav-hud-hdg">—</span></span>
+              <span class="nav-hud-chip"><span class="nav-hud-lbl">Tel age</span><span class="nav-hud-val" id="nav-hud-tel-age">—</span></span>
+            </div>
+            <div class="nav-map-fallback" id="nav-map-fallback" role="status" hidden></div>
+            <div class="nav-map-body">
+              <div id="nav-map-container" class="nav-map-container" aria-label="MapLibre map"></div>
+              <canvas id="nav-map-canvas" width="600" height="320"></canvas>
+            </div>
+          </div>
+
+          <p class="nav-map-help stat-sub">Configure <span class="mono">localStorage</span> keys <span class="mono">lros_map_style_url</span> (style.json) and/or <span class="mono">lros_map_raster_url</span> (raster <span class="mono">{z}/{x}/{y}</span> template) for LAN or offline tiles. No Google tiles.</p>
           <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
             <button type="button" class="btn btn-small" onclick="navClearWaypoints()">Clear WP</button>
             <button type="button" class="btn btn-small btn-ghost" onclick="navSendRouteToRobot()">Send route</button>
@@ -4077,6 +4527,67 @@ body.lros-app-revealed #app {
           </div>
         </div>
       </div>
+      </div>
+    </div>
+
+    <!-- SEQUENCE GENERATOR -->
+    <div class="page more-subpage" id="page-sequence">
+      <header class="subpage-head">
+        <div class="subpage-head-main">
+          <p class="subpage-kicker">SHOW · SEQUENCER</p>
+          <h2 class="page-title subpage-title">Sequence generator</h2>
+          <p class="page-lead">Timed cue stacks stored on the Brain (flash). Edit steps, save, then run — navigation_route needs GPS + compass like the Navigation page.</p>
+        </div>
+      </header>
+      <div class="subpage-deck subpage-deck--2col">
+        <div class="card more-deck-card">
+          <div class="card-header">Library</div>
+          <div class="card-body">
+            <div class="form-group"><label>On robot</label>
+              <select id="seq-library-select" class="seq-select"></select>
+            </div>
+            <div class="seq-toolbar">
+              <button type="button" class="btn btn-small" id="seq-btn-refresh">Refresh</button>
+              <button type="button" class="btn btn-small btn-ghost" id="seq-btn-load">Load</button>
+              <button type="button" class="btn btn-small btn-ghost" id="seq-btn-delete">Delete</button>
+              <button type="button" class="btn btn-small btn-ghost" id="seq-btn-new">New</button>
+            </div>
+            <p class="stat-sub">API: <span class="mono">/api/sequences/*</span> — persisted in NVS.</p>
+          </div>
+        </div>
+        <div class="card more-deck-card">
+          <div class="card-header">Transport</div>
+          <div class="card-body">
+            <div class="seq-toolbar">
+              <button type="button" class="btn btn-small" id="seq-btn-save">Save to robot</button>
+              <button type="button" class="btn btn-small" id="seq-btn-run">Run</button>
+              <button type="button" class="btn btn-small btn-ghost" id="seq-btn-stop">Stop</button>
+            </div>
+            <p class="seq-status-line" id="seq-run-status">—</p>
+            <div class="coming-soon-actions" style="margin-top:10px">
+              <button type="button" class="btn btn-small btn-ghost" onclick="switchTab('missions')">Missions</button>
+              <button type="button" class="btn btn-small btn-ghost" onclick="switchTab('navigation')">Navigation</button>
+              <button type="button" class="btn btn-small" onclick="switchTab('more')">Back to menu</button>
+            </div>
+          </div>
+        </div>
+        <div class="card more-deck-card subpage-card-span">
+          <div class="card-header">Editor</div>
+          <div class="card-body">
+            <div class="form-group seq-meta-row">
+              <label>Name</label><input type="text" id="seq-name" class="seq-name-input" placeholder="Show opener" />
+              <label>Id</label><input type="text" id="seq-id" class="mono seq-id-input" readonly />
+            </div>
+            <p class="stat-sub">Each row: time <span class="mono">at_ms</span> from start, <span class="mono">kind</span>, then extra fields as JSON (e.g. <span class="mono">"emotion":"happy"</span>, <span class="mono">"track":1</span>, <span class="mono">"route":{...}</span> for navigation).</p>
+            <div class="seq-table-wrap">
+              <table class="seq-editor-table">
+                <thead><tr><th>at_ms</th><th>kind</th><th>params (JSON)</th><th></th></tr></thead>
+                <tbody id="seq-steps-tbody"></tbody>
+              </table>
+            </div>
+            <button type="button" class="btn btn-small btn-ghost" id="seq-add-step">+ Add step</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -4552,7 +5063,7 @@ body.lros-app-revealed #app {
         <div class="subpage-head-main">
           <p class="subpage-kicker">LROS · MENU</p>
           <h2 class="page-title subpage-title">More</h2>
-          <p class="page-lead">Secondary screens — navigation, vision, audio, AI, missions, telemetry, power, and tools.</p>
+          <p class="page-lead">Secondary screens — navigation, vision, audio, AI, missions, sequence generator, telemetry, power, and tools.</p>
         </div>
       </header>
       <div class="nav-grid more-hub-grid">
@@ -4561,6 +5072,7 @@ body.lros-app-revealed #app {
         <a class="nav-tile" href="#" onclick="switchTab('audio');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>Audio</a>
         <a class="nav-tile" href="#" onclick="switchTab('ai');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 2a10 10 0 0 1 10 10c0 5.5-4.5 10-10 10S2 17.5 2 12 6.5 2 12 2z"/><circle cx="12" cy="12" r="2"/></svg>AI &amp; Auto</a>
         <a class="nav-tile" href="#" onclick="switchTab('missions');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Missions</a>
+        <a class="nav-tile" href="#" onclick="switchTab('sequence');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="1"/><line x1="7" y1="5" x2="7" y2="19"/><line x1="17" y1="5" x2="17" y2="19"/><path d="M10 9h1M13 9h1M10 12h1M13 12h1M10 15h1M13 15h1" stroke-linecap="round"/></svg>Sequence</a>
         <a class="nav-tile" href="#" onclick="switchTab('telemetry');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>Telemetry</a>
         <a class="nav-tile" href="#" onclick="switchTab('power');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>Power</a>
         <a class="nav-tile" href="#" onclick="switchTab('files');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>Files</a>
@@ -5320,6 +5832,14 @@ body.lros-app-revealed #app {
   var waypoints = [];
   var obstacles = []; // {x,y,r,type} type 'lidar'|'sonic'
   var robot = { x: 50, y: 50, heading: 0 };
+  /** Local tangent plane: grid (50,50) = originLat/originLon; 1 unit ≈ metersPerGridUnit */
+  var _originLat = 40.7128;
+  var _originLon = -74.006;
+  var _metersPerGridUnit = 0.5;
+  var _originFromGps = false;
+  var breadcrumbs = []; // { lng, lat } for trail on MapLibre
+  var _lastBreadMs = 0;
+  var _lastBreadPos = null;
   var pathLine = [];
   var antsOffset = 0;
   var animId = null;
@@ -5332,6 +5852,105 @@ body.lros-app-revealed #app {
 
   function screenToWorld(sx, sy) {
     return { x: (sx - offsetX) / scale, y: (sy - offsetY) / scale };
+  }
+
+  function gridToLngLat(x, y) {
+    var dx = (x - 50) * _metersPerGridUnit;
+    var dy = (50 - y) * _metersPerGridUnit;
+    var lat = _originLat + dy / 111320;
+    var lon = _originLon + dx / (111320 * Math.cos((_originLat * Math.PI) / 180));
+    return { lng: lon, lat: lat };
+  }
+
+  function lngLatToGrid(lng, lat) {
+    var dy = (lat - _originLat) * 111320;
+    var dx = (lng - _originLon) * 111320 * Math.cos((_originLat * Math.PI) / 180);
+    return {
+      x: 50 + dx / _metersPerGridUnit,
+      y: 50 - dy / _metersPerGridUnit
+    };
+  }
+
+  function clampGrid(pt) {
+    return {
+      x: Math.max(0, Math.min(gridW - 1e-6, pt.x)),
+      y: Math.max(0, Math.min(gridH - 1e-6, pt.y))
+    };
+  }
+
+  function addWaypointFromLngLat(lng, lat) {
+    var g = clampGrid(lngLatToGrid(lng, lat));
+    waypoints.push(g);
+    rebuildPath();
+    updateWaypointPanel();
+    notifyMapRefresh();
+  }
+
+  function recordBreadcrumb(lng, lat) {
+    var now = Date.now();
+    if (now - _lastBreadMs < 1100) return;
+    if (_lastBreadPos) {
+      var dLat = lat - _lastBreadPos.lat;
+      var dLon = lng - _lastBreadPos.lng;
+      if (dLat * dLat + dLon * dLon < 2e-10) return;
+    }
+    _lastBreadMs = now;
+    _lastBreadPos = { lng: lng, lat: lat };
+    breadcrumbs.push({ lng: lng, lat: lat });
+    if (breadcrumbs.length > 220) breadcrumbs.shift();
+  }
+
+  function getMapAnchors() {
+    try {
+      var h = localStorage.getItem('walle_nav_home');
+      var d = localStorage.getItem('walle_nav_dock');
+      return {
+        home: h ? JSON.parse(h) : null,
+        dock: d ? JSON.parse(d) : null
+      };
+    } catch (e) {
+      return { home: null, dock: null };
+    }
+  }
+
+  function setHomeAnchor(lat, lng) {
+    try {
+      localStorage.setItem('walle_nav_home', JSON.stringify({ lat: lat, lng: lng }));
+    } catch (e) {}
+    notifyMapRefresh();
+  }
+
+  function setDockAnchor(lat, lng) {
+    try {
+      localStorage.setItem('walle_nav_dock', JSON.stringify({ lat: lat, lng: lng }));
+    } catch (e) {}
+    notifyMapRefresh();
+  }
+
+  function getMapSnapshot() {
+    var anchors = getMapAnchors();
+    return {
+      origin: { lat: _originLat, lon: _originLon },
+      robot: { x: robot.x, y: robot.y, heading: robot.heading },
+      robotLngLat: gridToLngLat(robot.x, robot.y),
+      waypoints: waypoints.map(function (w) {
+        return gridToLngLat(w.x, w.y);
+      }),
+      pathLine: pathLine.map(function (p) {
+        return gridToLngLat(p.x, p.y);
+      }),
+      obstacles: obstacles,
+      home: anchors.home,
+      dock: anchors.dock,
+      breadcrumbs: breadcrumbs.slice(),
+      gridSize: { w: gridW, h: gridH }
+    };
+  }
+
+  function notifyMapRefresh() {
+    if (window.LrosMapNav && typeof LrosMapNav.refreshFromPlanner === 'function') {
+      LrosMapNav.refreshFromPlanner();
+    }
   }
 
   function init() {
@@ -5377,6 +5996,7 @@ body.lros-app-revealed #app {
     });
 
     canvas.addEventListener('click', function (e) {
+      if (window.LrosMapNav && LrosMapNav.isMapActive && LrosMapNav.isMapActive()) return;
       if (dragDist > 5) return;
       var rect = canvas.getBoundingClientRect();
       var w = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
@@ -5389,6 +6009,11 @@ body.lros-app-revealed #app {
 
     if (animId) cancelAnimationFrame(animId);
     loop();
+    if (window.LrosMapNav && typeof LrosMapNav.init === 'function') {
+      try {
+        LrosMapNav.init();
+      } catch (e) {}
+    }
   }
 
   function resize() {
@@ -5412,6 +6037,7 @@ body.lros-app-revealed #app {
     if (waypoints.length < 2) {
       if (waypoints.length === 1) pathLine = [robot, waypoints[0]];
       notifyRouteChange();
+      notifyMapRefresh();
       return;
     }
     var obsSet = new Set();
@@ -5436,6 +6062,7 @@ body.lros-app-revealed #app {
     }
     if (pathLine.length > 2) pathLine = PathPlanner.catmullRom(pathLine, 4);
     notifyRouteChange();
+    notifyMapRefresh();
   }
 
   function getRouteInfo() {
@@ -5612,6 +6239,7 @@ body.lros-app-revealed #app {
         waypoints.splice(i, 1);
         rebuildPath();
         updateWaypointPanel();
+        notifyMapRefresh();
       };
     });
   }
@@ -5620,6 +6248,7 @@ body.lros-app-revealed #app {
     waypoints = [];
     rebuildPath();
     updateWaypointPanel();
+    notifyMapRefresh();
   }
 
   function getMissionPayload() {
@@ -5639,9 +6268,11 @@ body.lros-app-revealed #app {
       return;
     }
     var payload = getMissionPayload();
+    var hdr = Object.assign({ 'Content-Type': 'application/json' },
+      typeof apiAuthHeaders === 'function' ? apiAuthHeaders() : {});
     fetch(typeof api === 'function' ? api('/api/navigation/route') : '/api/navigation/route', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: hdr,
       body: JSON.stringify(payload)
     })
       .then(function (r) {
@@ -5665,7 +6296,24 @@ body.lros-app-revealed #app {
 
   /** Live heading + sonar hint from HTTP poll (stateCache) */
   function syncFromState(cache) {
-    if (!cache || !cache.imu) return;
+    if (cache && cache.auto && cache.auto.gpsValid && cache.auto.lat != null && cache.auto.lon != null) {
+      var lat = Number(cache.auto.lat);
+      var lon = Number(cache.auto.lon);
+      if (!_originFromGps) {
+        _originLat = lat;
+        _originLon = lon;
+        _originFromGps = true;
+      }
+      var g = lngLatToGrid(lon, lat);
+      robot.x = Math.max(0, Math.min(gridW - 1e-6, g.x));
+      robot.y = Math.max(0, Math.min(gridH - 1e-6, g.y));
+      recordBreadcrumb(lon, lat);
+      notifyMapRefresh();
+    }
+    if (!cache || !cache.imu) {
+      notifyMapRefresh();
+      return;
+    }
     if (cache.imu.heading != null) robot.heading = Number(cache.imu.heading);
     if (cache.auto && cache.auto.sonar != null) {
       var d = Math.min(400, Math.max(5, Number(cache.auto.sonar)));
@@ -5684,6 +6332,7 @@ body.lros-app-revealed #app {
       if (found >= 0) obstacles[found] = o;
       else if (obstacles.length < 12) obstacles.push(o);
     }
+    notifyMapRefresh();
   }
 
   window.LrosNavigation = {
@@ -5692,7 +6341,15 @@ body.lros-app-revealed #app {
     sendRouteToRobot: sendRouteToRobot,
     syncFromState: syncFromState,
     getRouteInfo: getRouteInfo,
-    getMissionPayload: getMissionPayload
+    getMissionPayload: getMissionPayload,
+    gridToLngLat: gridToLngLat,
+    lngLatToGrid: lngLatToGrid,
+    addWaypointFromLngLat: addWaypointFromLngLat,
+    getMapSnapshot: getMapSnapshot,
+    setHomeAnchor: setHomeAnchor,
+    setDockAnchor: setDockAnchor,
+    getMapAnchors: getMapAnchors,
+    notifyMapRefresh: notifyMapRefresh
   };
 })();
 
@@ -5704,6 +6361,573 @@ function navSendRouteToRobot() {
   if (window.LrosNavigation) window.LrosNavigation.sendRouteToRobot();
 }
 
+
+
+/**
+ * LROS Navigation — MapLibre GL map (local / lawful tiles; no Google).
+ * Optional CDN load; graceful fallback to canvas planner if MapLibre or style fails.
+ *
+ * Config (localStorage):
+ *   lros_map_style_url   — full URL to style.json (vector or raster+glyphs)
+ *   lros_map_raster_url  — optional {z}/{x}/{y} template for a raster overlay (OSM-compatible)
+ *
+ * Globals (optional, set before load):
+ *   window.LROS_MAPLIBRE_JS   — override script URL (default: jsdelivr MapLibre 4.7.1)
+ *   window.LROS_MAP_STYLE_URL — initial style.json URL (same as localStorage)
+ */
+(function (global) {
+  'use strict';
+
+  var map = null;
+  var mapReady = false;
+  var useFallback = false;
+  var _mapInitStarted = false;
+  var _controlsWired = false;
+  var followRobot = false;
+  var headingUp = false;
+  var clickMode = 'waypoint'; // waypoint | home | dock
+  var _refreshTimer = null;
+
+  function log() {
+    if (typeof console !== 'undefined' && console.debug) {
+      console.debug.apply(console, ['[LROS MapLibre]'].concat([].slice.call(arguments)));
+    }
+  }
+
+  function getStyleUrl() {
+    try {
+      if (global.LROS_MAP_STYLE_URL) return String(global.LROS_MAP_STYLE_URL);
+      var u = localStorage.getItem('lros_map_style_url');
+      if (u) return u;
+    } catch (e) {}
+    return '';
+  }
+
+  function getRasterTemplate() {
+    try {
+      return localStorage.getItem('lros_map_raster_url') || '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  /** Offline-safe minimal style; optional OSM-style raster overlay (user-supplied URL). */
+  function buildEmbeddedStyle() {
+    var rasterTpl = getRasterTemplate();
+    var sources = {};
+    var layers = [
+      {
+        id: 'lros-bg',
+        type: 'background',
+        paint: { 'background-color': '#0b0f14' }
+      }
+    ];
+    if (rasterTpl) {
+      sources['lros-raster'] = {
+        type: 'raster',
+        tiles: [rasterTpl],
+        tileSize: 256,
+        attribution: 'Local / OSM-compatible tiles (configure lros_map_raster_url)'
+      };
+      layers.push({
+        id: 'lros-raster-layer',
+        type: 'raster',
+        source: 'lros-raster',
+        paint: { 'raster-opacity': 0.85 }
+      });
+    }
+    return {
+      version: 8,
+      name: 'LROS Local',
+      metadata: { 'lros:embedded': true },
+      sources: sources,
+      layers: layers
+    };
+  }
+
+  function geoCircleFeature(lng, lat, radiusM) {
+    var sides = 48;
+    var coords = [];
+    var R = 6371000;
+    var lat1 = (lat * Math.PI) / 180;
+    var lng1 = (lng * Math.PI) / 180;
+    var d = radiusM / R;
+    for (var i = 0; i <= sides; i++) {
+      var brng = (i / sides) * 2 * Math.PI;
+      var lat2 = Math.asin(Math.sin(lat1) * Math.cos(d) + Math.cos(lat1) * Math.sin(d) * Math.cos(brng));
+      var lng2 =
+        lng1 +
+        Math.atan2(
+          Math.sin(brng) * Math.sin(d) * Math.cos(lat1),
+          Math.cos(d) - Math.sin(lat1) * Math.sin(lat2)
+        );
+      coords.push([(lng2 * 180) / Math.PI, (lat2 * 180) / Math.PI]);
+    }
+    return {
+      type: 'Feature',
+      properties: {},
+      geometry: { type: 'Polygon', coordinates: [coords] }
+    };
+  }
+
+  function readGeofenceForMap() {
+    if (typeof readGeofenceConfig === 'function') {
+      var c = readGeofenceConfig();
+      if (c && c.enabled && c.centerLat != null && c.centerLon != null) {
+        return { lat: c.centerLat, lon: c.centerLon, radiusM: c.radiusM || 50 };
+      }
+    }
+    try {
+      var j = localStorage.getItem('walle_geofence_v1');
+      if (!j) return null;
+      var o = JSON.parse(j);
+      if (!o || !o.enabled || o.centerLat == null || o.centerLon == null) return null;
+      return { lat: Number(o.centerLat), lon: Number(o.centerLon), radiusM: o.radiusM != null ? Number(o.radiusM) : 50 };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function snapshotToGeoJSON() {
+    if (!global.LrosNavigation || typeof LrosNavigation.getMapSnapshot !== 'function') {
+      return null;
+    }
+    var s = LrosNavigation.getMapSnapshot();
+    var features = [];
+
+    if (s.breadcrumbs && s.breadcrumbs.length > 1) {
+      features.push({
+        type: 'Feature',
+        properties: { k: 'crumb' },
+        geometry: {
+          type: 'LineString',
+          coordinates: s.breadcrumbs.map(function (p) {
+            return [p.lng, p.lat];
+          })
+        }
+      });
+    }
+
+    if (s.pathLine && s.pathLine.length > 1) {
+      features.push({
+        type: 'Feature',
+        properties: { k: 'route' },
+        geometry: {
+          type: 'LineString',
+          coordinates: s.pathLine.map(function (p) {
+            return [p.lng, p.lat];
+          })
+        }
+      });
+    }
+
+    (s.waypoints || []).forEach(function (p, i) {
+      features.push({
+        type: 'Feature',
+        properties: { k: 'wp', i: i + 1 },
+        geometry: { type: 'Point', coordinates: [p.lng, p.lat] }
+      });
+    });
+
+    var rr = s.robotLngLat;
+    features.push({
+      type: 'Feature',
+      properties: { k: 'robot' },
+      geometry: { type: 'Point', coordinates: [rr.lng, rr.lat] }
+    });
+
+    var headDeg = s.robot && s.robot.heading != null ? Number(s.robot.heading) : 0;
+    var br = (headDeg * Math.PI) / 180;
+    var distM = 12;
+    var dN = (distM * Math.cos(br)) / 111320;
+    var dE = (distM * Math.sin(br)) / (111320 * Math.cos((rr.lat * Math.PI) / 180));
+    features.push({
+      type: 'Feature',
+      properties: { k: 'head' },
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [rr.lng, rr.lat],
+          [rr.lng + dE, rr.lat + dN]
+        ]
+      }
+    });
+
+    if (s.home && s.home.lat != null && s.home.lng != null) {
+      features.push({
+        type: 'Feature',
+        properties: { k: 'home' },
+        geometry: { type: 'Point', coordinates: [s.home.lng, s.home.lat] }
+      });
+    }
+    if (s.dock && s.dock.lat != null && s.dock.lng != null) {
+      features.push({
+        type: 'Feature',
+        properties: { k: 'dock' },
+        geometry: { type: 'Point', coordinates: [s.dock.lng, s.dock.lat] }
+      });
+    }
+
+    var gf = readGeofenceForMap();
+    if (gf) {
+      var gfeat = geoCircleFeature(gf.lon, gf.lat, gf.radiusM);
+      gfeat.properties = { k: 'geofence' };
+      features.push(gfeat);
+    }
+
+    return { type: 'FeatureCollection', features: features };
+  }
+
+  function setSourceData() {
+    if (!map || !mapReady) return;
+    var gj = snapshotToGeoJSON();
+    if (!gj) return;
+    var src = map.getSource('lros-dynamic');
+    if (src && src.setData) src.setData(gj);
+  }
+
+  function applyBearing() {
+    if (!map || !mapReady) return;
+    var s = global.LrosNavigation && LrosNavigation.getMapSnapshot ? LrosNavigation.getMapSnapshot() : null;
+    var h = s && s.robot ? Number(s.robot.heading) || 0 : 0;
+    map.setBearing(headingUp ? -h : 0);
+  }
+
+  function maybeFollow() {
+    if (!map || !mapReady || !followRobot) return;
+    var s = global.LrosNavigation && LrosNavigation.getMapSnapshot ? LrosNavigation.getMapSnapshot() : null;
+    if (!s || !s.robotLngLat) return;
+    map.easeTo({
+      center: [s.robotLngLat.lng, s.robotLngLat.lat],
+      duration: 380,
+      essential: true
+    });
+  }
+
+  function refreshFromPlanner() {
+    if (useFallback || !mapReady) return;
+    if (_refreshTimer) return;
+    _refreshTimer = setTimeout(function () {
+      _refreshTimer = null;
+      setSourceData();
+      applyBearing();
+      maybeFollow();
+    }, 40);
+  }
+
+  function showFallbackUI(msg) {
+    useFallback = true;
+    mapReady = false;
+    var ph = document.getElementById('nav-map-fallback');
+    var mc = document.getElementById('nav-map-container');
+    var cv = document.getElementById('nav-map-canvas');
+    var body = document.querySelector('.nav-map-body');
+    if (ph) {
+      ph.hidden = false;
+      ph.textContent = msg || 'MapLibre unavailable — using planner canvas below.';
+    }
+    if (mc) mc.style.display = 'none';
+    if (body) body.style.minHeight = 'min(48vh, 480px)';
+    if (cv) {
+      cv.style.display = 'block';
+      cv.style.position = 'relative';
+    }
+    log('fallback:', msg);
+  }
+
+  function wireControls() {
+    if (_controlsWired) return;
+    _controlsWired = true;
+    var fb = document.getElementById('nav-map-follow');
+    if (fb) {
+      fb.addEventListener('change', function () {
+        followRobot = !!fb.checked;
+        log('followRobot', followRobot);
+      });
+    }
+    var hu = document.getElementById('nav-map-heading-up');
+    if (hu) {
+      hu.addEventListener('change', function () {
+        headingUp = !!hu.checked;
+        applyBearing();
+      });
+    }
+    var ctr = document.getElementById('nav-map-center');
+    if (ctr) {
+      ctr.addEventListener('click', function () {
+        maybeFollow();
+        var s = LrosNavigation.getMapSnapshot();
+        if (map && s && s.robotLngLat) {
+          map.flyTo({ center: [s.robotLngLat.lng, s.robotLngLat.lat], zoom: Math.max(map.getZoom(), 16), duration: 600 });
+        }
+      });
+    }
+    var cm = document.getElementById('nav-map-click-mode');
+    if (cm) {
+      cm.addEventListener('change', function () {
+        clickMode = cm.value || 'waypoint';
+        log('clickMode', clickMode);
+      });
+    }
+    var lyr = document.getElementById('nav-map-layer-preset');
+    if (lyr) {
+      lyr.addEventListener('change', function () {
+        var v = lyr.value;
+        if (v === 'embed') {
+          try {
+            localStorage.removeItem('lros_map_style_url');
+          } catch (e) {}
+          location.reload();
+        } else if (v === 'demo') {
+          try {
+            localStorage.setItem('lros_map_style_url', 'https://demotiles.maplibre.org/style.json');
+          } catch (e) {}
+          location.reload();
+        }
+      });
+    }
+  }
+
+  function addLayers() {
+    if (!map) return;
+    map.addSource('lros-dynamic', {
+      type: 'geojson',
+      data: { type: 'FeatureCollection', features: [] }
+    });
+
+    map.addLayer({
+      id: 'lros-crumb',
+      type: 'line',
+      source: 'lros-dynamic',
+      filter: ['==', ['get', 'k'], 'crumb'],
+      paint: { 'line-color': '#f5a623', 'line-width': 2, 'line-opacity': 0.35 }
+    });
+    map.addLayer({
+      id: 'lros-route',
+      type: 'line',
+      source: 'lros-dynamic',
+      filter: ['==', ['get', 'k'], 'route'],
+      paint: { 'line-color': '#34d399', 'line-width': 4, 'line-opacity': 0.9 }
+    });
+    map.addLayer({
+      id: 'lros-head',
+      type: 'line',
+      source: 'lros-dynamic',
+      filter: ['==', ['get', 'k'], 'head'],
+      paint: { 'line-color': '#5eb3f6', 'line-width': 2, 'line-opacity': 0.8 }
+    });
+    map.addLayer({
+      id: 'lros-geofence-fill',
+      type: 'fill',
+      source: 'lros-dynamic',
+      filter: ['==', ['get', 'k'], 'geofence'],
+      paint: { 'fill-color': '#e63946', 'fill-opacity': 0.12 }
+    });
+    map.addLayer({
+      id: 'lros-geofence-line',
+      type: 'line',
+      source: 'lros-dynamic',
+      filter: ['==', ['get', 'k'], 'geofence'],
+      paint: { 'line-color': '#e63946', 'line-width': 2, 'line-opacity': 0.5 }
+    });
+    map.addLayer({
+      id: 'lros-wp',
+      type: 'circle',
+      source: 'lros-dynamic',
+      filter: ['==', ['get', 'k'], 'wp'],
+      paint: {
+        'circle-radius': 7,
+        'circle-color': '#5eb3f6',
+        'circle-stroke-width': 2,
+        'circle-stroke-color': '#0b0f14'
+      }
+    });
+    map.addLayer({
+      id: 'lros-home',
+      type: 'circle',
+      source: 'lros-dynamic',
+      filter: ['==', ['get', 'k'], 'home'],
+      paint: {
+        'circle-radius': 8,
+        'circle-color': '#34d399',
+        'circle-stroke-width': 2,
+        'circle-stroke-color': '#0b0f14'
+      }
+    });
+    map.addLayer({
+      id: 'lros-dock',
+      type: 'circle',
+      source: 'lros-dynamic',
+      filter: ['==', ['get', 'k'], 'dock'],
+      paint: {
+        'circle-radius': 8,
+        'circle-color': '#a78bfa',
+        'circle-stroke-width': 2,
+        'circle-stroke-color': '#0b0f14'
+      }
+    });
+    map.addLayer({
+      id: 'lros-robot',
+      type: 'circle',
+      source: 'lros-dynamic',
+      filter: ['==', ['get', 'k'], 'robot'],
+      paint: {
+        'circle-radius': 10,
+        'circle-color': '#f5a623',
+        'circle-stroke-width': 3,
+        'circle-stroke-color': '#fff'
+      }
+    });
+  }
+
+  function onMapClick(e) {
+    var lng = e.lngLat.lng;
+    var lat = e.lngLat.lat;
+    if (clickMode === 'home') {
+      if (typeof showToast === 'function') showToast('\u2302', 'Home marker set on map (local)');
+      LrosNavigation.setHomeAnchor(lat, lng);
+    } else if (clickMode === 'dock') {
+      if (typeof showToast === 'function') showToast('\u26EF', 'Dock marker set on map (local)');
+      LrosNavigation.setDockAnchor(lat, lng);
+    } else {
+      LrosNavigation.addWaypointFromLngLat(lng, lat);
+    }
+  }
+
+  function initMapInstance() {
+    var container = document.getElementById('nav-map-container');
+    if (!container || !global.maplibregl) return;
+
+    var styleUrl = getStyleUrl();
+    var initOpts = {
+      container: container,
+      attributionControl: true,
+      maxZoom: 20,
+      minZoom: 2
+    };
+
+    function afterLoad() {
+      mapReady = true;
+      addLayers();
+      var s = LrosNavigation.getMapSnapshot();
+      map.jumpTo({
+        center: [s.robotLngLat.lng, s.robotLngLat.lat],
+        zoom: 17,
+        pitch: 0
+      });
+      map.on('click', onMapClick);
+      map.on('moveend', function () {
+        log('moveend', map.getCenter().toArray());
+      });
+      refreshFromPlanner();
+      var ph = document.getElementById('nav-map-fallback');
+      var cv = document.getElementById('nav-map-canvas');
+      var mc = document.getElementById('nav-map-container');
+      if (ph) ph.hidden = true;
+      if (cv) {
+        cv.style.display = 'none';
+        cv.style.position = 'absolute';
+      }
+      if (mc) mc.style.display = 'block';
+      log('map ready');
+    }
+
+    if (styleUrl) {
+      initOpts.style = styleUrl;
+      try {
+        map = new maplibregl.Map(initOpts);
+        map.on('load', afterLoad);
+        map.on('error', function (ev) {
+          log('map error', ev);
+          showFallbackUI('Map style failed to load — check lros_map_style_url or network.');
+        });
+      } catch (err) {
+        log('map ctor', err);
+        showFallbackUI(String(err));
+      }
+    } else {
+      try {
+        initOpts.style = buildEmbeddedStyle();
+        map = new maplibregl.Map(initOpts);
+        map.on('load', afterLoad);
+      } catch (err2) {
+        log('embedded style', err2);
+        showFallbackUI(String(err2));
+      }
+    }
+
+    global.addEventListener('resize', function () {
+      if (map && mapReady) map.resize();
+    });
+  }
+
+  function loadScript(url, cb) {
+    var s = document.createElement('script');
+    s.src = url;
+    s.async = true;
+    s.crossOrigin = 'anonymous';
+    s.onload = function () {
+      cb(null);
+    };
+    s.onerror = function () {
+      cb(new Error('script load failed'));
+    };
+    document.head.appendChild(s);
+  }
+
+  function ensureCss(href) {
+    if (document.querySelector('link[data-lros-maplibre]')) return;
+    var l = document.createElement('link');
+    l.rel = 'stylesheet';
+    l.href = href;
+    l.setAttribute('data-lros-maplibre', '1');
+    document.head.appendChild(l);
+  }
+
+  function init() {
+    if (_mapInitStarted) {
+      onTabShow();
+      return;
+    }
+    _mapInitStarted = true;
+    wireControls();
+    var jsUrl =
+      global.LROS_MAPLIBRE_JS ||
+      'https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.min.js';
+    var cssUrl =
+      global.LROS_MAPLIBRE_CSS ||
+      'https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css';
+
+    if (global.maplibregl) {
+      initMapInstance();
+      return;
+    }
+    ensureCss(cssUrl);
+    loadScript(jsUrl, function (err) {
+      if (err || !global.maplibregl) {
+        showFallbackUI('Could not load MapLibre GL (offline?). Planner canvas remains available.');
+        return;
+      }
+      initMapInstance();
+    });
+  }
+
+  function onTabShow() {
+    if (map && mapReady) {
+      map.resize();
+      refreshFromPlanner();
+    }
+  }
+
+  global.LrosMapNav = {
+    init: init,
+    refreshFromPlanner: refreshFromPlanner,
+    isMapActive: function () {
+      return mapReady && !useFallback;
+    },
+    onTabShow: onTabShow
+  };
+})(typeof window !== 'undefined' ? window : this);
 
 
 /**
@@ -6051,6 +7275,380 @@ function navSendRouteToRobot() {
 
 
 /**
+ * LROS Sequence generator — load/save/run timelines on the Brain (Preferences).
+ * API: GET /api/sequences/list, get, save (POST JSON), delete (POST), run, stop, status
+ */
+(function (global) {
+  'use strict';
+
+  var _pollTimer = null;
+
+  function api(path) {
+    if (typeof global.api === 'function') return global.api(path);
+    var p = path.charAt(0) === '/' ? path : '/' + path;
+    if (typeof document !== 'undefined') {
+      var inp = document.getElementById('set-base-url');
+      if (inp && String(inp.value || '').trim()) {
+        return String(inp.value).trim().replace(/\/$/, '') + p;
+      }
+    }
+    var b = (typeof global.getBaseUrl === 'function' && global.getBaseUrl()) || '';
+    if (!b && typeof global.BASE !== 'undefined') b = global.BASE;
+    return (b || '') + p;
+  }
+
+  function log() {
+    if (typeof console !== 'undefined' && console.debug) {
+      console.debug.apply(console, ['[LrosSequences]'].concat([].slice.call(arguments)));
+    }
+  }
+
+  function fetchJson(url, opts) {
+    return fetch(url, opts || {}).then(function (r) {
+      return r.text().then(function (t) {
+        try {
+          return { ok: r.ok, status: r.status, json: JSON.parse(t), raw: t };
+        } catch (e) {
+          return { ok: r.ok, status: r.status, json: null, raw: t };
+        }
+      });
+    });
+  }
+
+  function el(id) {
+    return document.getElementById(id);
+  }
+
+  function newId() {
+    return 'seq_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7);
+  }
+
+  function defaultSteps() {
+    return [
+      { at_ms: 0, kind: 'emotion', emotion: 'happy' },
+      { at_ms: 500, kind: 'audio_play', track: 1 },
+      { at_ms: 1500, kind: 'motor_stop' }
+    ];
+  }
+
+  function stepExtraFields(step) {
+    var o = {};
+    Object.keys(step).forEach(function (k) {
+      if (k !== 'at_ms' && k !== 'kind') o[k] = step[k];
+    });
+    return JSON.stringify(o, null, 0);
+  }
+
+  function renderStepsTable(steps) {
+    var tb = el('seq-steps-tbody');
+    if (!tb) return;
+    tb.innerHTML = '';
+    (steps || []).forEach(function (s, idx) {
+      var tr = document.createElement('tr');
+      tr.dataset.index = String(idx);
+      var at = s.at_ms != null ? s.at_ms : 0;
+      var kind = s.kind || 'noop';
+      tr.innerHTML =
+        '<td><input type="number" class="seq-at input-compact" min="0" step="100" value="' +
+        at +
+        '" /></td>' +
+        '<td><select class="seq-kind">' +
+        KIND_OPTIONS +
+        '</select></td>' +
+        '<td><textarea class="seq-params mono" rows="2" placeholder="Extra JSON"></textarea></td>' +
+        '<td><button type="button" class="btn btn-small btn-ghost seq-row-del">×</button></td>';
+      tb.appendChild(tr);
+      var sel = tr.querySelector('.seq-kind');
+      if (sel) sel.value = kind;
+      var ta = tr.querySelector('.seq-params');
+      if (ta) ta.value = stepExtraFields(s);
+    });
+    bindStepRows();
+  }
+
+  var KIND_OPTIONS = [
+    'noop',
+    'emotion',
+    'audio_play',
+    'audio_volume',
+    'wait',
+    'motor_stop',
+    'drive_tank',
+    'navigation_route',
+    'laser_off',
+    'laser_on',
+    'laser_brightness',
+    'laser_fire',
+    'laser_mood'
+  ]
+    .map(function (k) {
+      return '<option value="' + k + '">' + k + '</option>';
+    })
+    .join('');
+
+  function bindStepRows() {
+    var tb = el('seq-steps-tbody');
+    if (!tb) return;
+    tb.querySelectorAll('.seq-row-del').forEach(function (btn) {
+      btn.onclick = function () {
+        var tr = btn.closest('tr');
+        if (tr) tr.remove();
+      };
+    });
+  }
+
+  function readStepsFromDOM() {
+    var rows = document.querySelectorAll('#seq-steps-tbody tr');
+    var steps = [];
+    rows.forEach(function (tr) {
+      var at = parseInt(tr.querySelector('.seq-at').value, 10);
+      if (isNaN(at)) at = 0;
+      var kind = tr.querySelector('.seq-kind').value;
+      var extra = {};
+      try {
+        var raw = (tr.querySelector('.seq-params').value || '').trim();
+        if (raw) extra = JSON.parse(raw);
+      } catch (e) {
+        log('bad JSON in step row', e);
+        throw new Error('Invalid JSON in step params');
+      }
+      var o = Object.assign({ at_ms: at, kind: kind }, extra);
+      steps.push(o);
+    });
+    steps.sort(function (a, b) {
+      return (a.at_ms || 0) - (b.at_ms || 0);
+    });
+    return steps;
+  }
+
+  function setStatus(text) {
+    var s = el('seq-run-status');
+    if (s) s.textContent = text;
+  }
+
+  function refreshLibrary() {
+    return fetchJson(api('/api/sequences/list')).then(function (res) {
+      if (!res.json || !res.json.ok) {
+        setStatus('List failed (offline or old firmware?)');
+        log('list', res.raw);
+        return;
+      }
+      var sel = el('seq-library-select');
+      if (!sel) return;
+      var cur = sel.value;
+      sel.innerHTML = '<option value="">— Select —</option>';
+      (res.json.sequences || []).forEach(function (s) {
+        var opt = document.createElement('option');
+        opt.value = s.id;
+        opt.textContent = (s.name || s.id) + ' (' + (s.step_count || 0) + ' steps)';
+        sel.appendChild(opt);
+      });
+      if (cur && [].some.call(sel.options, function (o) { return o.value === cur; })) {
+        sel.value = cur;
+      }
+      setStatus('Loaded library (' + (res.json.sequences || []).length + ' sequences)');
+    });
+  }
+
+  function loadSelected() {
+    var sel = el('seq-library-select');
+    if (!sel || !sel.value) return;
+    return fetchJson(api('/api/sequences/get?id=' + encodeURIComponent(sel.value))).then(function (res) {
+      if (!res.json || !res.json.ok || !res.json.sequence) {
+        setStatus('Load failed');
+        return;
+      }
+      var seq = res.json.sequence;
+      el('seq-id').value = seq.id || '';
+      el('seq-name').value = seq.name || '';
+      renderStepsTable(seq.steps || []);
+      setStatus('Loaded ' + seq.id);
+    });
+  }
+
+  function saveToRobot() {
+    var id = (el('seq-id').value || '').trim();
+    var name = (el('seq-name').value || '').trim();
+    if (!id) {
+      id = newId();
+      el('seq-id').value = id;
+    }
+    var steps;
+    try {
+      steps = readStepsFromDOM();
+    } catch (e) {
+      alert(e.message);
+      return;
+    }
+    var body = JSON.stringify({ id: id, name: name || 'Untitled', steps: steps });
+    log('save', body.length);
+    var h = Object.assign({ 'Content-Type': 'application/json' },
+      typeof apiAuthHeaders === 'function' ? apiAuthHeaders() : {});
+    return fetch(api('/api/sequences/save'), {
+      method: 'POST',
+      headers: h,
+      body: body
+    })
+      .then(function (r) {
+        return r.json();
+      })
+      .then(function (j) {
+        if (!j.ok) throw new Error(j.error || 'save failed');
+        setStatus('Saved to robot');
+        return refreshLibrary();
+      })
+      .catch(function (e) {
+        setStatus('Save error: ' + e.message);
+        log(e);
+      });
+  }
+
+  function deleteSelected() {
+    var sel = el('seq-library-select');
+    if (!sel || !sel.value) return;
+    var id = sel.value;
+    if (!confirm('Delete sequence ' + id + '?')) return;
+    var h2 = Object.assign({ 'Content-Type': 'application/json' },
+      typeof apiAuthHeaders === 'function' ? apiAuthHeaders() : {});
+    return fetch(api('/api/sequences/delete'), {
+      method: 'POST',
+      headers: h2,
+      body: JSON.stringify({ id: id })
+    })
+      .then(function (r) {
+        return r.json();
+      })
+      .then(function (j) {
+        if (!j.ok) throw new Error(j.error || 'delete failed');
+        setStatus('Deleted');
+        if (el('seq-id').value === id) {
+          el('seq-id').value = '';
+          el('seq-name').value = '';
+          renderStepsTable([]);
+        }
+        return refreshLibrary();
+      })
+      .catch(function (e) {
+        setStatus('Delete error: ' + e.message);
+      });
+  }
+
+  function runSequence() {
+    var id = (el('seq-id').value || '').trim();
+    if (!id) {
+      setStatus('Set an id or load from library');
+      return;
+    }
+    return fetchJson(api('/api/sequences/run?id=' + encodeURIComponent(id))).then(function (res) {
+      if (!res.json || !res.json.ok) {
+        var er = (res.json && res.json.error) ? res.json.error : (res.raw || 'error');
+        setStatus('Run failed: ' + er);
+        return;
+      }
+      setStatus('Running…');
+    });
+  }
+
+  function stopSequence() {
+    return fetchJson(api('/api/sequences/stop')).then(function (res) {
+      setStatus('Stopped');
+    });
+  }
+
+  function pollStatus() {
+    if (typeof document === 'undefined' || !document.getElementById('page-sequence')) return;
+    if (!document.getElementById('page-sequence').classList.contains('active')) return;
+    fetchJson(api('/api/sequences/status')).then(function (res) {
+      if (!res.json || !res.json.ok) return;
+      var s = el('seq-run-status');
+      if (s && res.json.running) {
+        s.textContent = 'Running step ' + (res.json.step || 0) + ' · ' + (res.json.id || '');
+      }
+    });
+  }
+
+  function wire() {
+    var add = el('seq-add-step');
+    if (add && !add.dataset.bound) {
+      add.dataset.bound = '1';
+      add.addEventListener('click', function () {
+        var tb = el('seq-steps-tbody');
+        if (!tb) return;
+        var tr = document.createElement('tr');
+        tr.innerHTML =
+          '<td><input type="number" class="seq-at input-compact" min="0" step="100" value="0" /></td>' +
+          '<td><select class="seq-kind">' +
+          KIND_OPTIONS +
+          '</select></td>' +
+          '<td><textarea class="seq-params mono" rows="2" placeholder="{ }"></textarea></td>' +
+          '<td><button type="button" class="btn btn-small btn-ghost seq-row-del">×</button></td>';
+        tb.appendChild(tr);
+        bindStepRows();
+      });
+    }
+    var b = el('seq-btn-new');
+    if (b && !b.dataset.bound) {
+      b.dataset.bound = '1';
+      b.addEventListener('click', function () {
+        el('seq-id').value = newId();
+        el('seq-name').value = 'New sequence';
+        renderStepsTable(defaultSteps());
+      });
+    }
+    if (el('seq-btn-refresh') && !el('seq-btn-refresh').dataset.bound) {
+      el('seq-btn-refresh').dataset.bound = '1';
+      el('seq-btn-refresh').addEventListener('click', refreshLibrary);
+    }
+    if (el('seq-btn-load') && !el('seq-btn-load').dataset.bound) {
+      el('seq-btn-load').dataset.bound = '1';
+      el('seq-btn-load').addEventListener('click', loadSelected);
+    }
+    if (el('seq-btn-save') && !el('seq-btn-save').dataset.bound) {
+      el('seq-btn-save').dataset.bound = '1';
+      el('seq-btn-save').addEventListener('click', saveToRobot);
+    }
+    if (el('seq-btn-delete') && !el('seq-btn-delete').dataset.bound) {
+      el('seq-btn-delete').dataset.bound = '1';
+      el('seq-btn-delete').addEventListener('click', deleteSelected);
+    }
+    if (el('seq-btn-run') && !el('seq-btn-run').dataset.bound) {
+      el('seq-btn-run').dataset.bound = '1';
+      el('seq-btn-run').addEventListener('click', runSequence);
+    }
+    if (el('seq-btn-stop') && !el('seq-btn-stop').dataset.bound) {
+      el('seq-btn-stop').dataset.bound = '1';
+      el('seq-btn-stop').addEventListener('click', stopSequence);
+    }
+  }
+
+  function onTabShow() {
+    wire();
+    if (!el('seq-id').value) {
+      el('seq-id').value = newId();
+      el('seq-name').value = 'My sequence';
+      renderStepsTable(defaultSteps());
+    }
+    refreshLibrary();
+    if (_pollTimer) clearInterval(_pollTimer);
+    _pollTimer = setInterval(pollStatus, 2500);
+  }
+
+  function onTabHide() {
+    if (_pollTimer) {
+      clearInterval(_pollTimer);
+      _pollTimer = null;
+    }
+  }
+
+  global.LrosSequences = {
+    onTabShow: onTabShow,
+    onTabHide: onTabHide,
+    refreshLibrary: refreshLibrary
+  };
+})(typeof window !== 'undefined' ? window : this);
+
+
+/**
  * WALL-E LROS - Living Robot Operating System
  * Full Web Console JavaScript
  */
@@ -6068,6 +7666,15 @@ function api(path) {
   var b = getBaseUrl();
   return (b || '') + p;
 }
+/** Attach X-Wall-E-Token from localStorage when set (optional API token on base). */
+function apiAuthHeaders() {
+  var h = {};
+  try {
+    var t = localStorage.getItem('walle_api_token');
+    if (t) h['X-Wall-E-Token'] = t;
+  } catch (e) {}
+  return h;
+}
 const TOAST_DURATION = 4000;
 const TOAST_MAX_VISIBLE = 2;
 const FAILSAFE_MS = 440;
@@ -6082,6 +7689,8 @@ let stateCache = {};
 var missionQueue = [];
 var _imuHist = [];
 let cydOverride = false;
+var _operatorLastOk = 0;
+var _operatorPayload = null;
 var _lastToastState = { lowBattery: false, rth: false, interest: false };
 var _docReleaseBound = false;
 
@@ -6134,11 +7743,15 @@ function switchTab(name) {
   if (name === 'navigation' && window.LrosNavigation) {
     setTimeout(function () {
       LrosNavigation.init();
+      if (window.LrosMapNav && typeof LrosMapNav.onTabShow === 'function') LrosMapNav.onTabShow();
       if (window.NavWorldContext) {
         NavWorldContext.bindGeoButton();
         NavWorldContext.refresh({}, { force: true });
       }
     }, 0);
+  }
+  if (name === 'sequence' && window.LrosSequences) {
+    setTimeout(function () { LrosSequences.onTabShow(); }, 0);
   }
   if (name === 'telemetry' || name === 'power') fetchStatus();
   if (name === 'drive') {
@@ -6156,6 +7769,7 @@ function switchTab(name) {
     initJoystick();
     initHeadPad();
     initTankSliders();
+    applyDriveLockUI(_operatorPayload);
   }
   refreshAutonomyPolling();
 }
@@ -6208,8 +7822,237 @@ function setTheme(theme) {
   document.documentElement.dataset.theme = theme || '';
 }
 
-function setOverrideBanner(visible) {
-  document.getElementById('override-banner').classList.toggle('visible', !!visible);
+/** Optional opts: { text, severity: 'info'|'warn'|'danger' } */
+function setOverrideBanner(visible, opts) {
+  var el = document.getElementById('override-banner');
+  if (!el) return;
+  el.classList.toggle('visible', !!visible);
+  el.classList.remove('severity--info', 'severity--warn', 'severity--danger');
+  if (visible && opts && opts.severity) el.classList.add('severity--' + opts.severity);
+  if (opts && opts.text) el.textContent = opts.text;
+  else if (!visible) el.textContent = 'Local Control Active - CYD touchscreen has control';
+}
+
+function computeOperatorLinkState(j) {
+  if (!navigator.onLine) return 'OFFLINE';
+  if (!j) {
+    if (_operatorLastOk <= 0) return 'TIMEOUT';
+    return Date.now() - _operatorLastOk > 12000 ? 'OFFLINE' : 'TIMEOUT';
+  }
+  if (j._linkDegraded) return 'TIMEOUT';
+  if (j.command_stale) return 'STALE';
+  var ws = window.WalleConnection && WalleConnection.getState();
+  if (ws === 'ws') return 'LIVE';
+  return 'HTTP FALLBACK';
+}
+
+function deriveBannerFromOperator(j, linkState) {
+  if (!j) {
+    if (linkState === 'OFFLINE' || linkState === 'TIMEOUT') {
+      return { visible: true, text: 'Connection lost — operator state unavailable', severity: 'danger' };
+    }
+    return { visible: false };
+  }
+  if (linkState === 'OFFLINE') {
+    return { visible: true, text: 'Browser offline — commands will not reach the base', severity: 'danger' };
+  }
+  if (j.unifiedSafety || j.authority === 'SAFETY') {
+    return { visible: true, text: j.lock_reason || 'Safety stop latched — drive disabled', severity: 'danger' };
+  }
+  if (j.authority === 'POLICY') {
+    return { visible: true, text: j.lock_reason || 'Motion policy limits CYD vs browser', severity: 'warn' };
+  }
+  if (j.authority === 'CYD') {
+    return { visible: true, text: j.lock_reason || 'CYD touchscreen has control', severity: 'warn' };
+  }
+  if (j.authority === 'DOCKING') {
+    return { visible: true, text: j.lock_reason || 'Docking controller owns drive', severity: 'info' };
+  }
+  if (j.drive_locked && j.authority === 'AI') {
+    return { visible: true, text: j.lock_reason || 'AI assist active — manual override available', severity: 'info' };
+  }
+  if (j.command_stale) {
+    return { visible: true, text: j.lock_reason || 'Connection stale — commands may be ignored', severity: 'warn' };
+  }
+  if (linkState === 'TIMEOUT') {
+    return { visible: true, text: 'Operator link interrupted — retrying', severity: 'warn' };
+  }
+  return { visible: false };
+}
+
+function applyDriveLockUI(j) {
+  var pd = document.getElementById('page-drive');
+  var msg = document.getElementById('drive-lock-msg');
+  if (!pd) return;
+  var locked = !!(j && j.drive_locked);
+  pd.classList.toggle('drive-console-locked', locked);
+  if (j && j.authority) pd.dataset.authority = String(j.authority).toLowerCase();
+  else pd.removeAttribute('data-authority');
+  if (msg) {
+    if (locked && j && j.lock_reason) {
+      msg.hidden = false;
+      msg.textContent = j.lock_reason;
+    } else if (locked) {
+      msg.hidden = false;
+      msg.textContent = 'Drive controls are locked by the base.';
+    } else {
+      msg.hidden = true;
+      msg.textContent = '';
+    }
+  }
+}
+
+function updateOperatorConsoleOffline() {
+  var strip = document.getElementById('operator-strip');
+  if (strip) {
+    strip.classList.add('operator-strip--offline', 'operator-strip--stale');
+    strip.classList.remove('operator-strip--locked');
+  }
+  setById('op-authority-val', 'UNKNOWN');
+  setById('op-policy-val', '—');
+  setById('op-motion-val', 'OFFLINE');
+  setById('op-profile-val', '—');
+  setById('op-link-val', 'OFFLINE');
+  setById('op-fresh-val', '—');
+  setById('op-lock-val', 'Robot offline or link lost');
+  document.body.classList.add('lros-operator-offline');
+  try {
+    window.__lrosOperatorSnapshot = null;
+  } catch (e) {}
+  applyDriveLockUI(null);
+  var b = deriveBannerFromOperator(null, 'OFFLINE');
+  setOverrideBanner(b.visible, b.visible ? { text: b.text, severity: b.severity } : {});
+}
+
+function updateOperatorConsole(j, linkStateOverride) {
+  if (!j) return;
+  var strip = document.getElementById('operator-strip');
+  if (strip) {
+    strip.classList.remove('operator-strip--offline');
+    strip.classList.toggle('operator-strip--stale', !!j.command_stale || !!j._linkDegraded);
+    strip.classList.toggle('operator-strip--locked', !!j.drive_locked);
+  }
+  document.body.classList.remove('lros-operator-offline');
+
+  var linkState = linkStateOverride !== undefined && linkStateOverride !== null
+    ? linkStateOverride
+    : computeOperatorLinkState(j);
+  setById('op-authority-val', j.authority || 'UNKNOWN');
+  setById('op-policy-val', j.motion_policy || '—');
+  setById('op-motion-val', j.motion || '—');
+  setById('op-profile-val', j.drive_profile || '—');
+  setById('op-link-val', linkState);
+  var age = j.last_command_age_ms != null ? Number(j.last_command_age_ms) : null;
+  var fs = j.failsafe_timeout_ms != null ? Number(j.failsafe_timeout_ms) : null;
+  var freshStr = age != null ? age + ' ms' : '—';
+  if (fs != null) freshStr += ' / ' + fs + ' ms failsafe';
+  setById('op-fresh-val', freshStr);
+  var lockShow = j.lock_reason || (!j.drive_locked ? '—' : 'locked');
+  setById('op-lock-val', lockShow);
+
+  applyDriveLockUI(j);
+
+  var b = deriveBannerFromOperator(j, linkState);
+  setOverrideBanner(b.visible, b.visible ? { text: b.text, severity: b.severity } : {});
+
+  if (typeof console !== 'undefined' && console.debug) {
+    console.debug('[LROS operator]', j.authority, j.motion, j.drive_profile, linkState, 'drive_locked=', j.drive_locked);
+  }
+  try {
+    window.__lrosOperatorSnapshot = j;
+  } catch (e) {}
+  if (typeof updateNavMapHud === 'function') updateNavMapHud();
+}
+
+var _lastVisionEvtMs = 0;
+var _visionEventsInited = false;
+
+function pollVisionEvents() {
+  fetch(api('/api/vision/events'), { cache: 'no-store', headers: apiAuthHeaders() })
+    .then(function (r) {
+      return r.json();
+    })
+    .then(function (j) {
+      if (!j || !j.events || !j.events.length) return;
+      var maxT = 0;
+      j.events.forEach(function (ev) {
+        if (ev && ev.t_ms > maxT) maxT = ev.t_ms;
+      });
+      if (!_visionEventsInited) {
+        _lastVisionEvtMs = maxT;
+        _visionEventsInited = true;
+        return;
+      }
+      j.events.forEach(function (ev) {
+        if (ev && ev.t_ms > _lastVisionEvtMs && ev.code) {
+          if (typeof showToast === 'function') showToast('\uD83D\uDCF9', 'Vision event ' + ev.code);
+        }
+      });
+      if (maxT > _lastVisionEvtMs) _lastVisionEvtMs = maxT;
+    })
+    .catch(function () {});
+}
+
+function pollMotionOperator() {
+  fetch(api('/api/motion/operator'), { cache: 'no-store' })
+    .then(function (r) {
+      if (!r.ok) throw new Error('bad status');
+      return r.json();
+    })
+    .then(function (j) {
+      _operatorLastOk = Date.now();
+      delete j._linkDegraded;
+      _operatorPayload = j;
+      if (window.WalleConnection) WalleConnection.markHttpOk();
+      updateOperatorConsole(j);
+    })
+    .catch(function (e) {
+      if (typeof console !== 'undefined' && console.debug) console.debug('[LROS operator] poll failed', e);
+      if (_operatorPayload) {
+        var degraded = Object.assign({}, _operatorPayload, { _linkDegraded: true });
+        if (!degraded.lock_reason) degraded.lock_reason = 'Connection stale — commands may be ignored';
+        updateOperatorConsole(degraded, 'TIMEOUT');
+      } else {
+        updateOperatorConsoleOffline();
+      }
+    });
+}
+
+/** Navigation page — mission HUD chips (MapLibre deck). */
+function updateNavMapHud() {
+  try {
+    var page = document.getElementById('page-navigation');
+    if (!page || !page.classList.contains('active')) return;
+    var auto = stateCache.auto || {};
+    var imu = stateCache.imu || {};
+    var op = window.__lrosOperatorSnapshot;
+    var set = function (id, t) {
+      var el = document.getElementById(id);
+      if (el) el.textContent = t;
+    };
+    set('nav-hud-autonomy', auto.state != null ? String(auto.state) : '—');
+    set('nav-hud-motion', op && op.motion ? String(op.motion) : '—');
+    set('nav-hud-profile', op && op.drive_profile ? String(op.drive_profile) : '—');
+    if (op && op.last_command_age_ms != null) set('nav-hud-tel-age', String(op.last_command_age_ms) + ' ms');
+    else set('nav-hud-tel-age', '—');
+    set('nav-hud-gps', auto.gpsValid ? 'Fix' : 'No fix');
+    set('nav-hud-hdg', imu.heading != null ? imu.heading + '\u00B0' : '—');
+    var ri = window.LrosNavigation && LrosNavigation.getRouteInfo ? LrosNavigation.getRouteInfo() : {};
+    set('nav-hud-route-m', ri.pathLength != null ? '~' + ri.pathLength.toFixed(1) + ' u' : '—');
+    set('nav-hud-eta', ri.etaSeconds != null && ri.etaSeconds ? '~' + ri.etaSeconds + ' s' : '—');
+    if (window.LrosNavigation && typeof LrosNavigation.getMapSnapshot === 'function') {
+      var s = LrosNavigation.getMapSnapshot();
+      if (s.waypoints && s.waypoints.length && auto.gpsValid && auto.lat != null && auto.lon != null) {
+        var w = s.waypoints[0];
+        var d = haversineMeters(Number(auto.lat), Number(auto.lon), w.lat, w.lng);
+        set('nav-hud-next-wp', Math.round(d) + ' m');
+      } else {
+        set('nav-hud-next-wp', '—');
+      }
+    }
+  } catch (e) {
+    if (typeof console !== 'undefined' && console.debug) console.debug('[LROS] nav HUD', e);
+  }
 }
 
 let _pillState = {};
@@ -7468,6 +9311,7 @@ async function fetchStatus() {
     if (window.LrosNavigation && typeof LrosNavigation.syncFromState === 'function') {
       LrosNavigation.syncFromState(stateCache);
     }
+    updateNavMapHud();
 
     if (window.WalleConnection) WalleConnection.markHttpOk();
 
@@ -8530,8 +10374,11 @@ function initAll() {
   if (window.ProximityAlert) ProximityAlert.setMuted(ProximityAlert.isMuted());
   fetchStatus();
   pollNodeHealth();
+  pollMotionOperator();
   setInterval(fetchStatus, 5000);
   setInterval(pollNodeHealth, 1500);
+  setInterval(pollMotionOperator, 1500);
+  setInterval(pollVisionEvents, 2500);
   try { fetch(api('/stop')); } catch(_) {}
   pushActivity('Dashboard ready', '\uD83C\uDFE0');
   setTimeout(function () { showToast('\uD83D\uDE0A', "Hi! I'm WALL-E"); }, 3000);

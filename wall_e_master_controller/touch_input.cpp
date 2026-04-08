@@ -12,6 +12,9 @@
 #include "motion_engine.h"  // For SERVO_COUNT
 #include "cyd_laser_ui.h"
 #include "ui_draw.h"
+#include "ui_state.h"
+#include "ui_sd_explorer.h"
+#include "ui_sd_memory_core.h"
 #include <XPT2046_Touchscreen.h>
 
 #define XPT2046_IRQ  36
@@ -334,7 +337,7 @@ TouchZone touchGetZone(int screenX, int screenY, int page) {
     }
     
     // Mood buttons on right side (physical joystick layout)
-    const int cTop = CONTENT_TOP;
+    const int cTop = uiContentTop();
     int midX = 320 / 2;  // 160
     for (int i = 0; i < 5; i++) {
       int bx = midX + 16 + (i % 2) * 72;
@@ -350,9 +353,10 @@ TouchZone touchGetZone(int screenX, int screenY, int page) {
     // Behaviour page mood buttons (5 buttons in 2 columns)
     if (page == 1) {
       // NEW: 6 animation buttons in 3x2 grid
+      const int behGridTop = uiContentTop() + 10;
       for (int i = 0; i < 6; i++) {
         int bx = 16 + (i % 3) * 100;
-        int by = 50 + (i / 3) * 50;
+        int by = behGridTop + (i / 3) * 50;
         if (screenX >= bx && screenX < (bx + 90) &&
             screenY >= by && screenY < (by + 36)) {
           return (TouchZone)(TOUCH_ZONE_ANIM_0 + i);
@@ -368,9 +372,15 @@ TouchZone touchGetZone(int screenX, int screenY, int page) {
     if (page == 2 && screenY >= 130 && screenY <= 162 && screenX >= 130 && screenX <= 230) {
       return TOUCH_ZONE_NAV_SERVO_TEST;
     }
-    // NEW: Autonomy button on System page (16, 168, 100x32)
-    if (page == 2 && screenY >= 168 && screenY <= 200 && screenX >= 16 && screenX <= 116) {
+    // System row 2: Autonomy | Help | SD (see uiDrawPageSystem)
+    if (page == 2 && screenY >= 168 && screenY <= 200 && screenX >= 4 && screenX <= 104) {
       return TOUCH_ZONE_NAV_AUTONOMY;
+    }
+    if (page == 2 && screenY >= 168 && screenY <= 200 && screenX >= 110 && screenX <= 210) {
+      return TOUCH_ZONE_NAV_HELP;
+    }
+    if (page == 2 && screenY >= 168 && screenY <= 200 && screenX >= 216 && screenX <= 316) {
+      return TOUCH_ZONE_NAV_SD;
     }
   } else if (page == 3) {  // PAGE_PROFILE
     // Profile cards: 3 cards centered
@@ -378,7 +388,7 @@ TouchZone touchGetZone(int screenX, int screenY, int page) {
     const int cardH = 120;
     const int cardSpacing = 10;
     const int startX = (320 - (cardW * 3 + cardSpacing * 2)) / 2;
-    const int startY = 50;
+    const int startY = uiContentTop() + 10;
     
     for (int i = 0; i < 3; i++) {
       int x = startX + i * (cardW + cardSpacing);
@@ -403,7 +413,7 @@ TouchZone touchGetZone(int screenX, int screenY, int page) {
     }
   } else if (page == 4) {  // PAGE_SERVO_EDITOR
     // Slider zones (5 sliders)
-    const int startY = 45;
+    const int startY = uiContentTop() + 8;
     const int sliderH = 24;
     const int spacing = 28;
     const int sliderX = 120;
@@ -458,12 +468,152 @@ TouchZone touchGetZone(int screenX, int screenY, int page) {
       if (screenX >= 190 && screenX <= 235) return TOUCH_ZONE_SERVO_TEST2;       // Test2
       if (screenX >= 250 && screenX <= 310) return TOUCH_ZONE_NAV_BACK;          // Back
     }
-  } else if (page == 6) {  // PAGE_AUTONOMY
-    // Toggle button (200, 50, 100x32)
-    if (screenX >= 200 && screenX <= 300 && screenY >= 50 && screenY <= 82) {
-      return TOUCH_ZONE_AUTONOMY_TOGGLE;
+  } else if (page == 6 || page == 7) {  // PAGE_AUTONOMY / PAGE_WAYPOINTS (same layout)
+    const int c = uiContentTop();
+    if (screenY >= c + 4 && screenY <= c + 26) {
+      if (screenX < 160) return TOUCH_ZONE_AUTONOMY_TAB_LIVE;
+      return TOUCH_ZONE_AUTONOMY_TAB_TUNE;
     }
-    // Back button
+    const int body = c + 30;
+    const int rh = 16;
+    if (g_autonomyUiTab == 0) {
+      if (screenX >= 200 && screenX <= 310 && screenY >= body + 2 && screenY <= body + 30) {
+        return TOUCH_ZONE_AUTONOMY_ARM;
+      }
+    } else {
+      // Match ui_draw.cpp AU_TUNE_X_MINUS (84), AU_TUNE_BTN_W (36), AU_TUNE_X_PLUS (264); waypoint toggle 128+72
+      const int auM0 = 84, auM1 = 120, auP0 = 264, auP1 = 300;
+      int y = body + 8;
+      if (screenY >= y && screenY <= y + rh) {
+        if (screenX >= auM0 && screenX <= auM1) return TOUCH_ZONE_AUTONOMY_M_CLOSE;
+        if (screenX >= auP0 && screenX <= auP1) return TOUCH_ZONE_AUTONOMY_P_CLOSE;
+      }
+      y += rh;
+      if (screenY >= y && screenY <= y + rh) {
+        if (screenX >= auM0 && screenX <= auM1) return TOUCH_ZONE_AUTONOMY_M_INT;
+        if (screenX >= auP0 && screenX <= auP1) return TOUCH_ZONE_AUTONOMY_P_INT;
+      }
+      y += rh;
+      if (screenY >= y && screenY <= y + rh) {
+        if (screenX >= auM0 && screenX <= auM1) return TOUCH_ZONE_AUTONOMY_M_CUR;
+        if (screenX >= auP0 && screenX <= auP1) return TOUCH_ZONE_AUTONOMY_P_CUR;
+      }
+      y += rh;
+      if (screenY >= y && screenY <= y + rh) {
+        if (screenX >= auM0 && screenX <= auM1) return TOUCH_ZONE_AUTONOMY_M_BRV;
+        if (screenX >= auP0 && screenX <= auP1) return TOUCH_ZONE_AUTONOMY_P_BRV;
+      }
+      y += rh;
+      if (screenY >= y && screenY <= y + rh && screenX >= 128 && screenX <= 200) {
+        return TOUCH_ZONE_AUTONOMY_WAYPOINT;
+      }
+      y += rh + 4;
+      if (screenY >= y && screenY <= y + rh) {
+        if (screenX >= 52 && screenX < 114) return TOUCH_ZONE_AUTONOMY_PRESET_0;
+        if (screenX >= 118 && screenX < 180) return TOUCH_ZONE_AUTONOMY_PRESET_1;
+        if (screenX >= 184 && screenX < 246) return TOUCH_ZONE_AUTONOMY_PRESET_2;
+        if (screenX >= 250 && screenX < 318) return TOUCH_ZONE_AUTONOMY_PRESET_3;
+      }
+    }
+    if (screenY >= 204 && screenY <= 236 && screenX >= 110 && screenX <= 210) {
+      return TOUCH_ZONE_NAV_BACK;
+    }
+  } else if (page == 8) {  // PAGE_HELP
+    const int c = uiContentTop();
+    if (screenY >= 204 && screenY <= 236 && screenX >= 110 && screenX <= 210) {
+      return TOUCH_ZONE_NAV_BACK;
+    }
+    if (g_helpSection == 0) {
+      for (int i = 0; i < 4; i++) {
+        int y = c + 22 + i * 38;
+        if (screenX >= 10 && screenX <= 310 && screenY >= y && screenY <= y + 32) {
+          return (TouchZone)(TOUCH_ZONE_HELP_TOPIC_0 + i);
+        }
+      }
+    }
+  } else if (page == 9) {  // PAGE_SD_EXPLORER
+    if (uiSdMemoryCoreRenameIsOpen()) {
+      const int r1y = 92, r2y = 122, r3y = 152;
+      const int bw = 94, gh = 26, g = 4;
+      const int x0 = 14;
+      const int x2 = (SCREEN_W - (2 * bw + g)) / 2;
+      if (screenX >= x0 && screenX < x0 + bw && screenY >= r1y && screenY < r1y + gh) {
+        return TOUCH_ZONE_SD_RENAME_CH_DEC;
+      }
+      if (screenX >= x0 + bw + g && screenX < x0 + 2 * bw + g && screenY >= r1y && screenY < r1y + gh) {
+        return TOUCH_ZONE_SD_RENAME_CH_INC;
+      }
+      if (screenX >= x0 + 2 * (bw + g) && screenX < x0 + 3 * bw + 2 * g && screenY >= r1y && screenY < r1y + gh) {
+        return TOUCH_ZONE_SD_RENAME_BKSP;
+      }
+      if (screenX >= x2 && screenX < x2 + bw && screenY >= r2y && screenY < r2y + gh) {
+        return TOUCH_ZONE_SD_RENAME_CUR_L;
+      }
+      if (screenX >= x2 + bw + g && screenX < x2 + 2 * bw + g && screenY >= r2y && screenY < r2y + gh) {
+        return TOUCH_ZONE_SD_RENAME_CUR_R;
+      }
+      if (screenX >= x2 && screenX < x2 + bw && screenY >= r3y && screenY < r3y + gh) {
+        return TOUCH_ZONE_SD_RENAME_CANCEL;
+      }
+      if (screenX >= x2 + bw + g && screenX < x2 + 2 * bw + g && screenY >= r3y && screenY < r3y + gh) {
+        return TOUCH_ZONE_SD_RENAME_OK;
+      }
+      return TOUCH_ZONE_NONE;
+    }
+    if (uiSdExplorerConfirmIsOpen()) {
+      if (screenY >= 120 && screenY <= 156) {
+        if (screenX >= 40 && screenX <= 140) return TOUCH_ZONE_SD_CONFIRM_YES;
+        if (screenX >= 180 && screenX <= 280) return TOUCH_ZONE_SD_CONFIRM_NO;
+      }
+      return TOUCH_ZONE_NONE;
+    }
+    if (uiSdExplorerPreviewIsOpen()) {
+      if (screenY >= 204 && screenY <= 236 && screenX >= 110 && screenX <= 210) {
+        return TOUCH_ZONE_NAV_BACK;
+      }
+      return TOUCH_ZONE_NONE;
+    }
+    const int c = uiContentTop();
+    /* Memory Core shortcuts (6 tiles) */
+    {
+      const int n = 6;
+      const int gap = 2;
+      const int totalW = 320 - 8;
+      const int btnW = (totalW - (n - 1) * gap) / n;
+      int sy0 = c + UI_MC_SHORTCUT_Y;
+      if (screenY >= sy0 && screenY < sy0 + UI_MC_SHORTCUT_H) {
+        for (int b = 0; b < n; b++) {
+          int bx = 4 + b * (btnW + gap);
+          if (screenX >= bx && screenX < bx + btnW) {
+            return (TouchZone)(TOUCH_ZONE_MC_SC_0 + b);
+          }
+        }
+      }
+    }
+    const int listTop = c + UI_MC_LIST_OFF;
+    for (int r = 0; r < UI_MC_LIST_ROWS; r++) {
+      int ry0 = listTop + r * UI_MC_ROW_H;
+      if (screenX >= 4 && screenX <= 304 && screenY >= ry0 && screenY < ry0 + UI_MC_ROW_H) {
+        return (TouchZone)(TOUCH_ZONE_SD_LIST_0 + r);
+      }
+    }
+    const int tbY = c + UI_MC_LIST_OFF + UI_MC_LIST_ROWS * UI_MC_ROW_H + 4;
+    const int nTb = 7;
+    const int gapTb = 2;
+    const int totalWTb = 320 - 8;
+    const int btnW = (totalWTb - (nTb - 1) * gapTb) / nTb;
+    for (int b = 0; b < nTb; b++) {
+      int bx = 4 + b * (btnW + gapTb);
+      if (screenY >= tbY && screenY <= tbY + 22 && screenX >= bx && screenX < bx + btnW) {
+        if (b == 0) return TOUCH_ZONE_SD_UP;
+        if (b == 1) return TOUCH_ZONE_SD_OPEN;
+        if (b == 2) return TOUCH_ZONE_SD_REFRESH;
+        if (b == 3) return TOUCH_ZONE_SD_PG_PREV;
+        if (b == 4) return TOUCH_ZONE_SD_PG_NEXT;
+        if (b == 5) return TOUCH_ZONE_SD_DELETE;
+        return TOUCH_ZONE_SD_RENAME;
+      }
+    }
     if (screenY >= 204 && screenY <= 236 && screenX >= 110 && screenX <= 210) {
       return TOUCH_ZONE_NAV_BACK;
     }

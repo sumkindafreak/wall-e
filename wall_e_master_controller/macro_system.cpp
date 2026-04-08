@@ -3,6 +3,7 @@
 // ============================================================
 
 #include "macro_system.h"
+#include "motion_engine.h"
 
 // ============================================================
 //  Internal State
@@ -126,7 +127,8 @@ bool macroStartPlayback(uint8_t slot) {
   s_state = MACRO_PLAYING;
   s_currentFrame = 0;
   s_playbackStartMs = millis();
-  
+  motionStopAllAnimations();
+
   Serial.printf("[Macro] ▶️  Playing slot %d (%d frames)\n", slot, s_frameCount);
   return true;
 }

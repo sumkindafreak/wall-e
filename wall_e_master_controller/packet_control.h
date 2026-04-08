@@ -17,6 +17,9 @@ void packetUpdate(unsigned long now, const DriveState* ds, bool estop);
 /* Set action for next packet(s) — e.g. ACTION_DOCK_GO, ACTION_DOCK_CANCEL. Cleared after send. */
 void packetSetPendingAction(uint8_t action);
 
+/** One-shot remote autonomy config (ACTION_AUTONOMY_REMOTE + aux bytes). */
+void packetSetAutonomyConfig(uint8_t key, uint8_t value);
+
 // Telemetry (read from ESP-NOW)
 bool packetTelemetryValid(void);
 void packetGetTelemetry(TelemetryPacket* out);

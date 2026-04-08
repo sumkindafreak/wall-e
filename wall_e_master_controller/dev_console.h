@@ -36,6 +36,9 @@ bool devConsoleIsUnlocked();
 // Unlock console (requires specific touch pattern)
 void devConsoleCheckUnlock(uint16_t x, uint16_t y, uint32_t holdTimeMs);
 
+// Full touch routing: unlock hold (locked), nav + macro strip + lock (unlocked)
+void devConsoleProcessTouch(uint16_t x, uint16_t y, bool pressed);
+
 // Lock console
 void devConsoleLock();
 

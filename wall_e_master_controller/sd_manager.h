@@ -26,6 +26,12 @@
 #define SD_STORY        "/wall_e/story"
 #define SD_LOGS         "/wall_e/logs"
 #define SD_PROFILES     "/wall_e/profiles"
+/** WALL-E Memory Core — create on SD if missing when jumping from UI */
+#define SD_MEMORY_DIR   "/wall_e/memory"
+#define SD_CONFIG_DIR   "/wall_e/config"
+#define SD_MISSIONS_DIR "/wall_e/missions"
+#define SD_DIAG_DIR     "/wall_e/diagnostics"
+#define SD_EVENTS_DIR   "/wall_e/events"
 
 // ============================================================
 //  Macro Frame Structure (Binary)
@@ -71,6 +77,8 @@ bool sdIsAvailable();
 
 // Get free space (MB)
 uint32_t sdGetFreeSpaceMB();
+/** Total card size (MB), 0 if no SD */
+uint32_t sdGetTotalSpaceMB(void);
 
 // Macro management
 bool sdSaveMacro(uint8_t slot, const MacroFrame* frames, uint16_t frameCount);

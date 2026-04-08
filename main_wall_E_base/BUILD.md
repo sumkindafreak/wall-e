@@ -17,3 +17,6 @@ pio run -t upload
 ## WebUI
 Connect to WALL-E AP → `http://192.168.4.1`  
 If Settings look wrong, hard-refresh (Ctrl+F5) or add `?v=1` to the URL to bypass cache.
+
+Full route list and operator features (motion policy, sequences, optional API token): **[README.md](README.md)**.  
+To rebuild embedded PROGMEM HTML from `../webui/`: **`../webui/build-embed.ps1`**.

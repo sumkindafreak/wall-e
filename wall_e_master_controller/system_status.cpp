@@ -5,6 +5,7 @@
 #include "system_status.h"
 #include "espnow_control.h"
 #include "packet_control.h"
+#include "sd_manager.h"
 #include <Arduino.h>
 #include <stdio.h>
 #include <string.h>
@@ -32,6 +33,7 @@ bool systemStatusTelemetryFresh(uint32_t maxAgeMs) {
 void systemStatusFormatDebug(char* buf, size_t bufLen) {
   if (!buf || bufLen < 8) return;
   uint32_t age = millis() - s_lastOkMs;
-  snprintf(buf, bufLen, "ESPNOW %up/s TELEM_AGE %lums",
-           (unsigned)espnowGetPacketRate(), (unsigned long)age);
+  snprintf(buf, bufLen, "ESPNOW %up/s TELEM_AGE %lums SD_%s",
+           (unsigned)espnowGetPacketRate(), (unsigned long)age,
+           sdIsAvailable() ? "OK" : "--");
 }

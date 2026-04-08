@@ -29,6 +29,8 @@ typedef struct __attribute__((packed)) {
   uint8_t  action;        // trigger event (scan, beep, lookaround, etc.)
   uint16_t systemFlags;   // bitmask flags
   uint8_t  servoTargets[10];  // NEW: 10 servo positions (0-180 degrees)
+  uint8_t  aux0;            // ACTION_AUTONOMY_REMOTE: config key (see below)
+  uint8_t  aux1;            // ACTION_AUTONOMY_REMOTE: value 0-255
 } ControlPacket;
 
 // ------------------------------------------------------------
@@ -71,6 +73,18 @@ typedef struct __attribute__((packed)) {
 #define ACTION_DOCK_GO     8
 #define ACTION_DOCK_CANCEL 9
 #define ACTION_STOP_ALL    10
+/** Remote autonomy/personality tuning (aux0=key, aux1=value) — must match Base espnow_receiver */
+#define ACTION_AUTONOMY_REMOTE  11
+
+/** Keys for ACTION_AUTONOMY_REMOTE (aux0) */
+#define AUTONOMY_KEY_DETECT_CLOSE_CM    1   /* aux1: cm 10-150 */
+#define AUTONOMY_KEY_DETECT_INTEREST_CM   2   /* aux1: cm, > close */
+#define AUTONOMY_KEY_CURIOSITY          10   /* aux1: 0-100 → personality */
+#define AUTONOMY_KEY_BRAVERY            11
+#define AUTONOMY_KEY_ENERGY             12
+#define AUTONOMY_KEY_RANDOMNESS         13
+#define AUTONOMY_KEY_WAYPOINT_MODE      20   /* aux1: 0/1 */
+#define AUTONOMY_KEY_PRESET             30   /* aux1: PersonalityPreset 0-3 */
 
 // ------------------------------------------------------------
 //  Mood codes (behaviourMode / moodState)

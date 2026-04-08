@@ -19,6 +19,7 @@
 #include "audio_protocol.h"
 #include "node_health_protocol.h"
 #include "node_health_registry.h"
+#include "motion_authority.h"
 #include "audio_espnow.h"
 #include "audio_telem.h"
 #include "audio_esp_status.h"
@@ -37,6 +38,8 @@ typedef struct __attribute__((packed)) {
   uint8_t  action;
   uint16_t systemFlags;
   uint8_t  servoTargets[10];
+  uint8_t  aux0;
+  uint8_t  aux1;
 } ControlPacket;
 
 #define CONTROL_PACKET_HEADER_BYTES  7
@@ -148,11 +151,15 @@ static void onRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len
   // Remember controller MAC for telemetry replies (from info struct in 3.x)
   memcpy(s_controllerMac, info->src_addr, 6);
 
-  // NEW: Track manual control activity
-  s_lastLeftSpeed = p->leftSpeed;
-  s_lastRightSpeed = p->rightSpeed;
-  if (abs(p->leftSpeed) > 5 || abs(p->rightSpeed) > 5) {
-    s_lastManualCommandMs = millis();
+  const bool cydAllowed = motionAuthorityAllowCyd();
+
+  // Track manual control activity (CYD sticks) only when CYD may own drive
+  if (cydAllowed) {
+    s_lastLeftSpeed = p->leftSpeed;
+    s_lastRightSpeed = p->rightSpeed;
+    if (abs(p->leftSpeed) > 5 || abs(p->rightSpeed) > 5) {
+      s_lastManualCommandMs = millis();
+    }
   }
 
   // E-STOP check (print only on transition to avoid serial spam)
@@ -194,12 +201,14 @@ static void onRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len
     laserOff();
     displaySetCommand(CMD_IDLE);
     Serial.println(F("[Action] STOP_ALL"));
+  } else if (p->action == ACTION_AUTONOMY_REMOTE && len >= (int)sizeof(ControlPacket)) {
+    autonomyApplyRemoteConfig(p->aux0, p->aux1);
   } else if (p->action != ACTION_NONE) {
     Serial.printf("[Action] %d\n", p->action);
   }
 
   /* Servo + laser from CYD (0–180° in packet → base uses 0–100 scale) */
-  if (len >= CONTROL_PACKET_FULL_BYTES) {
+  if (cydAllowed && len >= CONTROL_PACKET_FULL_BYTES) {
     if (p->systemFlags & FLAG_LASER) {
       laserSetBrightness(255);
     } else {
@@ -235,6 +244,17 @@ static void onRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len
 
   left  = constrain(left,  -255, 255);
   right = constrain(right, -255, 255);
+
+  /* Drive profile: CYD FLAG_PRECISION or NORMAL (main loop does not override while manual active) */
+  if (p->systemFlags & FLAG_PRECISION) {
+    motorSetDriveProfile(DRIVE_PROFILE_PRECISION, "CYD FLAG_PRECISION");
+  } else {
+    motorSetDriveProfile(DRIVE_PROFILE_NORMAL, "CYD manual");
+  }
+
+  if (!cydAllowed) {
+    return;
+  }
 
   lastCommandMillis = millis();
   // SWAP: Physical motors are wired opposite to code

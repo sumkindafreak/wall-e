@@ -9,6 +9,7 @@ Folder: `wall_e_master_controller`
 - Select env: `cyd_esp32_2432s028`
 - Build: `PlatformIO: Build`
 - Upload: `PlatformIO: Upload`
+- **Optional:** **SD card** (SPI: CS 5, MOSI 23, MISO 19, SCK 18) — firmware runs without it; see [wall_e_master_controller/README.md](wall_e_master_controller/README.md).
 
 ## 2) WALL-E Base Brain (ESP32-S3)
 Folder: `main_wall_E_base`

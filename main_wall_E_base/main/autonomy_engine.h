@@ -139,4 +139,11 @@ bool autonomyIsManualOverride();
 void autonomySetWaypointMode(bool enabled);
 bool autonomyIsWaypointMode();
 
+// Runtime detection radii (defaults from DETECT_* macros; tunable from CYD via ESP-NOW)
+float autonomyGetDetectCloseCm(void);
+float autonomyGetDetectInterestCm(void);
+
+/** CYD ACTION_AUTONOMY_REMOTE: aux0=key, aux1=value (see wall_e protocol.h) */
+void autonomyApplyRemoteConfig(uint8_t key, uint8_t val);
+
 #endif // AUTONOMY_ENGINE_H

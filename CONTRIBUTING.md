@@ -79,6 +79,7 @@ If you change **packed structs**, **magic values**, or **on-wire layout**, state
 | **Cross-links** | Link to `ARCHITECTURE.md` for protocol narrative; link to `OTA_README.md` for OTA. |
 | **Diagrams** | Mermaid is supported on GitHub; keep ASCII fallbacks for offline readers where useful. |
 | **Changelog** | For user-visible behavior, a short note in the PR description is enough unless you maintain `CHANGELOG.md`. |
+| **Base HTTP / LROS** | When you add or change `web_server.cpp` routes, update **[main_wall_E_base/README.md](main_wall_E_base/README.md)** (and run **`webui/build-embed.ps1`** if the embedded `web_page_lros.h` should match `webui/`). |
 
 ---
 

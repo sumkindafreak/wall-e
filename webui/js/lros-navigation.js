@@ -15,6 +15,14 @@
   var waypoints = [];
   var obstacles = []; // {x,y,r,type} type 'lidar'|'sonic'
   var robot = { x: 50, y: 50, heading: 0 };
+  /** Local tangent plane: grid (50,50) = originLat/originLon; 1 unit ≈ metersPerGridUnit */
+  var _originLat = 40.7128;
+  var _originLon = -74.006;
+  var _metersPerGridUnit = 0.5;
+  var _originFromGps = false;
+  var breadcrumbs = []; // { lng, lat } for trail on MapLibre
+  var _lastBreadMs = 0;
+  var _lastBreadPos = null;
   var pathLine = [];
   var antsOffset = 0;
   var animId = null;
@@ -27,6 +35,105 @@
 
   function screenToWorld(sx, sy) {
     return { x: (sx - offsetX) / scale, y: (sy - offsetY) / scale };
+  }
+
+  function gridToLngLat(x, y) {
+    var dx = (x - 50) * _metersPerGridUnit;
+    var dy = (50 - y) * _metersPerGridUnit;
+    var lat = _originLat + dy / 111320;
+    var lon = _originLon + dx / (111320 * Math.cos((_originLat * Math.PI) / 180));
+    return { lng: lon, lat: lat };
+  }
+
+  function lngLatToGrid(lng, lat) {
+    var dy = (lat - _originLat) * 111320;
+    var dx = (lng - _originLon) * 111320 * Math.cos((_originLat * Math.PI) / 180);
+    return {
+      x: 50 + dx / _metersPerGridUnit,
+      y: 50 - dy / _metersPerGridUnit
+    };
+  }
+
+  function clampGrid(pt) {
+    return {
+      x: Math.max(0, Math.min(gridW - 1e-6, pt.x)),
+      y: Math.max(0, Math.min(gridH - 1e-6, pt.y))
+    };
+  }
+
+  function addWaypointFromLngLat(lng, lat) {
+    var g = clampGrid(lngLatToGrid(lng, lat));
+    waypoints.push(g);
+    rebuildPath();
+    updateWaypointPanel();
+    notifyMapRefresh();
+  }
+
+  function recordBreadcrumb(lng, lat) {
+    var now = Date.now();
+    if (now - _lastBreadMs < 1100) return;
+    if (_lastBreadPos) {
+      var dLat = lat - _lastBreadPos.lat;
+      var dLon = lng - _lastBreadPos.lng;
+      if (dLat * dLat + dLon * dLon < 2e-10) return;
+    }
+    _lastBreadMs = now;
+    _lastBreadPos = { lng: lng, lat: lat };
+    breadcrumbs.push({ lng: lng, lat: lat });
+    if (breadcrumbs.length > 220) breadcrumbs.shift();
+  }
+
+  function getMapAnchors() {
+    try {
+      var h = localStorage.getItem('walle_nav_home');
+      var d = localStorage.getItem('walle_nav_dock');
+      return {
+        home: h ? JSON.parse(h) : null,
+        dock: d ? JSON.parse(d) : null
+      };
+    } catch (e) {
+      return { home: null, dock: null };
+    }
+  }
+
+  function setHomeAnchor(lat, lng) {
+    try {
+      localStorage.setItem('walle_nav_home', JSON.stringify({ lat: lat, lng: lng }));
+    } catch (e) {}
+    notifyMapRefresh();
+  }
+
+  function setDockAnchor(lat, lng) {
+    try {
+      localStorage.setItem('walle_nav_dock', JSON.stringify({ lat: lat, lng: lng }));
+    } catch (e) {}
+    notifyMapRefresh();
+  }
+
+  function getMapSnapshot() {
+    var anchors = getMapAnchors();
+    return {
+      origin: { lat: _originLat, lon: _originLon },
+      robot: { x: robot.x, y: robot.y, heading: robot.heading },
+      robotLngLat: gridToLngLat(robot.x, robot.y),
+      waypoints: waypoints.map(function (w) {
+        return gridToLngLat(w.x, w.y);
+      }),
+      pathLine: pathLine.map(function (p) {
+        return gridToLngLat(p.x, p.y);
+      }),
+      obstacles: obstacles,
+      home: anchors.home,
+      dock: anchors.dock,
+      breadcrumbs: breadcrumbs.slice(),
+      gridSize: { w: gridW, h: gridH }
+    };
+  }
+
+  function notifyMapRefresh() {
+    if (window.LrosMapNav && typeof LrosMapNav.refreshFromPlanner === 'function') {
+      LrosMapNav.refreshFromPlanner();
+    }
   }
 
   function init() {
@@ -72,6 +179,7 @@
     });
 
     canvas.addEventListener('click', function (e) {
+      if (window.LrosMapNav && LrosMapNav.isMapActive && LrosMapNav.isMapActive()) return;
       if (dragDist > 5) return;
       var rect = canvas.getBoundingClientRect();
       var w = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
@@ -84,6 +192,11 @@
 
     if (animId) cancelAnimationFrame(animId);
     loop();
+    if (window.LrosMapNav && typeof LrosMapNav.init === 'function') {
+      try {
+        LrosMapNav.init();
+      } catch (e) {}
+    }
   }
 
   function resize() {
@@ -107,6 +220,7 @@
     if (waypoints.length < 2) {
       if (waypoints.length === 1) pathLine = [robot, waypoints[0]];
       notifyRouteChange();
+      notifyMapRefresh();
       return;
     }
     var obsSet = new Set();
@@ -131,6 +245,7 @@
     }
     if (pathLine.length > 2) pathLine = PathPlanner.catmullRom(pathLine, 4);
     notifyRouteChange();
+    notifyMapRefresh();
   }
 
   function getRouteInfo() {
@@ -307,6 +422,7 @@
         waypoints.splice(i, 1);
         rebuildPath();
         updateWaypointPanel();
+        notifyMapRefresh();
       };
     });
   }
@@ -315,6 +431,7 @@
     waypoints = [];
     rebuildPath();
     updateWaypointPanel();
+    notifyMapRefresh();
   }
 
   function getMissionPayload() {
@@ -334,9 +451,11 @@
       return;
     }
     var payload = getMissionPayload();
+    var hdr = Object.assign({ 'Content-Type': 'application/json' },
+      typeof apiAuthHeaders === 'function' ? apiAuthHeaders() : {});
     fetch(typeof api === 'function' ? api('/api/navigation/route') : '/api/navigation/route', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: hdr,
       body: JSON.stringify(payload)
     })
       .then(function (r) {
@@ -360,7 +479,24 @@
 
   /** Live heading + sonar hint from HTTP poll (stateCache) */
   function syncFromState(cache) {
-    if (!cache || !cache.imu) return;
+    if (cache && cache.auto && cache.auto.gpsValid && cache.auto.lat != null && cache.auto.lon != null) {
+      var lat = Number(cache.auto.lat);
+      var lon = Number(cache.auto.lon);
+      if (!_originFromGps) {
+        _originLat = lat;
+        _originLon = lon;
+        _originFromGps = true;
+      }
+      var g = lngLatToGrid(lon, lat);
+      robot.x = Math.max(0, Math.min(gridW - 1e-6, g.x));
+      robot.y = Math.max(0, Math.min(gridH - 1e-6, g.y));
+      recordBreadcrumb(lon, lat);
+      notifyMapRefresh();
+    }
+    if (!cache || !cache.imu) {
+      notifyMapRefresh();
+      return;
+    }
     if (cache.imu.heading != null) robot.heading = Number(cache.imu.heading);
     if (cache.auto && cache.auto.sonar != null) {
       var d = Math.min(400, Math.max(5, Number(cache.auto.sonar)));
@@ -379,6 +515,7 @@
       if (found >= 0) obstacles[found] = o;
       else if (obstacles.length < 12) obstacles.push(o);
     }
+    notifyMapRefresh();
   }
 
   window.LrosNavigation = {
@@ -387,7 +524,15 @@
     sendRouteToRobot: sendRouteToRobot,
     syncFromState: syncFromState,
     getRouteInfo: getRouteInfo,
-    getMissionPayload: getMissionPayload
+    getMissionPayload: getMissionPayload,
+    gridToLngLat: gridToLngLat,
+    lngLatToGrid: lngLatToGrid,
+    addWaypointFromLngLat: addWaypointFromLngLat,
+    getMapSnapshot: getMapSnapshot,
+    setHomeAnchor: setHomeAnchor,
+    setDockAnchor: setDockAnchor,
+    getMapAnchors: getMapAnchors,
+    notifyMapRefresh: notifyMapRefresh
   };
 })();
 

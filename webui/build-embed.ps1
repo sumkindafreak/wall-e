@@ -11,7 +11,9 @@ $jsFiles = @(
   "js\proximityAlert.js",
   "js\navWorldContext.js",
   "js\lros-navigation.js",
+  "js\lros-maplibre-nav.js",
   "js\navMissionPanel.js",
+  "js\lros-sequences.js",
   "js\lros.js"
 )
 $parts = foreach ($rel in $jsFiles) {
@@ -26,7 +28,7 @@ $html = $html.Replace(
   "<style>`n$css`n</style>"
 )
 
-$pattern = '(?s)<script src="js/walleConnection\.js"></script>\s*<script src="js/pathPlanner\.js"></script>\s*<script src="js/proximityAlert\.js"></script>\s*<script src="js/navWorldContext\.js"></script>\s*<script src="js/lros-navigation\.js"></script>\s*<script src="js/navMissionPanel\.js"></script>\s*<script src="js/lros\.js"></script>'
+$pattern = '(?s)<script src="js/walleConnection\.js"></script>\s*<script src="js/pathPlanner\.js"></script>\s*<script src="js/proximityAlert\.js"></script>\s*<script src="js/navWorldContext\.js"></script>\s*<script src="js/lros-navigation\.js"></script>\s*<script src="js/lros-maplibre-nav\.js"></script>\s*<script src="js/navMissionPanel\.js"></script>\s*<script src="js/lros-sequences\.js"></script>\s*<script src="js/lros\.js"></script>'
 $embedded = "<script>`n" + $jsCombined + "`n</script>"
 if (-not ([regex]::IsMatch($html, $pattern))) {
   Write-Error "Could not find expected script bundle in index.html; update build-embed.ps1 pattern."

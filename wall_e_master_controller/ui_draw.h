@@ -18,10 +18,15 @@
 #define TOP_BAR_HEIGHT  30
 /* Two text rows (nums + mode|emo) under battery bar — needs >22px */
 #define TELEM_STRIP_H   30
-/** First Y below title + telemetry strip (battery label + bar live in strip) */
-#define CONTENT_TOP     (TOP_BAR_HEIGHT + TELEM_STRIP_H)
+/** Collapsed banner height (single-line status; tap banner to expand) */
+#define BANNER_MINI_H   16
+/** Max first Y when banner fully expanded (use uiContentTop() at runtime) */
+#define CONTENT_TOP_MAX (TOP_BAR_HEIGHT + TELEM_STRIP_H)
 #define BOTTOM_BAR_Y    200
 #define BOTTOM_BAR_H    40
+/** Bottom toast when Brain autonomy is in a “busy mind” state — keep in sync with uiDrawThinkingStrip */
+#define UI_THINKING_STRIP_Y   (BOTTOM_BAR_Y - 24)
+#define UI_THINKING_STRIP_H   24
 /** Drive bottom bar — Dock/Cancel/E-STOP slightly narrower so four nav tiles fit (320px wide) */
 #define DRIVE_DOCK_X        8
 #define DRIVE_DOCK_W        56
@@ -37,7 +42,7 @@
 #define DRIVE_NAV_AUT_X     (DRIVE_NAV_PRF_X + DRIVE_NAV_CELL_W + DRIVE_NAV_GAP)
 #define DRIVE_BOTTOM_BTN_Y  (BOTTOM_BAR_Y + 4)
 #define DRIVE_BOTTOM_BTN_H  32
-#define CONTENT_H       (BOTTOM_BAR_Y - CONTENT_TOP)
+#define CONTENT_H_MAX   (BOTTOM_BAR_Y - CONTENT_TOP_MAX)
 
 // Single centered joystick
 #define JOY_CX          160  // Center X
@@ -85,6 +90,13 @@ typedef struct {
 //  API
 // ------------------------------------------------------------
 void uiDrawInit(TFT_eSPI* tft);
+
+/** Runtime banner height: full title+telemetry or thin mini strip */
+int uiBannerTotalHeight(void);
+int uiContentTop(void);
+int uiContentHeight(void);
+void uiBannerInvalidateTelemetryCache(void);
+void uiDrawBannerBackground(void);
 void uiDrawCurrentPage(void);  // Central: static draw based on InputMode + Page
 void uiDrawUpdateDynamic(const TelemetryStripData* telem, const DriveState* ds,
                          int joyDotX, int joyDotY);
@@ -97,6 +109,10 @@ void uiDrawEStopRegion(bool highlighted);
 void uiDrawPageBehaviour(void);
 void uiDrawPageSystem(void);
 void uiDrawPageAutonomy(void);
+/** Shown above bottom bar when Base reports autonomy “thinking”-like states */
+void uiDrawThinkingStrip(const TelemetryPacket* tm, bool linkOk);
+void uiDrawPageHelp(void);
+void uiDrawPageSdExplorer(void);
 void uiDrawStaticDrive(void);  // Touchscreen Drive page static
 void uiDrawStaticBehaviour(void);
 void uiDrawStaticSystem(void);

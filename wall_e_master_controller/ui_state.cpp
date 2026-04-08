@@ -11,6 +11,17 @@ bool              g_estop = false;
 bool              g_advancedMode = false;
 bool              g_overlayVisible = false;
 bool              g_needStaticRedraw = true;
+uint8_t           g_helpSection = 0;
+bool              g_topBannerCollapsed = false;
+uint8_t           g_autonomyUiTab = 0;
+bool              g_remoteAutonomyArm = false;
+uint8_t           g_auCloseCm = 40;
+uint8_t           g_auInterestCm = 80;
+uint8_t           g_auCuriosityPct = 50;
+uint8_t           g_auBraveryPct = 50;
+uint8_t           g_auEnergyPct = 50;
+uint8_t           g_auRandomPct = 50;
+bool              g_auWaypointFollow = false;
 
 void uiStateInit(void) {
 #if USE_PHYSICAL_JOYSTICKS
@@ -25,6 +36,17 @@ void uiStateInit(void) {
   g_advancedMode = false;
   g_overlayVisible = false;
   g_needStaticRedraw = true;
+  g_topBannerCollapsed = false;
+  g_autonomyUiTab = 0;
+  g_remoteAutonomyArm = false;
+  g_auCloseCm = 40;
+  g_auInterestCm = 80;
+  g_auCuriosityPct = 50;
+  g_auBraveryPct = 50;
+  g_auEnergyPct = 50;
+  g_auRandomPct = 50;
+  g_auWaypointFollow = false;
+  g_helpSection = 0;
 }
 
 bool uiStateIsTouchscreen(void) {

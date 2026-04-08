@@ -13,6 +13,7 @@
 #include <Arduino.h>
 #include <TFT_eSPI.h>
 #include <esp_task_wdt.h>
+#include <math.h>
 
 #include "protocol.h"
 #include "ui_draw.h"
@@ -44,6 +45,13 @@
 #include "ui_rendering.h"
 #include "command_input.h"
 
+// SD card (SPI: CS 5, MOSI 23, MISO 19, SCK 18) + macro persistence
+#include "sd_manager.h"
+#include "macro_system.h"
+#include "dev_console.h"
+#include "ui_sd_explorer.h"
+#include "sd_browser.h"
+
 #define TFT_BL 21
 #define WDT_TIMEOUT_SEC 3
 
@@ -69,6 +77,16 @@ void setup() {
 
   tft.init();
   tft.setRotation(1);
+
+  // SD card: after TFT init (separate SPI bus). Macros + logs use SD when present.
+  if (sdInit()) {
+    sdLogInit();
+    sdLog("WALL-E CYD Master boot");
+    sdLogFlush();
+  } else {
+    sdLogInit();
+  }
+  macroInit();
 
   uiDrawInit(&tft);
   uiRenderingInit(&tft);
@@ -106,6 +124,7 @@ void setup() {
 }
 
 void loop() {
+  const uint32_t loopStartUs = micros();
   unsigned long now = millis();
   
   // Feed watchdog to prevent reset
@@ -114,10 +133,90 @@ void loop() {
   ads1115Update();
   sx1509Update();
 
+  bool screenTouch = false;
+  uint16_t sx = 0, sy = 0;
+  if (touchGetTs()->touched()) {
+    TS_Point tp = touchGetTs()->getPoint();
+    sx = (uint16_t)constrain(map(tp.x, TOUCH_X_MIN, TOUCH_X_MAX, 0, 319), 0, 319);
+    sy = (uint16_t)constrain(map(tp.y, TOUCH_Y_MIN, TOUCH_Y_MAX, 0, 239), 0, 239);
+    screenTouch = true;
+  }
+  devConsoleProcessTouch(sx, sy, screenTouch);
+
+  /* Right ~48px of banner only — avoids dev-console unlock hold (top-right x≈250–271) */
+  const bool bannerTapZone =
+      screenTouch && sy < (uint16_t)uiBannerTotalHeight() && sx >= (uint16_t)(SCREEN_W - 48);
+  static bool s_prevBannerTapZone = false;
+  if (!devConsoleIsUnlocked() && bannerTapZone && !s_prevBannerTapZone) {
+    g_topBannerCollapsed = !g_topBannerCollapsed;
+    uiBannerInvalidateTelemetryCache();
+    g_needStaticRedraw = true;
+    playUISound(SOUND_CLICK);
+  }
+  s_prevBannerTapZone = bannerTapZone;
+
+  if (devConsoleIsUnlocked()) {
+    commandQueueDrainAll();
+    DriveState dsZ = {};
+    motionSetHeadPanVelocity(0);
+    motionSetHeadTiltVelocity(0);
+
+    macroCheckJoystickOverride(false);
+    float pbL, pbR, pbSv[9];
+    if (macroGetPlaybackData(&pbL, &pbR, pbSv)) {
+      dsZ.leftSpeed = (int8_t)constrain((int)lroundf(pbL), -100, 100);
+      dsZ.rightSpeed = (int8_t)constrain((int)lroundf(pbR), -100, 100);
+      for (int i = 0; i < 9; i++) {
+        uint8_t deg = (uint8_t)constrain((int)lroundf(pbSv[i] * 180.0f / 100.0f), 0, 180);
+        motionSetServoDirect(i, deg);
+      }
+    }
+    if (!isDeadmanButtonHeld()) {
+      dsZ.leftSpeed = 0;
+      dsZ.rightSpeed = 0;
+    }
+
+    motionUpdate(now);
+
+    uint8_t macTgt[10];
+    motionGetServoTargets(macTgt);
+    float macSv[9];
+    for (int i = 0; i < 9; i++) {
+      macSv[i] = macTgt[i] * (100.0f / 180.0f);
+    }
+    macroSetCurrentData((float)dsZ.leftSpeed, (float)dsZ.rightSpeed, macSv);
+    macroUpdate(now);
+
+    uint8_t st[10];
+    motionGetServoTargets(st);
+    float sv[9];
+    for (int i = 0; i < 9; i++) {
+      sv[i] = st[i] * (100.0f / 180.0f);
+    }
+    devConsoleFeedServoData(sv);
+    TelemetryPacket tm;
+    packetGetTelemetry(&tm);
+    devConsoleFeedSensorData(tm.sonarDistanceCm, tm.compassHeading, tm.gpsValid != 0);
+    devConsoleFeedPacketTiming(PACKET_SEND_INTERVAL_MS * 1000u, (uint32_t)(micros() - loopStartUs));
+    devConsoleUpdate(now);
+    devConsoleDraw(&tft);
+    packetUpdate(now, &dsZ, g_estop);
+    systemStatusTick(now);
+    audioUpdate(now);
+    sdUpdate();
+    delay(1);
+    return;
+  }
+
   commandQueueDrainAll();
 
   int pageInt = (int)g_currentPage;
-  TouchZone zone = touchHandlingUpdate(pageInt);
+  TouchZone zone;
+  if (bannerTapZone) {
+    zone = TOUCH_ZONE_NONE;
+  } else {
+    zone = touchHandlingUpdate(pageInt);
+  }
 
   static TouchZone s_prevTouchZone = TOUCH_ZONE_NONE;
   if (touchGetTs()->touched() && zone != TOUCH_ZONE_LASER_PAD && cydLaserUiIsDraggingHead()) {
@@ -219,7 +318,14 @@ void loop() {
     playUISound(SOUND_CLICK);
   }
   if (zone == TOUCH_ZONE_NAV_BACK) {
-    g_currentPage = PAGE_DRIVE;
+    if (g_currentPage == PAGE_HELP && g_helpSection > 0) {
+      g_helpSection = 0;
+    } else if (g_currentPage == PAGE_HELP) {
+      g_currentPage = PAGE_SYSTEM;
+      g_helpSection = 0;
+    } else {
+      g_currentPage = PAGE_DRIVE;
+    }
     g_needStaticRedraw = true;
     playUISound(SOUND_CLICK);
   }
@@ -255,15 +361,250 @@ void loop() {
   // NEW: Autonomy navigation
   if (zone == TOUCH_ZONE_NAV_AUTONOMY) {
     g_currentPage = PAGE_AUTONOMY;
+    g_autonomyUiTab = 0;
     g_needStaticRedraw = true;
     playUISound(SOUND_CLICK);
     Serial.println(F("[Nav] Navigated to Autonomy page"));
   }
-  if (zone == TOUCH_ZONE_AUTONOMY_TOGGLE) {
-    // TODO: Send command to Base to toggle autonomy
+  if (zone == TOUCH_ZONE_NAV_HELP) {
+    g_currentPage = PAGE_HELP;
+    g_helpSection = 0;
+    g_needStaticRedraw = true;
+    playUISound(SOUND_CLICK);
+    Serial.println(F("[Nav] Help"));
+  }
+  if (zone >= TOUCH_ZONE_HELP_TOPIC_0 && zone <= TOUCH_ZONE_HELP_TOPIC_3) {
+    g_helpSection = (uint8_t)(1 + (zone - TOUCH_ZONE_HELP_TOPIC_0));
+    g_needStaticRedraw = true;
+    playUISound(SOUND_CLICK);
+    Serial.printf("[Nav] Help topic %u\n", (unsigned)g_helpSection);
+  }
+  if (zone == TOUCH_ZONE_NAV_SD) {
+    uiSdExplorerClosePreview();
+    uiSdExplorerCloseConfirm();
+    uiSdExplorerCloseRename();
+    sdBrowserOnEnterPage();
+    g_currentPage = PAGE_SD_EXPLORER;
+    g_needStaticRedraw = true;
+    playUISound(SOUND_CLICK);
+    Serial.println(F("[Nav] SD explorer"));
+  }
+  if (zone >= TOUCH_ZONE_MC_SC_0 && zone <= TOUCH_ZONE_MC_SC_5) {
+    static const char* const kMemCorePath[] = {
+      SD_MEMORY_DIR,
+      SD_LOGS,
+      SD_CONFIG_DIR,
+      SD_MISSIONS_DIR,
+      SD_DIAG_DIR,
+      SD_EVENTS_DIR
+    };
+    int si = (int)(zone - TOUCH_ZONE_MC_SC_0);
+    if (sdBrowserNavigateToAbsolute(kMemCorePath[si])) {
+      Serial.printf("[MemCore] Shortcut -> %s\n", kMemCorePath[si]);
+    } else {
+      Serial.printf("[MemCore] Shortcut failed: %s\n", kMemCorePath[si]);
+    }
+    g_needStaticRedraw = true;
+    playUISound(SOUND_CLICK);
+  }
+  if (zone >= TOUCH_ZONE_SD_LIST_0 && zone <= TOUCH_ZONE_SD_LIST_3) {
+    int row = (int)(zone - TOUCH_ZONE_SD_LIST_0);
+    uint16_t idx = (uint16_t)(sdBrowserGetScroll() + (uint16_t)row);
+    sdBrowserSetSelected((int16_t)idx);
+    g_needStaticRedraw = true;
+    playUISound(SOUND_CLICK);
+  }
+  if (zone == TOUCH_ZONE_SD_UP) {
+    sdBrowserGoUp();
+    g_needStaticRedraw = true;
+    playUISound(SOUND_CLICK);
+  }
+  if (zone == TOUCH_ZONE_SD_OPEN) {
+    if (sdBrowserGetSelected() >= 0) {
+      const SdDirEntry* e = sdBrowserGetEntry((uint16_t)sdBrowserGetSelected());
+      if (e && e->isDir) {
+        sdBrowserEnterSelected();
+      } else if (e) {
+        uiSdExplorerTryOpenPreview();
+      }
+    }
+    g_needStaticRedraw = true;
+    playUISound(SOUND_CLICK);
+  }
+  if (zone == TOUCH_ZONE_SD_REFRESH) {
+    sdBrowserRefresh();
+    g_needStaticRedraw = true;
+    playUISound(SOUND_CLICK);
+  }
+  if (zone == TOUCH_ZONE_SD_PG_PREV) {
+    uint16_t sc = sdBrowserGetScroll();
+    if (sc >= SD_BROWSER_VISIBLE_ROWS) {
+      sdBrowserSetScroll((uint16_t)(sc - SD_BROWSER_VISIBLE_ROWS));
+    } else {
+      sdBrowserSetScroll(0);
+    }
+    g_needStaticRedraw = true;
+    playUISound(SOUND_CLICK);
+  }
+  if (zone == TOUCH_ZONE_SD_PG_NEXT) {
+    uint16_t sc = sdBrowserGetScroll();
+    uint16_t cnt = sdBrowserGetEntryCount();
+    uint16_t maxScr = (cnt > SD_BROWSER_VISIBLE_ROWS) ? (uint16_t)(cnt - SD_BROWSER_VISIBLE_ROWS) : 0;
+    uint16_t nsc = (uint16_t)(sc + SD_BROWSER_VISIBLE_ROWS);
+    if (nsc > maxScr) nsc = maxScr;
+    sdBrowserSetScroll(nsc);
+    g_needStaticRedraw = true;
+    playUISound(SOUND_CLICK);
+  }
+  if (zone == TOUCH_ZONE_SD_DELETE) {
+    uiSdExplorerRequestDeleteConfirm();
+    g_needStaticRedraw = true;
+    playUISound(SOUND_CLICK);
+  }
+  if (zone == TOUCH_ZONE_SD_CONFIRM_YES) {
+    if (sdBrowserDeleteSelected()) {
+      uiSdExplorerCloseConfirm();
+    }
+    g_needStaticRedraw = true;
+    playUISound(SOUND_CLICK);
+  }
+  if (zone == TOUCH_ZONE_SD_CONFIRM_NO) {
+    uiSdExplorerCloseConfirm();
+    g_needStaticRedraw = true;
+    playUISound(SOUND_CLICK);
+  }
+  if (zone == TOUCH_ZONE_SD_RENAME) {
+    uiSdExplorerRequestRename();
+    g_needStaticRedraw = true;
+    playUISound(SOUND_CLICK);
+  }
+  if (zone == TOUCH_ZONE_SD_RENAME_CH_DEC) {
+    uiSdExplorerRenameChrDec();
+    g_needStaticRedraw = true;
+    playUISound(SOUND_CLICK);
+  }
+  if (zone == TOUCH_ZONE_SD_RENAME_CH_INC) {
+    uiSdExplorerRenameChrInc();
+    g_needStaticRedraw = true;
+    playUISound(SOUND_CLICK);
+  }
+  if (zone == TOUCH_ZONE_SD_RENAME_BKSP) {
+    uiSdExplorerRenameBksp();
+    g_needStaticRedraw = true;
+    playUISound(SOUND_CLICK);
+  }
+  if (zone == TOUCH_ZONE_SD_RENAME_CUR_L) {
+    uiSdExplorerRenameCurLeft();
+    g_needStaticRedraw = true;
+    playUISound(SOUND_CLICK);
+  }
+  if (zone == TOUCH_ZONE_SD_RENAME_CUR_R) {
+    uiSdExplorerRenameCurRight();
+    g_needStaticRedraw = true;
+    playUISound(SOUND_CLICK);
+  }
+  if (zone == TOUCH_ZONE_SD_RENAME_CANCEL) {
+    uiSdExplorerCloseRename();
+    g_needStaticRedraw = true;
+    playUISound(SOUND_CLICK);
+  }
+  if (zone == TOUCH_ZONE_SD_RENAME_OK) {
+    uiSdExplorerRenameApplyOk();
+    g_needStaticRedraw = true;
+    playUISound(SOUND_CLICK);
+  }
+  if (zone == TOUCH_ZONE_AUTONOMY_TAB_LIVE) {
+    g_autonomyUiTab = 0;
+    g_needStaticRedraw = true;
+    playUISound(SOUND_CLICK);
+  }
+  if (zone == TOUCH_ZONE_AUTONOMY_TAB_TUNE) {
+    g_autonomyUiTab = 1;
+    g_needStaticRedraw = true;
+    playUISound(SOUND_CLICK);
+  }
+  if (zone == TOUCH_ZONE_AUTONOMY_ARM) {
+    g_remoteAutonomyArm = !g_remoteAutonomyArm;
+    g_needStaticRedraw = true;
     playUISound(SOUND_MODE_CHANGE);
-    Serial.println(F("[Autonomy] Toggle requested (command not implemented yet)"));
-    // Future: send ESP-NOW command to Base
+    Serial.printf("[Autonomy] ARM TX %s\n", g_remoteAutonomyArm ? "ON" : "off");
+  }
+  if (zone == TOUCH_ZONE_AUTONOMY_M_CLOSE) {
+    if (g_auCloseCm > 10) g_auCloseCm -= 5;
+    if (g_auInterestCm < (uint8_t)(g_auCloseCm + 5)) g_auInterestCm = g_auCloseCm + 5;
+    packetSetAutonomyConfig(AUTONOMY_KEY_DETECT_CLOSE_CM, g_auCloseCm);
+    g_needStaticRedraw = true;
+    playUISound(SOUND_CLICK);
+  }
+  if (zone == TOUCH_ZONE_AUTONOMY_P_CLOSE) {
+    if (g_auCloseCm < 150) g_auCloseCm += 5;
+    if (g_auInterestCm < (uint8_t)(g_auCloseCm + 5)) g_auInterestCm = g_auCloseCm + 5;
+    packetSetAutonomyConfig(AUTONOMY_KEY_DETECT_CLOSE_CM, g_auCloseCm);
+    g_needStaticRedraw = true;
+    playUISound(SOUND_CLICK);
+  }
+  if (zone == TOUCH_ZONE_AUTONOMY_M_INT) {
+    uint8_t lo = g_auCloseCm + 5;
+    if (g_auInterestCm > lo) g_auInterestCm -= 5;
+    packetSetAutonomyConfig(AUTONOMY_KEY_DETECT_INTEREST_CM, g_auInterestCm);
+    g_needStaticRedraw = true;
+    playUISound(SOUND_CLICK);
+  }
+  if (zone == TOUCH_ZONE_AUTONOMY_P_INT) {
+    if (g_auInterestCm < 200) g_auInterestCm += 5;
+    packetSetAutonomyConfig(AUTONOMY_KEY_DETECT_INTEREST_CM, g_auInterestCm);
+    g_needStaticRedraw = true;
+    playUISound(SOUND_CLICK);
+  }
+  if (zone == TOUCH_ZONE_AUTONOMY_M_CUR) {
+    if (g_auCuriosityPct > 0) g_auCuriosityPct -= 5;
+    packetSetAutonomyConfig(AUTONOMY_KEY_CURIOSITY, g_auCuriosityPct);
+    g_needStaticRedraw = true;
+    playUISound(SOUND_CLICK);
+  }
+  if (zone == TOUCH_ZONE_AUTONOMY_P_CUR) {
+    if (g_auCuriosityPct < 100) g_auCuriosityPct += 5;
+    packetSetAutonomyConfig(AUTONOMY_KEY_CURIOSITY, g_auCuriosityPct);
+    g_needStaticRedraw = true;
+    playUISound(SOUND_CLICK);
+  }
+  if (zone == TOUCH_ZONE_AUTONOMY_M_BRV) {
+    if (g_auBraveryPct > 0) g_auBraveryPct -= 5;
+    packetSetAutonomyConfig(AUTONOMY_KEY_BRAVERY, g_auBraveryPct);
+    g_needStaticRedraw = true;
+    playUISound(SOUND_CLICK);
+  }
+  if (zone == TOUCH_ZONE_AUTONOMY_P_BRV) {
+    if (g_auBraveryPct < 100) g_auBraveryPct += 5;
+    packetSetAutonomyConfig(AUTONOMY_KEY_BRAVERY, g_auBraveryPct);
+    g_needStaticRedraw = true;
+    playUISound(SOUND_CLICK);
+  }
+  if (zone == TOUCH_ZONE_AUTONOMY_WAYPOINT) {
+    g_auWaypointFollow = !g_auWaypointFollow;
+    packetSetAutonomyConfig(AUTONOMY_KEY_WAYPOINT_MODE, g_auWaypointFollow ? 1u : 0u);
+    g_needStaticRedraw = true;
+    playUISound(SOUND_MODE_CHANGE);
+  }
+  if (zone == TOUCH_ZONE_AUTONOMY_PRESET_0) {
+    packetSetAutonomyConfig(AUTONOMY_KEY_PRESET, 0);
+    g_needStaticRedraw = true;
+    playUISound(SOUND_CONFIRM);
+  }
+  if (zone == TOUCH_ZONE_AUTONOMY_PRESET_1) {
+    packetSetAutonomyConfig(AUTONOMY_KEY_PRESET, 1);
+    g_needStaticRedraw = true;
+    playUISound(SOUND_CONFIRM);
+  }
+  if (zone == TOUCH_ZONE_AUTONOMY_PRESET_2) {
+    packetSetAutonomyConfig(AUTONOMY_KEY_PRESET, 2);
+    g_needStaticRedraw = true;
+    playUISound(SOUND_CONFIRM);
+  }
+  if (zone == TOUCH_ZONE_AUTONOMY_PRESET_3) {
+    packetSetAutonomyConfig(AUTONOMY_KEY_PRESET, 3);
+    g_needStaticRedraw = true;
+    playUISound(SOUND_CONFIRM);
   }
   if (zone == TOUCH_ZONE_PROFILE_0) {
     profileSet(0);
@@ -466,12 +807,41 @@ void loop() {
   }
 #endif
   
-  // Update motion engine
+  macroCheckJoystickOverride(joystickActive);
+
+  float pbL, pbR, pbSv[9];
+  if (macroGetPlaybackData(&pbL, &pbR, pbSv)) {
+    ds.leftSpeed = (int8_t)constrain((int)lroundf(pbL), -100, 100);
+    ds.rightSpeed = (int8_t)constrain((int)lroundf(pbR), -100, 100);
+    for (int i = 0; i < 9; i++) {
+      uint8_t deg = (uint8_t)constrain((int)lroundf(pbSv[i] * 180.0f / 100.0f), 0, 180);
+      motionSetServoDirect(i, deg);
+    }
+  }
+  if (!isDeadmanButtonHeld()) {
+    ds.leftSpeed = 0;
+    ds.rightSpeed = 0;
+  }
+
   motionUpdate(now);
+
+  {
+    uint8_t macTgt[10];
+    motionGetServoTargets(macTgt);
+    float macSv[9];
+    for (int i = 0; i < 9; i++) {
+      macSv[i] = macTgt[i] * (100.0f / 180.0f);
+    }
+    macroSetCurrentData((float)ds.leftSpeed, (float)ds.rightSpeed, macSv);
+  }
+  macroUpdate(now);
 
   packetUpdate(now, &ds, g_estop);
   systemStatusTick(now);
   audioUpdate(now);
+
+  // Buffered SD log flush (periodic inside sdUpdate)
+  sdUpdate();
 
   // Static redraw on page/overlay change
   if (g_needStaticRedraw) {
@@ -531,6 +901,8 @@ void loop() {
   if (g_currentPage == PAGE_DRIVE || g_currentPage == PAGE_BEHAVIOUR) {
     animDrawEye(telem.moodState, g_estop, false);
   }
+
+  uiDrawThinkingStrip(&telem, connected);
 
   if (g_advancedMode) {
     uiDrawAdvancedModeOverlay();

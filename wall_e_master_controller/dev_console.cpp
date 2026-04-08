@@ -4,13 +4,19 @@
 
 #include "dev_console.h"
 #include "sd_manager.h"
+#include "macro_system.h"
 #include <ESP.h>
+#include <string.h>
+
+// CYD 2432S028R: TFT rotation 1 → 320×240 landscape
+#define DEV_SCR_W  320
+#define DEV_SCR_H  240
 
 // ============================================================
 //  Unlock Pattern (Top-right corner hold for 3 seconds)
 // ============================================================
 
-#define UNLOCK_X_MIN  400
+#define UNLOCK_X_MIN  250
 #define UNLOCK_Y_MIN  0
 #define UNLOCK_Y_MAX  40
 #define UNLOCK_HOLD_MS  3000
@@ -67,6 +73,7 @@ bool devConsoleIsUnlocked() {
 }
 
 void devConsoleCheckUnlock(uint16_t x, uint16_t y, uint32_t holdTimeMs) {
+  (void)holdTimeMs;
   // Check if touch is in unlock zone
   if (x >= UNLOCK_X_MIN && y >= UNLOCK_Y_MIN && y <= UNLOCK_Y_MAX) {
     if (!s_unlockHolding) {
@@ -79,6 +86,55 @@ void devConsoleCheckUnlock(uint16_t x, uint16_t y, uint32_t holdTimeMs) {
     }
   } else {
     s_unlockHolding = false;
+  }
+}
+
+void devConsoleProcessTouch(uint16_t x, uint16_t y, bool pressed) {
+  static bool s_prevDown = false;
+
+  if (!pressed) {
+    s_unlockHolding = false;
+    s_prevDown = false;
+    return;
+  }
+
+  if (!s_unlocked) {
+    devConsoleCheckUnlock(x, y, 0);
+    s_prevDown = true;
+    return;
+  }
+
+  const bool edge = !s_prevDown;
+  s_prevDown = true;
+
+  if (edge && x < 52 && y < 40) {
+    devConsoleLock();
+    return;
+  }
+
+  if (edge && y >= 200) {
+    if (x < DEV_SCR_W / 2) {
+      devConsolePrevPage();
+    } else {
+      devConsoleNextPage();
+    }
+    return;
+  }
+
+  if (edge && s_currentPage == DEV_OVERVIEW && y >= 136 && y <= 170) {
+    if (x < 80) {
+      if (macroGetState() == MACRO_RECORDING) {
+        macroCancelRecording();
+      } else {
+        macroStartRecording();
+      }
+    } else if (x < 160) {
+      macroStopRecordingAndSave(0);
+    } else if (x < 240) {
+      macroStartPlayback(0);
+    } else {
+      macroStopPlayback();
+    }
   }
 }
 
@@ -134,7 +190,7 @@ DevConsolePage devConsoleGetPage() {
 // ============================================================
 
 static void drawHeader(TFT_eSPI* tft, const char* title) {
-  tft->fillRect(0, 0, 480, 30, COL_ACCENT);
+  tft->fillRect(0, 0, DEV_SCR_W, 30, COL_ACCENT);
   tft->setTextColor(COL_BG, COL_ACCENT);
   tft->setTextSize(2);
   tft->setCursor(10, 8);
@@ -212,6 +268,26 @@ static void drawOverviewPage(TFT_eSPI* tft) {
   uint32_t uptime = millis() / 1000;
   snprintf(buf, sizeof(buf), "%u:%02u:%02u", uptime / 3600, (uptime % 3600) / 60, uptime % 60);
   drawText(tft, 10, 120, "Uptime: ", buf);
+
+  const char* mst = "IDLE";
+  if (macroGetState() == MACRO_RECORDING) mst = "REC";
+  else if (macroGetState() == MACRO_PLAYING) mst = "PLAY";
+  drawText(tft, 10, 132, "Macro: ", mst, macroGetState() == MACRO_RECORDING ? COL_ERROR : COL_TEXT);
+
+  // Touch strip: REC | SAVE0 | PLAY0 | STOP (slot 0)
+  const uint16_t btnY = 138;
+  const uint16_t btnH = 32;
+  const uint16_t bw = DEV_SCR_W / 4;
+  uint16_t colors[] = {0x39C7, 0x4A69, 0x2589, 0x632C};
+  const char* labels[] = {"REC", "SV0", "PL0", "STP"};
+  for (int b = 0; b < 4; b++) {
+    int16_t bx = b * bw;
+    tft->fillRect(bx, btnY, bw - 1, btnH, colors[b]);
+    tft->setTextColor(COL_BG, colors[b]);
+    tft->setTextSize(1);
+    tft->setCursor(bx + 8, btnY + 10);
+    tft->print(labels[b]);
+  }
 }
 
 static void drawServoGraphPage(TFT_eSPI* tft) {
@@ -224,12 +300,12 @@ static void drawServoGraphPage(TFT_eSPI* tft) {
   
   for (int i = 0; i < 9; i++) {
     tft->setTextColor(colors[i], COL_BG);
-    tft->setCursor(10 + (i % 3) * 150, 40 + (i / 3) * 12);
+    tft->setCursor(10 + (i % 3) * 104, 40 + (i / 3) * 12);
     tft->print(servoNames[i]);
   }
   
-  // Draw graph
-  drawServoGraph(tft, 10, 80, 460, 150);
+  // Draw graph (fits 320×240)
+  drawServoGraph(tft, 10, 78, 300, 100);
 }
 
 static void drawPacketTimingPage(TFT_eSPI* tft) {
@@ -339,7 +415,7 @@ static void drawSDBrowserPage(TFT_eSPI* tft) {
   // Free space
   char buf[64];
   snprintf(buf, sizeof(buf), "%u MB free", sdGetFreeSpaceMB());
-  drawText(tft, 10, 200, "Storage: ", buf);
+  drawText(tft, 10, 178, "Storage: ", buf);
 }
 
 // ============================================================
@@ -363,9 +439,9 @@ void devConsoleDraw(TFT_eSPI* tft) {
   // Footer with page indicator
   tft->setTextSize(1);
   tft->setTextColor(COL_GRID, COL_BG);
-  tft->setCursor(200, 310);
-  char buf[32];
-  snprintf(buf, sizeof(buf), "Page %d/%d", s_currentPage + 1, DEV_PAGE_COUNT);
+  tft->setCursor(10, DEV_SCR_H - 12);
+  char buf[40];
+  snprintf(buf, sizeof(buf), "Pg %d/%d  bot=L/R  TL=lock", s_currentPage + 1, DEV_PAGE_COUNT);
   tft->print(buf);
 }
 

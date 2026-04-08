@@ -4,6 +4,7 @@
 // ============================================================
 
 #include "navigation_api.h"
+#include "api_security.h"
 #include "waypoint_nav.h"
 #include "autonomy_engine.h"
 #include "gps_module.h"
@@ -30,33 +31,26 @@ static void offsetMetersToLatLon(double originLat, double originLon, double east
   outLon = originLon + (eastM / (EARTH_RADIUS_M * cos(latRad))) * (180.0 / M_PI);
 }
 
-void navigationHandleRoutePost() {
-  navAddCors();
-  if (!server.hasArg("plain")) {
-    server.send(400, "application/json", "{\"ok\":false,\"error\":\"expected JSON body\"}");
-    return;
+bool navigationApplyRouteFromJson(const char* body, size_t bodyLen, char* errBuf, size_t errBufLen) {
+  if (errBuf && errBufLen) errBuf[0] = '\0';
+  if (!body || bodyLen == 0 || bodyLen > 4096) {
+    if (errBuf && errBufLen) snprintf(errBuf, errBufLen, "body_size");
+    return false;
   }
-
-  String body = server.arg("plain");
-  if (body.length() == 0 || body.length() > 4096) {
-    server.send(400, "application/json", "{\"ok\":false,\"error\":\"body_size\"}");
-    return;
-  }
-
   if (!gpsHasFix()) {
-    server.send(400, "application/json", "{\"ok\":false,\"error\":\"no_gps_fix\"}");
-    return;
+    if (errBuf && errBufLen) snprintf(errBuf, errBufLen, "no_gps_fix");
+    return false;
   }
   if (!compassIsValid()) {
-    server.send(400, "application/json", "{\"ok\":false,\"error\":\"no_compass\"}");
-    return;
+    if (errBuf && errBufLen) snprintf(errBuf, errBufLen, "no_compass");
+    return false;
   }
 
   StaticJsonDocument<2048> doc;
-  DeserializationError err = deserializeJson(doc, body);
+  DeserializationError err = deserializeJson(doc, body, bodyLen);
   if (err) {
-    server.send(400, "application/json", "{\"ok\":false,\"error\":\"json_parse\"}");
-    return;
+    if (errBuf && errBufLen) snprintf(errBuf, errBufLen, "json_parse");
+    return false;
   }
 
   const char* frame = doc["frame"] | "grid";
@@ -70,8 +64,8 @@ void navigationHandleRoutePost() {
 
   JsonArray wps = doc["waypoints"].as<JsonArray>();
   if (wps.isNull() || wps.size() == 0) {
-    server.send(400, "application/json", "{\"ok\":false,\"error\":\"missing_waypoints\"}");
-    return;
+    if (errBuf && errBufLen) snprintf(errBuf, errBufLen, "missing_waypoints");
+    return false;
   }
 
   if (strcmp(frame, "gps") == 0) {
@@ -85,7 +79,6 @@ void navigationHandleRoutePost() {
       if (waypointAdd(la, lo, name)) added++;
     }
   } else {
-    // grid: meters per map unit, robot position, waypoints in same frame as UI (y down = south)
     float scale = doc["scale_m_per_unit"] | 0.5f;
     if (scale <= 0.01f || scale > 50.0f) scale = 0.5f;
 
@@ -109,14 +102,39 @@ void navigationHandleRoutePost() {
   }
 
   if (added == 0) {
-    server.send(400, "application/json", "{\"ok\":false,\"error\":\"no_waypoints_added\"}");
-    return;
+    if (errBuf && errBufLen) snprintf(errBuf, errBufLen, "no_waypoints_added");
+    return false;
   }
 
   waypointSave();
   waypointStartNavigation();
   autonomySetWaypointMode(true);
   autonomySetEnabled(true);
+  return true;
+}
+
+void navigationHandleRoutePost() {
+  navAddCors();
+  if (apiSecurityRejectIfBadToken()) return;
+  if (!server.hasArg("plain")) {
+    server.send(400, "application/json", "{\"ok\":false,\"error\":\"expected JSON body\"}");
+    return;
+  }
+
+  String body = server.arg("plain");
+  char err[48];
+  if (!navigationApplyRouteFromJson(body.c_str(), body.length(), err, sizeof(err))) {
+    String j = "{\"ok\":false,\"error\":\"";
+    j += err;
+    j += "\"}";
+    server.send(400, "application/json", j);
+    return;
+  }
+
+  StaticJsonDocument<256> doc;
+  deserializeJson(doc, body);
+  const char* frame = doc["frame"] | "grid";
+  uint8_t added = (uint8_t)waypointGetCount();
 
   char resp[96];
   snprintf(resp, sizeof(resp), "{\"ok\":true,\"count\":%u,\"frame\":\"%s\"}", (unsigned)added, frame);

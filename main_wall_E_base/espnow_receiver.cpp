@@ -178,6 +178,13 @@ static void onRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len
   left  = constrain(left,  -255, 255);
   right = constrain(right, -255, 255);
 
+  /* Drive profile: CYD FLAG_PRECISION or NORMAL */
+  if (p->systemFlags & FLAG_PRECISION) {
+    motorSetDriveProfile(DRIVE_PROFILE_PRECISION, "CYD FLAG_PRECISION");
+  } else {
+    motorSetDriveProfile(DRIVE_PROFILE_NORMAL, "CYD manual");
+  }
+
   lastCommandMillis = millis();
   // SWAP: Physical motors are wired opposite to code
   motorSetLeftRight(right, left);  // Swapped: was (left, right)

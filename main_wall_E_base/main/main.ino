@@ -43,7 +43,12 @@
 #include "return_home_engine.h"
 #include "autonomy_engine.h"
 #include "unified_autonomy_engine.h"
+#include "motion_layer.h"
+#include "motion_authority.h"
+#include "api_security.h"
+#include "eve_uart_bridge.h"
 #include "laser_control.h"
+#include "sequence_engine.h"
 
 // ============================================================
 //  Failsafe
@@ -62,6 +67,7 @@ void setup() {
 
   // Motors safe first — always
   motorInit();
+  motionLayerInit();
   Serial.println("[Motors] Initialised");
 
   // Display up early so user gets boot feedback
@@ -115,6 +121,10 @@ void setup() {
   wifiManagerInit();
   displayUpdateWifi();
   Serial.println("[Setup] Post-wifi");
+
+  motionAuthorityInit();
+  apiSecurityInit();
+  eveUartBridgeInit();
 
   // Web server
   webServerInit();
@@ -171,6 +181,8 @@ void loop() {
 
   // Web requests
   webServerHandle();
+  eveUartBridgePoll();
+  sequenceEngineTick(now);
 
   // Servo velocity interpolation
   servoHandle();
@@ -193,7 +205,8 @@ void loop() {
   }
   personalityUpdate(now);
 
-  bool manualFromControl = espnowIsManualControlActive() || webServerIsManualOverrideActive();
+  bool manualFromControl = (motionAuthorityAllowCyd() && espnowIsManualControlActive()) ||
+                           (motionAuthorityAllowWeb() && webServerIsManualOverrideActive());
   autonomySetManualOverride(manualFromControl);
 
   int8_t autoLeft = 0, autoRight = 0;
@@ -227,10 +240,14 @@ void loop() {
     lastCommandMillis = now;
   }
 
+  /* Central motion layer: drive profile, speed caps, turn feel (manual: CYD/WebUI still set profile per command) */
+  motionLayerUpdate(now, manualFromControl, safetyBlock);
+
 #if USE_AUTONOMOUS_DOCKING
   if (!safetyBlock && autonomousDockingIsActive()) {
     int16_t left, right;
     if (autonomousDockingGetMotorOutput(&left, &right)) {
+      motionLayerApplyMotorTankLimits(&left, &right);
       motorSetLeftRight(left, right);
       lastCommandMillis = now;
       dockDriving = true;
@@ -240,6 +257,7 @@ void loop() {
   if (!safetyBlock && dockHomingIsActive()) {
     int16_t left, right;
     if (dockHomingGetMotorOutput(&left, &right)) {
+      motionLayerApplyMotorTankLimits(&left, &right);
       motorSetLeftRight(left, right);
       lastCommandMillis = now;
       dockDriving = true;
@@ -278,6 +296,9 @@ void loop() {
     displaySetCommand(CMD_IDLE);
     lastCommandMillis = now;
   }
+
+  // L298N: ramp toward targets and drive PWM (after motorSetLeftRight + failsafe motorStop)
+  motorHandle();
 
   delay(1);  /* Yield — prevents TG1WDT_SYS_RST */
   yield();

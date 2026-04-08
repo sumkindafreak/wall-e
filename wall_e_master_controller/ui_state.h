@@ -33,7 +33,9 @@ typedef enum {
   PAGE_SERVO_EDITOR,  // Per-profile servo tuning
   PAGE_SERVO_TEST,    // Individual servo testing
   PAGE_AUTONOMY,      // NEW: Autonomy status & control
-  PAGE_WAYPOINTS      // NEW: Waypoint management
+  PAGE_WAYPOINTS,     // NEW: Waypoint management
+  PAGE_HELP,          // Help topics (from System)
+  PAGE_SD_EXPLORER    // SD card file browser
 } Page;
 
 // ------------------------------------------------------------
@@ -67,6 +69,24 @@ extern bool          g_estop;
 extern bool          g_advancedMode;   // Triple-tap top-left
 extern bool          g_overlayVisible; // Long-press quick action
 extern bool          g_needStaticRedraw;
+/** Tap top banner (full or mini strip) to toggle — frees vertical space for content */
+extern bool          g_topBannerCollapsed;
+
+/** PAGE_AUTONOMY: 0 = live telemetry, 1 = remote tuning */
+extern uint8_t       g_autonomyUiTab;
+/** When true, outgoing packets set FLAG_AUTONOMOUS (Base runs autonomy engine) */
+extern bool          g_remoteAutonomyArm;
+/** Edited tuning values (0-100 for traits; cm for distances) — Tune tab */
+extern uint8_t       g_auCloseCm;
+extern uint8_t       g_auInterestCm;
+extern uint8_t       g_auCuriosityPct;
+extern uint8_t       g_auBraveryPct;
+extern uint8_t       g_auEnergyPct;
+extern uint8_t       g_auRandomPct;
+extern bool          g_auWaypointFollow;
+
+/** PAGE_HELP: 0 = topic list, 1..4 = topic body */
+extern uint8_t       g_helpSection;
 
 // ------------------------------------------------------------
 //  Init — call from setup()
