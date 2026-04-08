@@ -180,20 +180,8 @@ TouchZone touchUpdate(int page) {
       screenX = constrain(screenX, 0, SCREEN_W - 1);
       screenY = constrain(screenY, 0, SCREEN_H - 1);
 
-      // DEBUG: Log ALL touches
-      static unsigned long lastTouchLog = 0;
-      if (now - lastTouchLog > 500) {  // Every 500ms
-        Serial.printf("[Touch] X=%d Y=%d Page=%d\n", screenX, screenY, page);
-        lastTouchLog = now;
-      }
-
       s_lastInputMs = now;
       zone = touchGetZone(screenX, screenY, page);
-      
-      // Debug: Log navigation button touches
-      if (zone == TOUCH_ZONE_NAV_SYSTEM || zone == TOUCH_ZONE_NAV_BEHAV || zone == TOUCH_ZONE_NAV_PROFILE) {
-        Serial.printf("[Touch] Nav button at X=%d Y=%d Zone=%d\n", screenX, screenY, zone);
-      }
 
       // Long-press quick action (bottom-right 2s)
       if (screenX >= QUICK_ZONE_X_MIN && screenY >= QUICK_ZONE_Y_MIN) {

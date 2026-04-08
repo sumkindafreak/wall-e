@@ -329,7 +329,7 @@ static void drawRenameModal(void) {
   g_tft->print(show);
   g_tft->setTextColor(C_TEXT_DIM, C_BG_DARK);
   g_tft->setCursor(32, 80);
-  g_tft->print("Chr-/Chr+  Bksp   < >   OK");
+  g_tft->print("-/+ char  Bksp  < > cursor");
 
   const int r1y = 92;
   const int r2y = 122;

@@ -32,3 +32,11 @@ Thumbs.db
 *.zip
 *.tmp
 *~
+
+# Loose reference assets / legacy copies at repo root (not part of firmware tree)
+/*.stl
+/*.stp
+/*.step
+/*.webp
+/Eve - 2748077/
+/old working bluetooth wall-e/
