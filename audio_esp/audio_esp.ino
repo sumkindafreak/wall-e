@@ -21,12 +21,18 @@
 #include "espnow_manager.h"
 #include "event_router.h"
 #include "diagnostics.h"
+#include "voicebox_router.h"
+#include "dfplayer_character_controls.h"
+#include "button_menu_manager.h"
+#include "menu_state_machine.h"
+#include "menu_protocol.h"
 
 /* Last values for change detection */
 static MicDirection s_lastMicDir = MIC_DIR_UNKNOWN;
 static DockIrState s_lastDockIr = DOCK_IR_NONE;
 static bool s_lastAudioBusy = false;
 static unsigned long s_lastHeartbeat = 0;
+static uint16_t s_uiSeq = 0;
 
 void setup() {
   Serial.begin(115200);
@@ -46,6 +52,10 @@ void setup() {
     DEBUG_LOG("ESP-NOW init failed - retry on next boot");
   }
   eventRouterInit();
+
+  voiceboxRouterInit();
+  charControlsInit();
+  buttonMenuInit();
 
   /* Audio — optional; boot continues without if not connected */
   (void)audioPlayerInit();
@@ -73,7 +83,29 @@ void loop() {
   irDockTick();
   audioPlayerTick();
 
+  buttonMenuTick(now);
+
   espnowManagerTick();
+
+  {
+    WalleAudioUiTelemPacket_t ui = {};
+    ui.version = WALLE_MENU_PROTO_VERSION;
+    ui.btn_mode = buttonMenuIsMenuMode() ? WALLE_BTN_MODE_MENU : WALLE_BTN_MODE_NORMAL;
+    ui.menu_page = (uint8_t)menuStateGetPage();
+    ui.voicebox_mode = (uint8_t)voiceboxRouterGetMode();
+    ui.last_ui_event = (uint8_t)buttonMenuGetLastUiEvent();
+    ui.combo_hold_pct = buttonMenuGetComboHoldPct();
+    ui.menu_sel_idx = menuStateGetSel();
+    ui.pair_request = (uint8_t)voiceboxRouterPeekPairRequest();
+    ui.seq = s_uiSeq;
+    bool force = (ui.pair_request != (uint8_t)WALLE_UI_PAIR_NONE) ||
+                 (ui.last_ui_event != (uint8_t)WALLE_UI_EVT_NONE) || (ui.combo_hold_pct > 0);
+    if (espnowManagerSendUiTelem(&ui, force)) {
+      if (ui.pair_request != (uint8_t)WALLE_UI_PAIR_NONE) voiceboxRouterClearPairRequest();
+      s_uiSeq++;
+    }
+    buttonMenuClearUiEvent();
+  }
 
   /* Voice from dedicated UART (if used) */
   VoiceCmdId vc = voiceCommandsTick();

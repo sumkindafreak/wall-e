@@ -3,6 +3,7 @@
 // ============================================================
 
 #include "profiles.h"
+#include "animation_data.h"
 #include "ads1115_input.h"
 #include "motion_engine.h"
 #include "audio_system.h"
@@ -42,7 +43,7 @@ Profile profiles[PROFILE_COUNT] = {
     .requireDeadman = true,
     .autoStopTimeout = 3000,   // 3 second timeout
     .neutralPositions = {90, 90, 90, 90, 90, 90, 90, 90, 90, 90},  // All servos at 90° (center)
-    .favoriteAnimations = {2, 1, 5, 3, 4},  // Default: Inquisitive, Bootup, Surprised, BrowR, BrowL
+    .favoriteAnimations = {2, 1, 0, 0, 0, 0},  // Kid: only slots for allowed anims 0–2
     .autonomyCuriosity = 0.5f,
     .autonomyBravery = 0.3f,
     .autonomyEnergy = 0.4f,
@@ -76,7 +77,7 @@ Profile profiles[PROFILE_COUNT] = {
     .requireDeadman = true,
     .autoStopTimeout = 5000,   // 5 second timeout
     .neutralPositions = {90, 90, 90, 90, 90, 90, 90, 90, 90, 90},
-    .favoriteAnimations = {2, 1, 5, 3, 4},  // Default: Inquisitive, Bootup, Surprised, BrowR, BrowL
+    .favoriteAnimations = {2, 1, 5, 3, 4, 6},
     .autonomyCuriosity = 0.7f,
     .autonomyBravery = 0.5f,
     .autonomyEnergy = 0.6f,
@@ -110,7 +111,7 @@ Profile profiles[PROFILE_COUNT] = {
     .requireDeadman = true,
     .autoStopTimeout = 0,      // No timeout
     .neutralPositions = {90, 90, 90, 90, 90, 90, 90, 90, 90, 90},
-    .favoriteAnimations = {2, 1, 5, 3, 4},  // Default: Inquisitive, Bootup, Surprised, BrowR, BrowL
+    .favoriteAnimations = {2, 1, 5, 3, 4, 6},
     .autonomyCuriosity = 0.9f,
     .autonomyBravery = 0.7f,
     .autonomyEnergy = 0.8f,
@@ -321,8 +322,11 @@ void profileLoadNeutralPositions() {
 // ============================================================
 
 void profileToggleFavoriteAnimation(uint8_t animId) {
+  if (animId >= ANIMATION_COUNT) {
+    return;
+  }
   Profile* p = profileGet();
-  
+
   // Check if animation is already in favorites
   int existingIndex = -1;
   for (int i = 0; i < 6; i++) {
@@ -334,15 +338,15 @@ void profileToggleFavoriteAnimation(uint8_t animId) {
   
   if (existingIndex >= 0) {
     // Remove from favorites - shift remaining animations
-    for (int i = existingIndex; i < 4; i++) {
+    for (int i = existingIndex; i < 5; i++) {
       p->favoriteAnimations[i] = p->favoriteAnimations[i + 1];
     }
-    p->favoriteAnimations[4] = 0;  // Clear last slot
+    p->favoriteAnimations[5] = 0;
     Serial.printf("[Profile] Removed animation %d from favorites\n", animId);
   } else {
     // Add to first empty slot (or replace last if full)
-    for (int i = 0; i < 5; i++) {
-      if (p->favoriteAnimations[i] == 0 || i == 4) {
+    for (int i = 0; i < 6; i++) {
+      if (p->favoriteAnimations[i] == 0 || i == 5) {
         p->favoriteAnimations[i] = animId;
         Serial.printf("[Profile] Added animation %d to favorites at slot %d\n", animId, i);
         break;
@@ -363,14 +367,20 @@ void profileLoadFavoriteAnimations() {
   char key[20];
   snprintf(key, sizeof(key), "favs_%d", g_currentProfile);
   
-  uint8_t loaded[5];
-  size_t len = prefs.getBytes(key, loaded, 5);
+  uint8_t loaded[6];
+  size_t len = prefs.getBytes(key, loaded, 6);
   
-  if (len == 5) {
-    for (int i = 0; i < 5; i++) {
+  if (len == 6) {
+    for (int i = 0; i < 6; i++) {
       p->favoriteAnimations[i] = loaded[i];
     }
     Serial.printf("[Profile] Loaded favorite animations from Preferences\n");
+  } else if (len == 5) {
+    for (int i = 0; i < 5; i++) {
+      p->favoriteAnimations[i] = loaded[i];
+    }
+    p->favoriteAnimations[5] = 0;
+    Serial.printf("[Profile] Loaded 5 favorite slots; 6th defaults to empty\n");
   } else {
     Serial.printf("[Profile] Using default favorite animations\n");
   }

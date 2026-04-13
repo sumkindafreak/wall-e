@@ -3,7 +3,8 @@
  *
  * Hand link: Serial1 @ GPIO17 TX / GPIO18 RX to WALL-E (see config.h).
  *
- * Required library: ArduinoJson 6.x (Library Manager: "ArduinoJson" by Benoit Blanchon)
+ * Libraries (Library Manager): ArduinoJson 6.x; lvgl 9.x; GFX Library for Arduino (moononournation).
+ * Optional ToF: Pololu VL53L1X. Place lv_conf.h in this sketch folder when using LVGL 9 face.
  *
  * Board: ESP32S3 Dev Module (match your N16R8 module: 16 MB flash, OPI PSRAM in Tools menu).
  */
@@ -17,6 +18,8 @@
 #include "servo_control.h"
 #include "neopixel_control.h"
 #include "audio_control.h"
+#include "battery_monitor.h"
+#include "eve_spatial_awareness.h"
 
 static void onUartRx(uint8_t type, const uint8_t* payload, size_t len, uint8_t seq) {
   stateMachineOnUartRx(type, payload, len, seq);
@@ -24,6 +27,7 @@ static void onUartRx(uint8_t type, const uint8_t* payload, size_t len, uint8_t s
 
 void setup() {
   Serial.begin(115200);
+  randomSeed((uint32_t)micros());
   delay(300);
   Serial.println();
   Serial.println(F("========================================"));
@@ -32,10 +36,12 @@ void setup() {
   Serial.println(F("========================================"));
 
   systemStatusInit();
+  eveBatteryInit();
   uartLinkInit();
   uartLinkSetRxCallback(onUartRx);
 
   eyesInit();
+  eveSpatialAwarenessInit();
   tofInit();
   servoInit();
   neopixelInit();
@@ -53,6 +59,7 @@ void setup() {
 
 void loop() {
   uartLinkPoll();
+  eveBatteryTick();
   stateMachineTick();
   systemStatusTick();
   eyesTick();

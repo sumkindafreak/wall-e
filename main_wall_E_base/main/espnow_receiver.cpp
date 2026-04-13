@@ -17,6 +17,9 @@
 #include "vision_protocol.h"
 #include "vision_behaviour.h"
 #include "audio_protocol.h"
+#include "menu_protocol.h"
+#include "audio_ui_telemetry.h"
+#include "shared_voicebox_manager.h"
 #include "node_health_protocol.h"
 #include "node_health_registry.h"
 #include "motion_authority.h"
@@ -67,6 +70,8 @@ typedef struct __attribute__((packed)) {
   float   waypointBearingDeg;
   uint8_t currentWaypoint;
   uint8_t totalWaypoints;
+  uint8_t motionPolicy;
+  uint8_t policyDenyCyd;
 } TelemetryPacket;
 
 // Action codes
@@ -81,6 +86,8 @@ typedef struct __attribute__((packed)) {
 #define ACTION_DOCK_GO     8
 #define ACTION_DOCK_CANCEL 9
 #define ACTION_STOP_ALL    10
+#define ACTION_AUTONOMY_REMOTE  11
+#define ACTION_MOTION_POLICY    12
 
 // System flags
 #define FLAG_ESTOP      0x0001
@@ -126,6 +133,16 @@ static void onRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len
     }
   }
 
+  /* Audio ESP UI telem (buttons, menu, voicebox echo, pair requests) */
+  if (len >= (int)sizeof(WalleAudioUiTelemPacket_t)) {
+    const WalleAudioUiTelemPacket_t* up = (const WalleAudioUiTelemPacket_t*)data;
+    if (up->magic == WALLE_AUDIO_UI_MAGIC) {
+      audioUiTelemOnPacket(data, len);
+      sharedVoiceboxOnAudioUi(up);
+      return;
+    }
+  }
+
   /* Audio ESP status: mic dir, dock IR, voice cmd, mode, fault */
   if (len >= (int)sizeof(WalleAudioStatusPacket_t)) {
     const WalleAudioStatusPacket_t* ap = (const WalleAudioStatusPacket_t*)data;
@@ -153,13 +170,11 @@ static void onRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len
 
   const bool cydAllowed = motionAuthorityAllowCyd();
 
-  // Track manual control activity (CYD sticks) only when CYD may own drive
-  if (cydAllowed) {
-    s_lastLeftSpeed = p->leftSpeed;
-    s_lastRightSpeed = p->rightSpeed;
-    if (abs(p->leftSpeed) > 5 || abs(p->rightSpeed) > 5) {
-      s_lastManualCommandMs = millis();
-    }
+  /* Always track CYD stick intent for /api/motion/operator POLICY + telemetry policyDenyCyd */
+  s_lastLeftSpeed = p->leftSpeed;
+  s_lastRightSpeed = p->rightSpeed;
+  if (abs(p->leftSpeed) > 5 || abs(p->rightSpeed) > 5) {
+    s_lastManualCommandMs = millis();
   }
 
   // E-STOP check (print only on transition to avoid serial spam)
@@ -203,6 +218,11 @@ static void onRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len
     Serial.println(F("[Action] STOP_ALL"));
   } else if (p->action == ACTION_AUTONOMY_REMOTE && len >= (int)sizeof(ControlPacket)) {
     autonomyApplyRemoteConfig(p->aux0, p->aux1);
+  } else if (p->action == ACTION_MOTION_POLICY && len >= (int)sizeof(ControlPacket)) {
+    if (p->aux0 <= (uint8_t)MOTION_AUTH_WEB_ONLY) {
+      motionAuthoritySet((MotionAuthorityMode)p->aux0);
+      Serial.printf("[MotionAuth] CYD policy -> %s\n", motionAuthorityModeName((MotionAuthorityMode)p->aux0));
+    }
   } else if (p->action != ACTION_NONE) {
     Serial.printf("[Action] %d\n", p->action);
   }
@@ -245,15 +265,15 @@ static void onRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len
   left  = constrain(left,  -255, 255);
   right = constrain(right, -255, 255);
 
-  /* Drive profile: CYD FLAG_PRECISION or NORMAL (main loop does not override while manual active) */
+  if (!cydAllowed) {
+    return;
+  }
+
+  /* Drive profile: only when CYD may command motors (avoid web_only profile fighting HTTP) */
   if (p->systemFlags & FLAG_PRECISION) {
     motorSetDriveProfile(DRIVE_PROFILE_PRECISION, "CYD FLAG_PRECISION");
   } else {
     motorSetDriveProfile(DRIVE_PROFILE_NORMAL, "CYD manual");
-  }
-
-  if (!cydAllowed) {
-    return;
   }
 
   lastCommandMillis = millis();
@@ -353,6 +373,13 @@ void espnowSendTelemetry() {
   telem.waypointBearingDeg = nav ? nav->bearingToWaypoint : 0.0f;
   telem.currentWaypoint = nav ? nav->currentWaypointIndex : 0;
   telem.totalWaypoints = waypointGetCount();
+
+  telem.motionPolicy = (uint8_t)motionAuthorityGet();
+  {
+    bool sticksIntent = (abs(s_lastLeftSpeed) > 5 || abs(s_lastRightSpeed) > 5);
+    telem.policyDenyCyd =
+        (telem.motionPolicy == (uint8_t)MOTION_AUTH_WEB_ONLY && sticksIntent) ? 1 : 0;
+  }
 
   esp_err_t result = esp_now_send(s_controllerMac, (uint8_t*)&telem, sizeof(TelemetryPacket));
   

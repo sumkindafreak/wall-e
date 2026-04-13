@@ -3,8 +3,10 @@
  * Framing matches eve/src/uart_link.cpp (CRC-16-CCITT over ver..payload).
  */
 #include "eve_uart_bridge.h"
+#include "eve_target_assist.h"
 #include <HardwareSerial.h>
 #include <string.h>
+#include <stdio.h>
 #include <ArduinoJson.h>
 
 #ifndef EVE_BRIDGE_ENABLE
@@ -23,6 +25,8 @@ enum EveMsgType : uint8_t {
   MSG_EVE_LOW_BATTERY = 0x05,
   MSG_EVE_SLEEP = 0x06,
   MSG_EVE_ERROR = 0x07,
+  MSG_EVE_TARGET_AWARENESS = 0x08,
+  MSG_PLAY_SOUND = 0x33,
 };
 
 enum ParseState : uint8_t {
@@ -52,9 +56,10 @@ static uint8_t fCrcHi = 0;
 static uint32_t s_framesOk = 0;
 static uint32_t s_crcErr = 0;
 static uint32_t s_lastRxMs = 0;
+static uint8_t s_txSeq = 0;
 static uint8_t s_lastType = 0;
 static uint32_t s_session = 0;
-static char s_lastJson[192] = "";
+static char s_lastJson[400] = "";
 
 static uint16_t crc16_ccitt(const uint8_t* data, size_t len) {
   uint16_t crc = 0xFFFF;
@@ -70,6 +75,33 @@ static uint16_t crc16_ccitt(const uint8_t* data, size_t len) {
 
 static void resetParser(void) {
   st = ST_SOF0;
+}
+
+static bool eveSendFrame(uint8_t type, const char* jsonUtf8) {
+#if !EVE_BRIDGE_ENABLE
+  (void)type;
+  (void)jsonUtf8;
+  return false;
+#else
+  if (!jsonUtf8) return false;
+  size_t plen = strlen(jsonUtf8);
+  if (plen > EVE_MAX_PAYLOAD) return false;
+  uint8_t seq = ++s_txSeq;
+  uint8_t buf[5 + EVE_MAX_PAYLOAD + 2];
+  buf[0] = 0x01; /* EVE_FRAME_VER */
+  buf[1] = type;
+  buf[2] = (uint8_t)(plen & 0xFF);
+  buf[3] = (uint8_t)((plen >> 8) & 0xFF);
+  buf[4] = seq;
+  if (plen > 0) memcpy(buf + 5, jsonUtf8, plen);
+  uint16_t crc = crc16_ccitt(buf, 5 + plen);
+  buf[5 + plen] = (uint8_t)(crc & 0xFF);
+  buf[5 + plen + 1] = (uint8_t)((crc >> 8) & 0xFF);
+  EveSerial.write(EVE_SOF0);
+  EveSerial.write(EVE_SOF1);
+  EveSerial.write(buf, 5 + plen + 2);
+  return true;
+#endif
 }
 
 static void onFrame(void) {
@@ -91,12 +123,27 @@ static void onFrame(void) {
   s_lastRxMs = millis();
   s_lastType = fType;
   s_lastJson[0] = '\0';
+  if (fType == MSG_EVE_HELLO) {
+    if (s_session == 0)
+      s_session = (uint32_t)(millis() ^ 0xA5A5u);
+    StaticJsonDocument<64> doc;
+    doc["session"] = s_session;
+    String o;
+    serializeJson(doc, o);
+    if (eveSendFrame(MSG_WALL_E_ACK, o.c_str())) {
+      Serial.printf("[EVE bridge] -> WALL_E_ACK session=%lu\n", (unsigned long)s_session);
+    }
+  }
   if (fLen > 0 && fLen < sizeof(fPayload)) {
     fPayload[fLen] = '\0';
     strncpy(s_lastJson, (const char*)fPayload, sizeof(s_lastJson) - 1);
-    StaticJsonDocument<256> doc;
-    DeserializationError jer = deserializeJson(doc, s_lastJson);
-    if (!jer && doc.containsKey("session")) s_session = (uint32_t)(doc["session"] | 0);
+    if (fType == MSG_EVE_TARGET_AWARENESS) {
+      eveTargetAssistIngestJson(s_lastJson, millis());
+    } else {
+      StaticJsonDocument<256> doc;
+      DeserializationError jer = deserializeJson(doc, s_lastJson);
+      if (!jer && doc.containsKey("session")) s_session = (uint32_t)(doc["session"] | 0);
+    }
   }
   resetParser();
 }
@@ -169,6 +216,9 @@ void eveUartBridgePoll(void) {
   while (EveSerial.available() > 0) {
     feedByte((uint8_t)EveSerial.read());
   }
+  uint32_t now = millis();
+  if (s_lastRxMs != 0 && (now - s_lastRxMs > 25000u))
+    s_session = 0;
 #endif
 }
 
@@ -181,6 +231,7 @@ static const char* typeName(uint8_t t) {
     case MSG_EVE_LOW_BATTERY: return "EVE_LOW_BATTERY";
     case MSG_EVE_SLEEP: return "EVE_SLEEP";
     case MSG_EVE_ERROR: return "EVE_ERROR";
+    case MSG_EVE_TARGET_AWARENESS: return "EVE_TARGET_AWARENESS";
     default: return "unknown";
   }
 }
@@ -213,4 +264,34 @@ String eveUartBridgeGetJSON(void) {
   }
   j += "}";
   return j;
+}
+
+bool eveUartBridgeIsLinkUp(void) {
+  uint32_t now = millis();
+  return (s_lastRxMs != 0) && ((now - s_lastRxMs) < 12000u);
+}
+
+bool eveUartBridgeSendPlaySound(uint8_t track) {
+#if !EVE_BRIDGE_ENABLE
+  (void)track;
+  return false;
+#else
+  char buf[48];
+  snprintf(buf, sizeof(buf), "{\"track\":%u}", (unsigned)track);
+  Serial.printf("[EVE] -> PLAY_SOUND tr=%u\n", (unsigned)track);
+  return eveSendFrame(MSG_PLAY_SOUND, buf);
+#endif
+}
+
+bool eveUartBridgeSendWallEAck(uint32_t session) {
+#if !EVE_BRIDGE_ENABLE
+  (void)session;
+  return false;
+#else
+  StaticJsonDocument<64> doc;
+  doc["session"] = session;
+  String o;
+  serializeJson(doc, o);
+  return eveSendFrame(MSG_WALL_E_ACK, o.c_str());
+#endif
 }

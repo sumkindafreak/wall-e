@@ -65,5 +65,9 @@ struct BatteryData {
 
 void                  batteryInit();
 bool                  batteryHandle();    // Call in loop(); returns true when a new reading was taken
+/** Immediate ADC sample (blocking ~35–50 ms). Use at boot; updates same BatteryData as batteryHandle. */
+void                  batterySampleNow();
+/** Suppress per-sample Serial spam during rapid boot polling (optional). */
+void                  batterySetVerboseSampleLog(bool on);
 const BatteryData&    batteryGetData();
 String                batteryGetStatusJSON();

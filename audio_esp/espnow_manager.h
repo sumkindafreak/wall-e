@@ -11,6 +11,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include "menu_protocol.h"
+
 /* Initialize WiFi STA + ESP-NOW. Returns true on success. */
 bool espnowManagerInit();
 
@@ -29,5 +31,8 @@ void espnowManagerSendStatus(uint8_t mic_dir, uint8_t dock_ir, uint8_t voice_cmd
 
 /** Periodic node health (v1 protocol) — rate-limited internally */
 void espnowManagerSendNodeHealth(void);
+
+/** UI telem to base (rate-limited unless \p force). Returns true if queued. */
+bool espnowManagerSendUiTelem(const WalleAudioUiTelemPacket_t* pkt, bool force);
 
 #endif

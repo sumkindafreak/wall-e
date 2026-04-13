@@ -52,9 +52,18 @@ static void sortStepsArray(JsonArray steps) {
                return a.first < b.first;
              });
   steps.clear();
+  /* ArduinoJson 7: deserialize into JsonDocument, then copy keys into new array elements. */
   for (auto& p : tmp) {
-    JsonObject no = steps.createNestedObject();
-    deserializeJson(no, p.second);
+    DynamicJsonDocument one(4096);
+    DeserializationError e =
+        deserializeJson(one, p.second.c_str(), p.second.length());
+    if (e) continue;
+    JsonObjectConst src = one.as<JsonObjectConst>();
+    if (src.isNull()) continue;
+    JsonObject dest = steps.add<JsonObject>();
+    for (JsonPairConst kv : src) {
+      dest[kv.key()] = kv.value();
+    }
   }
 }
 
@@ -103,6 +112,35 @@ static bool strEqLo(const char* a, const char* b) {
     if (ca != cb) return false;
   }
   return *a == *b;
+}
+
+/** Optional step gate: { "when": { ... } }. Unknown keys are ignored (pass). */
+static bool sequenceWhenMet(JsonObject w) {
+  if (w.isNull()) return true;
+
+  const BatteryData& bat = batteryGetData();
+
+  if (w.containsKey("battery_pct_min")) {
+    int mn = w["battery_pct_min"] | 0;
+    if (!bat.valid || bat.percent < mn) return false;
+  }
+  if (w.containsKey("battery_pct_max")) {
+    int mx = w["battery_pct_max"] | 100;
+    if (!bat.valid || bat.percent > mx) return false;
+  }
+  if (w.containsKey("battery_voltage_min")) {
+    float mn = w["battery_voltage_min"] | 0.0f;
+    if (!bat.valid || bat.voltage < mn) return false;
+  }
+  if (w.containsKey("battery_voltage_max")) {
+    float mx = w["battery_voltage_max"] | 99.0f;
+    if (!bat.valid || bat.voltage > mx) return false;
+  }
+  if (w.containsKey("vision_engaged")) {
+    bool want = w["vision_engaged"] | false;
+    if (visionBehaviourIsEngaged() != want) return false;
+  }
+  return true;
 }
 
 static int8_t parseEmotionId(JsonObject& o) {

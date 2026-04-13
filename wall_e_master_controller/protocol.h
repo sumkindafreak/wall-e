@@ -57,6 +57,10 @@ typedef struct __attribute__((packed)) {
   float   waypointBearingDeg;   // Bearing to waypoint (0-360)
   uint8_t currentWaypoint;      // Current waypoint index
   uint8_t totalWaypoints;       // Total waypoint count
+  /** Base motion policy: 0=any, 1=cyd_only, 2=web_only (see MotionAuthorityMode on base) */
+  uint8_t motionPolicy;
+  /** 1 if CYD sticks are active but policy blocks drive (e.g. web_only + non-idle sticks) */
+  uint8_t policyDenyCyd;
 } TelemetryPacket;
 
 // ------------------------------------------------------------
@@ -75,6 +79,8 @@ typedef struct __attribute__((packed)) {
 #define ACTION_STOP_ALL    10
 /** Remote autonomy/personality tuning (aux0=key, aux1=value) — must match Base espnow_receiver */
 #define ACTION_AUTONOMY_REMOTE  11
+/** Set motion authority: aux0 = 0 any, 1 cyd_only, 2 web_only (paired CYD only; same trust as drive) */
+#define ACTION_MOTION_POLICY    12
 
 /** Keys for ACTION_AUTONOMY_REMOTE (aux0) */
 #define AUTONOMY_KEY_DETECT_CLOSE_CM    1   /* aux1: cm 10-150 */
@@ -117,6 +123,6 @@ typedef struct __attribute__((packed)) {
 #define FLAG_PRECISION  0x0004
 #define FLAG_SUPERVISED 0x0008
 #define FLAG_SLEEP      0x0010
-#define FLAG_LASER      0x0020  /* Eye laser beam enabled (base GPIO; aim via servo targets) */
+#define FLAG_LASER      0x0020  /* Laser diode on (base); points with head pose from CYD */
 
 #endif // PROTOCOL_H

@@ -59,12 +59,32 @@ typedef enum {
   TOUCH_ZONE_MOOD_SHY,         // Behaviour: Shy mood
   TOUCH_ZONE_MOOD_TIRED,       // Behaviour: Tired mood
   TOUCH_ZONE_MOOD_EXCITED,     // Behaviour: Excited mood
+  TOUCH_ZONE_MOOD_FAV6,        // Drive: 6th favorite / mood slot
   TOUCH_ZONE_ANIM_0,           // Animation 0 (Reset)
   TOUCH_ZONE_ANIM_1,           // Animation 1 (Bootup)
   TOUCH_ZONE_ANIM_2,           // Animation 2 (Inquisitive)
   TOUCH_ZONE_ANIM_3,           // Animation 3 (EyebrowRight)
   TOUCH_ZONE_ANIM_4,           // Animation 4 (EyebrowLeft)
   TOUCH_ZONE_ANIM_5,           // Animation 5 (Surprised)
+  TOUCH_ZONE_ANIM_6,
+  TOUCH_ZONE_ANIM_7,
+  TOUCH_ZONE_ANIM_8,
+  TOUCH_ZONE_ANIM_9,
+  TOUCH_ZONE_ANIM_10,
+  TOUCH_ZONE_ANIM_11,
+  TOUCH_ZONE_ANIM_12,
+  TOUCH_ZONE_ANIM_13,
+  TOUCH_ZONE_ANIM_14,
+  TOUCH_ZONE_ANIM_15,
+  TOUCH_ZONE_ANIM_16,
+  TOUCH_ZONE_ANIM_17,
+  TOUCH_ZONE_ANIM_18,
+  TOUCH_ZONE_ANIM_19,
+  TOUCH_ZONE_ANIM_20,
+  TOUCH_ZONE_ANIM_21,
+  TOUCH_ZONE_ANIM_22,
+  TOUCH_ZONE_ANIM_23,
+  TOUCH_ZONE_BEHAV_PAGE,       // Cycle Behaviour animation pages (4×6 grid)
   TOUCH_ZONE_NAV_AUTONOMY,     // NEW: Navigate to Autonomy page
   TOUCH_ZONE_NAV_HELP,         // System page → Help
   TOUCH_ZONE_HELP_TOPIC_0,
@@ -72,6 +92,7 @@ typedef enum {
   TOUCH_ZONE_HELP_TOPIC_2,
   TOUCH_ZONE_HELP_TOPIC_3,
   TOUCH_ZONE_NAV_SD,           // System page → Memory Core
+  TOUCH_ZONE_SYS_MOTION_POLICY, // System page — tap to cycle motion policy (→ Base)
   TOUCH_ZONE_MC_SC_0,          // Shortcuts Mem..Evt (PAGE_SD_EXPLORER)
   TOUCH_ZONE_MC_SC_1,
   TOUCH_ZONE_MC_SC_2,
@@ -100,8 +121,7 @@ typedef enum {
   TOUCH_ZONE_SD_RENAME_OK,
   TOUCH_ZONE_DOCK_GO,          // Go to dock (sends ACTION_DOCK_GO)
   TOUCH_ZONE_DOCK_CANCEL,      // Cancel dock homing (sends ACTION_DOCK_CANCEL)
-  TOUCH_ZONE_LASER_PAD,        // Drag crosshair — head pan/tilt aim + laser alignment
-  TOUCH_ZONE_LASER_FIRE,       // Toggle laser armed (FLAG_LASER on base)
+  TOUCH_ZONE_LASER_TOGGLE,     // Laser beam on/off (head pose follows robot; no screen aim)
   TOUCH_ZONE_AUTONOMY_TAB_LIVE,
   TOUCH_ZONE_AUTONOMY_TAB_TUNE,
   TOUCH_ZONE_AUTONOMY_ARM,

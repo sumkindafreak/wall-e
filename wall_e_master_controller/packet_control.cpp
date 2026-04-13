@@ -48,6 +48,8 @@ void packetUpdate(unsigned long now, const DriveState* ds, bool estop) {
   pkt.aux1 = s_pendingAux1;
   if (s_pendingAction == ACTION_AUTONOMY_REMOTE) {
     /* aux already set */
+  } else if (s_pendingAction == ACTION_MOTION_POLICY) {
+    pkt.aux1 = 0;
   } else {
     pkt.aux0 = 0;
     pkt.aux1 = 0;
@@ -77,6 +79,13 @@ void packetSetAutonomyConfig(uint8_t key, uint8_t value) {
   s_pendingAction = ACTION_AUTONOMY_REMOTE;
   s_pendingAux0 = key;
   s_pendingAux1 = value;
+}
+
+void packetSetMotionPolicy(uint8_t mode) {
+  if (mode > 2) mode = 0;
+  s_pendingAction = ACTION_MOTION_POLICY;
+  s_pendingAux0 = mode;
+  s_pendingAux1 = 0;
 }
 
 bool packetTelemetryValid(void) {

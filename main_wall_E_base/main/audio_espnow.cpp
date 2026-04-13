@@ -1,5 +1,6 @@
 #include "audio_espnow.h"
 #include "audio_protocol.h"
+#include "voicebox_protocol.h"
 #include <WiFi.h>
 #include <esp_now.h>
 #include <esp_wifi.h>
@@ -64,4 +65,17 @@ bool audioEspNowSendEvent(uint8_t event_id, uint8_t priority) {
 
 bool audioEspNowStop(void) {
   return sendPacket(WALLE_AU_CMD_STOP, 0, 0);
+}
+
+bool audioEspNowSendVoiceboxCmd(uint8_t mode, uint8_t eve_audio_ok, uint8_t bond_strength) {
+  if (!ensureBroadcastPeer()) {
+    return false;
+  }
+  WalleVoiceboxCmdPacket_t pkt = {};
+  pkt.magic = WALLE_VOICEBOX_CMD_MAGIC;
+  pkt.version = WALLE_VOICEBOX_PROTO_VERSION;
+  pkt.mode = mode;
+  pkt.eve_audio_ok = eve_audio_ok ? 1u : 0u;
+  pkt.bond_strength = bond_strength;
+  return esp_now_send(s_bcast, (uint8_t*)&pkt, sizeof(pkt)) == ESP_OK;
 }

@@ -32,6 +32,8 @@
 #include "motion_authority.h"
 #include "api_security.h"
 #include "eve_uart_bridge.h"
+#include "telemetry_manager.h"
+#include "websocket_manager.h"
 #include "espnow_receiver.h"
 #include "dock_homing.h"
 #include <WebServer.h>
@@ -156,6 +158,8 @@ static void handleMotionOperatorApi() {
   json += ",\"motion_policy\":\""; json += motionAuthorityModeName(motionAuthorityGet()); json += "\"";
   json += ",\"motion_policy_allows_cyd\":"; json += motionAuthorityAllowCyd() ? "true" : "false";
   json += ",\"motion_policy_allows_web\":"; json += motionAuthorityAllowWeb() ? "true" : "false";
+  bool denyCyd = (motionAuthorityGet() == MOTION_AUTH_WEB_ONLY && espnowIsManualControlActive());
+  json += ",\"policy_deny_cyd\":"; json += denyCyd ? "true" : "false";
   json += ",\"last_command_age_ms\":"; json += String(age);
   json += ",\"failsafe_timeout_ms\":"; json += String((uint32_t)FAILSAFE_TIMEOUT_MS);
   json += ",\"command_stale\":"; json += stale ? "true" : "false";
@@ -735,6 +739,11 @@ static void handleEveStatusApi(void) {
   server.send(200, "application/json", eveUartBridgeGetJSON());
 }
 
+static void handleLivingTelemetryApi(void) {
+  addCORS();
+  server.send(200, "application/json", telemetryManagerGetJSON());
+}
+
 static void handleVisionEventsApi(void) {
   addCORS();
   String j = "{\"ok\":true,\"events\":";
@@ -836,6 +845,7 @@ void webServerInit() {
   server.on("/api/motion/authority/set", HTTP_GET, handleMotionAuthoritySet);
 
   server.on("/api/eve/status", HTTP_GET, handleEveStatusApi);
+  server.on("/api/living/telemetry", HTTP_GET, handleLivingTelemetryApi);
   server.on("/api/vision/events", HTTP_GET, handleVisionEventsApi);
   server.on("/api/dashboard", HTTP_GET, handleDashboardApi);
   server.on("/api/audit", HTTP_GET, handleAuditApi);
@@ -863,10 +873,12 @@ void webServerInit() {
   server.onNotFound(handleNotFound);
   server.begin();
   Serial.println("[WebServer] Started on port 80");
+  websocketManagerBegin();
 }
 
 void webServerHandle() {
   server.handleClient();
+  websocketManagerLoop();
 }
 
 bool webServerIsManualOverrideActive() {

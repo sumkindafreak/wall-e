@@ -19,7 +19,5 @@ void uiRenderingDrawDriveLaserOverlayIfNeeded(void) {
 #if USE_PHYSICAL_JOYSTICKS
   if (g_inputMode != INPUT_PHYSICAL_JOYSTICK) return;
 #endif
-  uint8_t ap, at;
-  cydLaserUiGetAim(&ap, &at);
-  uiDrawLaserCrosshairDynamic(s_tft, ap, at, cydLaserUiGetArmed());
+  uiDrawLaserButton(s_tft, cydLaserUiGetArmed());
 }

@@ -37,6 +37,7 @@
 
 // Profile system
 #include "profiles.h"
+#include "animation_data.h"
 
 #include "command_queue.h"
 #include "cyd_laser_ui.h"
@@ -219,25 +220,14 @@ void loop() {
   }
 
   static TouchZone s_prevTouchZone = TOUCH_ZONE_NONE;
-  if (touchGetTs()->touched() && zone != TOUCH_ZONE_LASER_PAD && cydLaserUiIsDraggingHead()) {
-    cydLaserUiCancelDrag();
-  }
-  if (!touchGetTs()->touched()) {
-    cydLaserUiCancelDrag();
-  }
-
-  if (zone == TOUCH_ZONE_LASER_PAD && touchGetTs()->touched()) {
-    TS_Point tp = touchGetTs()->getPoint();
-    int screenX = map(tp.x, TOUCH_X_MIN, TOUCH_X_MAX, 0, 319);
-    int screenY = map(tp.y, TOUCH_Y_MIN, TOUCH_Y_MAX, 0, 239);
-    screenX = constrain(screenX, 0, 319);
-    screenY = constrain(screenY, 0, 239);
-    cydLaserUiDragFromScreen(screenX, screenY);
-  }
-  if (zone == TOUCH_ZONE_LASER_FIRE && s_prevTouchZone != TOUCH_ZONE_LASER_FIRE) {
-    cydLaserUiToggleArmed();
-    playUISound(SOUND_CLICK);
-    Serial.println(F("[UI] Laser arm toggle"));
+  static uint32_t s_lastLaserToggleMs = 0;
+  if (zone == TOUCH_ZONE_LASER_TOGGLE && s_prevTouchZone != TOUCH_ZONE_LASER_TOGGLE) {
+    if ((uint32_t)(now - s_lastLaserToggleMs) >= 400u) {
+      cydLaserUiToggleArmed();
+      s_lastLaserToggleMs = now;
+      playUISound(SOUND_CLICK);
+      Serial.println(F("[UI] Laser beam toggle"));
+    }
   }
   s_prevTouchZone = zone;
 
@@ -246,18 +236,9 @@ void loop() {
   // Priority: Physical joystick overrides touch
   const JoystickState& joy = getJoystickState();
   bool joystickActive = joy.active[JOY2_X] || joy.active[JOY2_Y];
-  bool joy1Active = joy.active[JOY1_X] || joy.active[JOY1_Y];
 
-  if (joy1Active) {
-    cydLaserUiCancelDrag();
-  }
-
-  if (cydLaserUiIsDraggingHead() && !joy1Active) {
-    cydLaserUiApplyMotion();
-  } else {
-    motionSetHeadPanVelocity(joy.processed[JOY1_X]);
-    motionSetHeadTiltVelocity(joy.processed[JOY1_Y]);
-  }
+  motionSetHeadPanVelocity(joy.processed[JOY1_X]);
+  motionSetHeadTiltVelocity(joy.processed[JOY1_Y]);
   
   // DRIVE CONTROL (Joy2) - tank drive
   if (joystickActive) {
@@ -309,6 +290,12 @@ void loop() {
   }
   if (zone == TOUCH_ZONE_NAV_BEHAV) {
     g_currentPage = PAGE_BEHAVIOUR;
+    g_behaviourAnimPage = 0;
+    g_needStaticRedraw = true;
+    playUISound(SOUND_CLICK);
+  }
+  if (zone == TOUCH_ZONE_BEHAV_PAGE) {
+    g_behaviourAnimPage = (uint8_t)((g_behaviourAnimPage + 1u) % 4u);
     g_needStaticRedraw = true;
     playUISound(SOUND_CLICK);
   }
@@ -338,6 +325,15 @@ void loop() {
     g_currentPage = PAGE_SERVO_TEST;
     g_needStaticRedraw = true;
     playUISound(SOUND_CLICK);
+  }
+  if (zone == TOUCH_ZONE_SYS_MOTION_POLICY) {
+    uint8_t cur = g_motionPolicyFromBrain;
+    if (cur > 2) cur = 0;
+    uint8_t next = (uint8_t)((cur + 1) % 3);
+    packetSetMotionPolicy(next);
+    g_needStaticRedraw = true;
+    playUISound(SOUND_CLICK);
+    Serial.printf("[Nav] Motion policy -> %u (any/cyd/web)\n", (unsigned)next);
   }
   if (zone == TOUCH_ZONE_DOCK_GO) {
     packetSetPendingAction(ACTION_DOCK_GO);
@@ -733,28 +729,28 @@ void loop() {
     playUISound(SOUND_CLICK);
   }
   // Behaviour page - mood buttons trigger animations
-  if (zone >= TOUCH_ZONE_ANIM_0 && zone <= TOUCH_ZONE_ANIM_5) {
+  if (zone >= TOUCH_ZONE_ANIM_0 && zone <= TOUCH_ZONE_ANIM_23) {
     uint8_t animId = zone - TOUCH_ZONE_ANIM_0;
     motionTriggerAnimation(animId);
     playUISound(SOUND_CLICK);
     Serial.printf("[Behaviour] Animation %d triggered\n", animId);
   }
-  
+
   // Behaviour page - LONG PRESS to toggle favorite
-  if (zone >= (TOUCH_ZONE_ANIM_0 + 100) && zone <= (TOUCH_ZONE_ANIM_5 + 100)) {
+  if (zone >= (TOUCH_ZONE_ANIM_0 + 100) && zone <= (TOUCH_ZONE_ANIM_23 + 100)) {
     uint8_t animId = zone - (TOUCH_ZONE_ANIM_0 + 100);
     profileToggleFavoriteAnimation(animId);
     playUISound(SOUND_CONFIRM);
     g_needStaticRedraw = true;
     Serial.printf("[Behaviour] Toggled favorite for animation %d\n", animId);
   }
-  
+
   // Legacy mood zones (from main screen) - use profile favorites
-  if (zone >= TOUCH_ZONE_MOOD_CURIOUS && zone <= TOUCH_ZONE_MOOD_EXCITED) {
+  if (zone >= TOUCH_ZONE_MOOD_CURIOUS && zone <= TOUCH_ZONE_MOOD_FAV6) {
     Profile* p = profileGet();
     uint8_t moodIndex = zone - TOUCH_ZONE_MOOD_CURIOUS;
     uint8_t animId = p->favoriteAnimations[moodIndex];
-    if (animId < 6) {
+    if (animId < ANIMATION_COUNT) {
       motionTriggerAnimation(animId);
       playUISound(SOUND_CLICK);
       Serial.printf("[MainScreen] Favorite %d (anim %d) triggered\n", moodIndex, animId);
@@ -855,6 +851,9 @@ void loop() {
   packetGetTelemetry(&telem);
   bool connected = packetTelemetryValid();
 
+  g_motionPolicyFromBrain = connected ? telem.motionPolicy : 0;
+  g_policyDenyCyd = connected && (telem.policyDenyCyd != 0);
+
   emotionRefreshFromTelemetry(&telem, connected);
   emotionApplyPoseToMotionEngine();
 
@@ -885,7 +884,6 @@ void loop() {
   touchGetJoystickDots(&lx, &ly);
 
   uiDrawUpdateDynamic(&strip, &ds, lx, ly);
-  uiRenderingDrawDriveLaserOverlayIfNeeded();
 
   // Draw physical joystick indicators (only on Drive page)
   if (g_currentPage == PAGE_DRIVE) {
@@ -907,6 +905,9 @@ void loop() {
   if (g_advancedMode) {
     uiDrawAdvancedModeOverlay();
   }
+
+  /* Laser button must be painted after all other Drive overlays (joystick dots, eye, toasts). */
+  uiRenderingDrawDriveLaserOverlayIfNeeded();
 
   delay(1);
 }

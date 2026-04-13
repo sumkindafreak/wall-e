@@ -44,6 +44,14 @@
 #define TRACK_WAKE          7
 #define TRACK_DOCK_GUIDE    8
 #define TRACK_STOP          9
+/* Character “fake MP3” + menu cues (place matching MP3s on SD: 010–016) */
+#define TRACK_CHAR_PLAY         10
+#define TRACK_CHAR_STOP         11
+#define TRACK_CHAR_REWIND       12
+#define TRACK_CHAR_RECORD_FAIL  13
+#define TRACK_MENU_ENTER_OK     14
+#define TRACK_MENU_EXIT_OK      15
+#define TRACK_MENU_TICK         16  /* optional tick during long hold */
 
 /*=============================================================================
  * AUDIO PRIORITY (higher = can interrupt lower)
@@ -54,13 +62,22 @@
 #define PRIO_VOICE_CMD  30
 #define PRIO_ERROR      40
 #define PRIO_ESTOP      50
+#define PRIO_MENU       25
+
+/*=============================================================================
+ * Physical menu timing
+ *===========================================================================*/
+#define MENU_COMBO_HOLD_MS    6000u
+#define MENU_COMBO_BEEP_MS    2000u
+#define MENU_PAGE_TIMEOUT_MS  120000u
+#define BTN_DEBOUNCE_MS       45u
 
 /*=============================================================================
  * DEBUG
  *===========================================================================*/
-#define DEBUG_ENABLE        0   /* 1 = Serial debug output */
-#define DEBUG_AUDIO         0
-#define DEBUG_COMMS         0
+#define DEBUG_ENABLE        1   /* 1 = Serial debug output */
+#define DEBUG_AUDIO         1
+#define DEBUG_COMMS         1
 #define DEBUG_MIC           0   /* Noisy if 1 */
 #define DEBUG_IR            0
 #define DIAGNOSTICS_ENABLE  0   /* 1 = periodic diag block to Serial */

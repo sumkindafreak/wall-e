@@ -1,4 +1,5 @@
 #include "motor_control.h"
+#include "eve_target_assist.h"
 #include <Arduino.h>
 
 // ============================================================
@@ -128,6 +129,11 @@ void motorHandle() {
     s_lastMotorRampMs = now;
     int16_t effL = scaleTargetToCap(s_tgtL, cfg.maxPwm);
     int16_t effR = scaleTargetToCap(s_tgtR, cfg.maxPwm);
+    int16_t adl = 0;
+    int16_t adr = 0;
+    eveTargetAssistGetMotorDelta(&adl, &adr);
+    effL = (int16_t)constrain((int)effL + (int)adl, -255, 255);
+    effR = (int16_t)constrain((int)effR + (int)adr, -255, 255);
     s_currL = rampToward(s_currL, effL, cfg);
     s_currR = rampToward(s_currR, effR, cfg);
   }

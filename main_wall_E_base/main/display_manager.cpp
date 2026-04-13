@@ -62,6 +62,13 @@ static bool         _cmdDirty = true, _spdDirty = true, _batDirty = true, _wifiD
 static unsigned long _lastDraw = 0;
 #define DRAW_INTERVAL_MS  80
 
+/* ---- Chest TFT power-on sequence (every cold boot) ---- */
+#define BOOT_CHARGE_PHASE_MS   3200u  /* bar fills 0 -> measured % */
+#define BOOT_HOLD_PHASE_MS     4200u  /* hold so operator can read V/A/% */
+#define BOOT_WAKE_PHASE_MS     1500u  /* short “wake up” animation */
+#define BOOT_RESAMPLE_MS       450u   /* refresh ADC during charge phase */
+#define BOOT_FRAME_MS          26u    /* ~38 fps during boot loops */
+
 static char         _toastBuf[48] = "";
 static unsigned long _toastUntil = 0;
 
@@ -69,6 +76,176 @@ static unsigned long _toastUntil = 0;
 //  Helpers — text with datum (Adafruit_GFX has setCursor + print)
 // ============================================================
 enum { DATUM_TL, DATUM_TR, DATUM_BC, DATUM_MC };
+
+static void bootDrawStringMC(int16_t y, const char* s, uint8_t textSize, uint16_t fg, uint16_t bg) {
+  tft->setTextSize(textSize);
+  tft->setTextColor(fg, bg);
+  int16_t x1, y1;
+  uint16_t tw, th;
+  tft->getTextBounds(s, 0, 0, &x1, &y1, &tw, &th);
+  tft->setCursor((W - (int)tw) / 2, y);
+  tft->print(s);
+}
+
+/** Charging-style screen: big battery, fill only up to real SOC (fillPct 0..100 for animation). */
+static void drawBootChargeScreen(int fillPct, const BatteryData& bat) {
+  tft->fillScreen(C_BG);
+  tft->setTextSize(1);
+  tft->setTextColor(C_TXT_DIM, C_BG);
+  bootDrawStringMC(16, "SOLAR CHARGE / BOOT", 1, C_TXT_DIM, C_BG);
+  tft->setTextColor(C_ACCENT, C_BG);
+  bootDrawStringMC(44, "WALL-E", 2, C_ACCENT, C_BG);
+
+  int bx = 40, by = 92, bw = W - 80, bh = 52;
+  tft->drawRoundRect(bx, by, bw, bh, 8, C_BORDER);
+  tft->fillRoundRect(bx + 3, by + 3, bw - 6, bh - 6, 6, C_SURFACE2);
+  int capW = 10;
+  tft->fillRoundRect(bx + bw, by + 14, capW, bh - 28, 3, C_BORDER);
+
+  int innerW = bw - 12;
+  int innerH = bh - 12;
+  int fw = (innerW * fillPct) / 100;
+  if (fw < 0) fw = 0;
+  if (fw > innerW) fw = innerW;
+  uint16_t fcol = C_OK;
+  if (bat.valid) {
+    if (bat.status == BAT_CRITICAL) fcol = C_STOP;
+    else if (bat.status == BAT_WARNING) fcol = C_WARN;
+  } else {
+    fcol = C_TXT_DIM;
+  }
+  if (fw > 2)
+    tft->fillRoundRect(bx + 6, by + 6, fw, innerH, 4, fcol);
+
+  char line[48];
+  if (bat.valid) {
+    snprintf(line, sizeof(line), "%.2f V   %.2f A   %d%%", bat.voltage, bat.currentA, bat.percent);
+  } else {
+    snprintf(line, sizeof(line), "%.2f V   %.2f A   --%%", bat.voltage, bat.currentA);
+  }
+  tft->setTextSize(1);
+  tft->setTextColor(C_TXT, C_BG);
+  bootDrawStringMC(158, line, 1, C_TXT, C_BG);
+
+  tft->setTextColor(C_TXT_DIM, C_BG);
+  bootDrawStringMC(182, "Reading power bus...", 1, C_TXT_DIM, C_BG);
+}
+
+static void drawBootHoldScreen(const BatteryData& bat) {
+  tft->fillScreen(C_BG);
+  tft->setTextColor(C_ACCENT, C_BG);
+  bootDrawStringMC(28, "CHARGE LEVEL", 2, C_ACCENT, C_BG);
+  char line[48];
+  if (bat.valid) {
+    snprintf(line, sizeof(line), "%.2f V  |  %.2f A", bat.voltage, bat.currentA);
+  } else {
+    snprintf(line, sizeof(line), "%.2f V  |  %.2f A (sense?)", bat.voltage, bat.currentA);
+  }
+  tft->setTextSize(1);
+  tft->setTextColor(C_TXT, C_BG);
+  bootDrawStringMC(64, line, 1, C_TXT, C_BG);
+
+  int bx = 30, by = 92, bw = W - 60, bh = 36;
+  tft->drawRoundRect(bx, by, bw, bh, 6, C_BORDER);
+  tft->fillRoundRect(bx + 3, by + 3, bw - 6, bh - 6, 4, C_SURFACE2);
+  if (bat.valid) {
+    int fw = ((bw - 12) * bat.percent) / 100;
+    uint16_t col = (bat.status == BAT_CRITICAL) ? C_STOP : (bat.status == BAT_WARNING) ? C_WARN : C_OK;
+    if (fw > 2) tft->fillRoundRect(bx + 6, by + 6, fw, bh - 12, 3, col);
+    char pb[16];
+    snprintf(pb, sizeof(pb), "%d %%", bat.percent);
+    tft->setTextSize(2);
+    tft->setTextColor(C_TXT, C_SURFACE2);
+    bootDrawStringMC(98, pb, 2, C_TXT, C_SURFACE2);
+  } else {
+    tft->setTextSize(2);
+    bootDrawStringMC(98, "-- %", 2, C_TXT_DIM, C_SURFACE2);
+  }
+
+  tft->setTextSize(1);
+  tft->setTextColor(C_TXT_DIM, C_BG);
+  bootDrawStringMC(200, "Stand by — coming online", 1, C_TXT_DIM, C_BG);
+}
+
+/** Quick “wake up”: eyes pop + status line, then hand off to layered UI. */
+static void drawBootWakeScreen(uint32_t elapsed) {
+  tft->fillScreen(C_BG);
+  int cx = W / 2;
+  int eyeY = 100;
+  int spread = (int)(elapsed * 28 / BOOT_WAKE_PHASE_MS);
+  if (spread > 28) spread = 28;
+  int ex = 72 - spread;
+  tft->fillCircle(cx - ex, eyeY, 18 + (spread / 4), C_SURFACE2);
+  tft->fillCircle(cx + ex, eyeY, 18 + (spread / 4), C_SURFACE2);
+  tft->drawCircle(cx - ex, eyeY, 18 + (spread / 4), C_BORDER);
+  tft->drawCircle(cx + ex, eyeY, 18 + (spread / 4), C_BORDER);
+  tft->fillCircle(cx - ex, eyeY, 8, C_ACCENT);
+  tft->fillCircle(cx + ex, eyeY, 8, C_ACCENT);
+
+  tft->setTextSize(2);
+  tft->setTextColor(C_OK, C_BG);
+  bootDrawStringMC(168, "ONLINE", 2, C_OK, C_BG);
+  tft->setTextSize(1);
+  tft->setTextColor(C_TXT_DIM, C_BG);
+  bootDrawStringMC(198, "Systems waking...", 1, C_TXT_DIM, C_BG);
+}
+
+static void displayRunPowerOnSequence(void) {
+  Serial.println(F("[Display] Boot sequence: charge animation + telemetry hold + wake"));
+
+  batterySetVerboseSampleLog(false);
+  batterySampleNow();
+  unsigned long lastResample = millis();
+
+  unsigned long tCharge = millis();
+  while (millis() - tCharge < BOOT_CHARGE_PHASE_MS) {
+    unsigned long el = millis() - tCharge;
+    if (millis() - lastResample >= BOOT_RESAMPLE_MS) {
+      batterySampleNow();
+      lastResample = millis();
+    }
+    const BatteryData& b = batteryGetData();
+    int target = b.valid ? b.percent : 0;
+    int dispPct;
+    if (BOOT_CHARGE_PHASE_MS == 0)
+      dispPct = target;
+    else
+      dispPct = (int)((el * (long)target) / (long)BOOT_CHARGE_PHASE_MS);
+    if (dispPct > target) dispPct = target;
+    if (dispPct < 0) dispPct = 0;
+    drawBootChargeScreen(dispPct, b);
+    delay(BOOT_FRAME_MS);
+    yield();
+  }
+
+  batterySampleNow();
+  {
+    unsigned long tHold = millis();
+    while (millis() - tHold < BOOT_HOLD_PHASE_MS) {
+      if (millis() - lastResample >= BOOT_RESAMPLE_MS) {
+        batterySampleNow();
+        lastResample = millis();
+      }
+      drawBootHoldScreen(batteryGetData());
+      delay(BOOT_FRAME_MS);
+      yield();
+    }
+  }
+
+  {
+    unsigned long tWake = millis();
+    while (millis() - tWake < BOOT_WAKE_PHASE_MS) {
+      uint32_t wel = (uint32_t)(millis() - tWake);
+      drawBootWakeScreen(wel);
+      delay(BOOT_FRAME_MS);
+      yield();
+    }
+  }
+
+  batterySetVerboseSampleLog(true);
+  batterySampleNow();
+  Serial.println(F("[Display] Boot sequence complete -> main panel"));
+}
 
 static void drawStringDatum(Adafruit_GFX* gfx, int16_t x, int16_t y, const char* s, int datum) {
   int16_t x1, y1;
@@ -238,6 +415,19 @@ static void redrawBattery() {
   tft->drawRGBBitmap(12, BAT_Y, sprBat->getBuffer(), SPR_W, sh);
 }
 
+static void drawNormalUILayout(void) {
+  tft->fillScreen(C_BG);
+  drawHeader();
+  drawSectionLabel("DRIVE", 38);
+  drawSectionLabel("SPEED", 118);
+  drawSectionLabel("BATTERY", 160);
+  drawSectionLabel("NETWORK", 200);
+  redrawCommand();
+  redrawSpeed();
+  redrawBattery();
+  redrawWifi();
+}
+
 // ============================================================
 //  Public API
 // ============================================================
@@ -258,31 +448,27 @@ void displayInit() {
   tft = new Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
   tft->init(240, 240, SPI_MODE3);
   tft->setRotation(0);
-  tft->fillScreen(C_BG);
+  tft->fillScreen(C_BLACK);
 
-  // Create offscreen canvases for the four panels
+  // Create offscreen canvases for the four panels (used after boot)
   sprCmd  = new GFXcanvas16(SPR_W, CMD_H);
   sprSpd  = new GFXcanvas16(SPR_W, SPD_H);
   sprBat  = new GFXcanvas16(SPR_W, BAT_H);
   sprWifi = new GFXcanvas16(SPR_W, WIFI_H);
 
-  drawHeader();
-  drawSectionLabel("DRIVE", 38);
-  drawSectionLabel("SPEED", 118);
-  drawSectionLabel("BATTERY", 160);
-  drawSectionLabel("NETWORK", 200);
-
-  redrawCommand();
-  redrawSpeed();
-  redrawBattery();
-  redrawWifi();
-
-  // Backlight PWM fade (ESP32 Arduino 3.x API)
+  // Dim backlight during boot readout, then full after sequence
   ledcAttach(TFT_BL, BLK_PWM_FREQ, BLK_PWM_RES);
-  for (int i = 0; i <= BLK_BRIGHTNESS; i += 5) {
+  ledcWrite(TFT_BL, 48);
+  delay(30);
+
+  displayRunPowerOnSequence();
+
+  for (int i = 48; i <= BLK_BRIGHTNESS; i += 8) {
     ledcWrite(TFT_BL, i);
-    delay(8);
+    delay(6);
   }
+
+  drawNormalUILayout();
 
   Serial.println("[Display] ST7789 240x240 initialised (Adafruit)");
 }

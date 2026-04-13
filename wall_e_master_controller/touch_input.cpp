@@ -203,7 +203,7 @@ TouchZone touchUpdate(int page) {
       }
       
       // Track animation button long-press on Behaviour page (500ms to toggle favorite)
-      if (page == 1 && zone >= TOUCH_ZONE_ANIM_0 && zone <= TOUCH_ZONE_ANIM_5) {
+      if (page == 1 && zone >= TOUCH_ZONE_ANIM_0 && zone <= TOUCH_ZONE_ANIM_23) {
         if (s_animPressZone != zone) {
           s_animPressZone = zone;
           s_animPressStartMs = now;
@@ -283,13 +283,9 @@ unsigned long touchLastActivityMs(void) {
 
 TouchZone touchGetZone(int screenX, int screenY, int page) {
   if (page == 0) {  // PAGE_DRIVE
-    if (screenX >= CYD_LASER_FIRE_X && screenX < CYD_LASER_FIRE_X + CYD_LASER_FIRE_W &&
-        screenY >= CYD_LASER_FIRE_Y && screenY < CYD_LASER_FIRE_Y + CYD_LASER_FIRE_H) {
-      return TOUCH_ZONE_LASER_FIRE;
-    }
-    if (screenX >= CYD_LASER_PAD_X && screenX < CYD_LASER_PAD_X + CYD_LASER_PAD_W &&
-        screenY >= CYD_LASER_PAD_Y && screenY < CYD_LASER_PAD_Y + CYD_LASER_PAD_H) {
-      return TOUCH_ZONE_LASER_PAD;
+    if (screenX >= CYD_LASER_BTN_X && screenX < CYD_LASER_BTN_X + CYD_LASER_BTN_W &&
+        screenY >= CYD_LASER_BTN_Y && screenY < CYD_LASER_BTN_Y + CYD_LASER_BTN_H) {
+      return TOUCH_ZONE_LASER_TOGGLE;
     }
     // Single centered joystick zone
     if (inCircle(JOY_CX, JOY_CY, screenX, screenY)) return TOUCH_ZONE_LEFT_JOY;
@@ -324,30 +320,44 @@ TouchZone touchGetZone(int screenX, int screenY, int page) {
       return TOUCH_ZONE_NAV_AUTONOMY;
     }
     
-    // Mood buttons on right side (physical joystick layout)
-    const int cTop = uiContentTop();
-    int midX = 320 / 2;  // 160
-    for (int i = 0; i < 5; i++) {
-      int bx = midX + 16 + (i % 2) * 72;
-      int by = cTop + 30 + (i / 2) * 38;
-      if (screenX >= bx && screenX < (bx + 64) &&
-          screenY >= by && screenY < (by + 32)) {
+    // Mood / favourite buttons — right panel, centred (matches uiPhysFavouriteCellPos)
+    for (int i = 0; i < 6; i++) {
+      int bx, by;
+      uiPhysFavouriteCellPos(i, &bx, &by);
+      if (screenX >= bx && screenX < (bx + PHYS_FAV_BOX_W) &&
+          screenY >= by && screenY < (by + PHYS_FAV_BOX_H)) {
         return (TouchZone)(TOUCH_ZONE_MOOD_CURIOUS + i);
       }
     }
   } else if (page == 1 || page == 2) {  // PAGE_BEHAVIOUR, PAGE_SYSTEM
     if (screenY >= 204 && screenY <= 236 && screenX >= 110 && screenX <= 210) return TOUCH_ZONE_NAV_BACK;
+
+    /* System page: motion policy strip (see uiDrawPageSystem SYS_MP_*) */
+    if (page == 2 && screenX >= 8 && screenX <= 312 && screenY >= 40 && screenY <= 67) {
+      return TOUCH_ZONE_SYS_MOTION_POLICY;
+    }
     
-    // Behaviour page mood buttons (5 buttons in 2 columns)
+    // Behaviour page: 3×2 grid × 4 pages → animId = page*6 + cell (match uiDrawPageBehaviour)
     if (page == 1) {
-      // NEW: 6 animation buttons in 3x2 grid
-      const int behGridTop = uiContentTop() + 10;
+      const int behTop = uiContentTop() + 10;
       for (int i = 0; i < 6; i++) {
         int bx = 16 + (i % 3) * 100;
-        int by = behGridTop + (i / 3) * 50;
+        int by = behTop + (i / 3) * 50;
         if (screenX >= bx && screenX < (bx + 90) &&
             screenY >= by && screenY < (by + 36)) {
-          return (TouchZone)(TOUCH_ZONE_ANIM_0 + i);
+          int animId = (int)g_behaviourAnimPage * 6 + i;
+          if (animId <= 23) {
+            return (TouchZone)(TOUCH_ZONE_ANIM_0 + animId);
+          }
+        }
+      }
+      {
+        const int pgX = BEHAV_PAGE_BTN_X;
+        const int pgY = BEHAV_PAGE_BTN_Y;
+        const int pgW = BEHAV_PAGE_BTN_W;
+        const int pgH = BEHAV_PAGE_BTN_H;
+        if (screenX >= pgX && screenX < pgX + pgW && screenY >= pgY && screenY < pgY + pgH) {
+          return TOUCH_ZONE_BEHAV_PAGE;
         }
       }
     }

@@ -10,6 +10,7 @@
 #include "espnow_control.h"
 #include "packet_control.h"
 #include "profiles.h"
+#include "animation_data.h"
 #include "motion_engine.h"  // For SERVO_COUNT and motionGetServoTargets
 #include <Arduino.h>
 #include <stdio.h>
@@ -228,6 +229,29 @@ void uiDrawStaticSystem(void) {
   uiDrawPageSystem();
 }
 
+void uiPhysFavouriteCellPos(int index, int* outBx, int* outBy) {
+  const int cTop = uiContentTop();
+  const int midX = SCREEN_W / 2;
+  const int rightW = SCREEN_W - midX;
+  const int gridW = PHYS_FAV_BOX_W * 2 + PHYS_FAV_COL_GAP;
+  const int favBaseX = midX + (rightW - gridW) / 2;
+  const int favBlockH = 2 * PHYS_FAV_ROW_STEP + PHYS_FAV_BOX_H;
+  const int availH = BOTTOM_BAR_Y - cTop - PHYS_FAV_TOP_PAD - PHYS_FAV_BOTTOM_PAD;
+  int favBaseY = cTop + PHYS_FAV_TOP_PAD;
+  if (availH > favBlockH) {
+    favBaseY += (availH - favBlockH) / 2;
+  }
+  int i = index;
+  if (i < 0) i = 0;
+  if (i > 5) i = 5;
+  if (outBx) {
+    *outBx = favBaseX + (i % 2) * (PHYS_FAV_BOX_W + PHYS_FAV_COL_GAP);
+  }
+  if (outBy) {
+    *outBy = favBaseY + (i / 2) * PHYS_FAV_ROW_STEP;
+  }
+}
+
 #if USE_PHYSICAL_JOYSTICKS
 void uiDrawPhysicalJoystickLayout(void) {
   const int cTop = uiContentTop();
@@ -247,33 +271,36 @@ void uiDrawPhysicalJoystickLayout(void) {
 
   // Get animation names based on current profile's favorites
   Profile* p = profileGet();
-  const char* allAnimNames[] = {"Reset", "Bootup", "Inquis", "BrowR", "BrowL", "Suprs"};
-  const char* displayNames[5];
-  
-  for (int i = 0; i < 5; i++) {
+  static const char kAnimShortNames[][9] = {
+    "Reset", "Bootup", "Inquis", "BrowR", "BrowL", "Suprs",
+    "Nod", "LookSd", "Wave", "Sleepy", "Shake", "Perk",
+    "Sad", "Tilt", "LeanIn", "Peek", "Yawn", "Jump",
+    "Wiggle", "Cheer", "Shy", "Up", "Down", "Fidget"
+  };
+  const char* displayNames[6];
+
+  for (int i = 0; i < 6; i++) {
     uint8_t animId = p->favoriteAnimations[i];
-    if (animId < 6) {
-      displayNames[i] = allAnimNames[animId];
+    if (animId < ANIMATION_COUNT) {
+      displayNames[i] = kAnimShortNames[animId];
     } else {
       displayNames[i] = "---";
     }
   }
-  
+
   g_tft->setTextColor(C_ACCENT, C_BG);
   g_tft->setTextSize(1);
-  const int animBoxW = 64;
-  const int animBoxH = 32;
   const int animCharW = 6;
-  for (int i = 0; i < 5; i++) {
-    int bx = midX + 16 + (i % 2) * 72;
-    int by = cTop + 30 + (i / 2) * 38;
-    g_tft->drawRect(bx, by, animBoxW, animBoxH, C_BORDER);
+  for (int i = 0; i < 6; i++) {
+    int bx, by;
+    uiPhysFavouriteCellPos(i, &bx, &by);
+    g_tft->drawRect(bx, by, PHYS_FAV_BOX_W, PHYS_FAV_BOX_H, C_BORDER);
     const char* name = displayNames[i];
     int tw = (int)strlen(name) * animCharW;
-    if (tw > animBoxW - 4) tw = animBoxW - 4;
-    int tx = bx + (animBoxW - tw) / 2;
+    if (tw > PHYS_FAV_BOX_W - 4) tw = PHYS_FAV_BOX_W - 4;
+    int tx = bx + (PHYS_FAV_BOX_W - tw) / 2;
     if (tx < bx + 2) tx = bx + 2;
-    int ty = by + (animBoxH - 8) / 2;
+    int ty = by + (PHYS_FAV_BOX_H - 8) / 2;
     g_tft->drawString(name, tx, ty);
   }
   
@@ -305,8 +332,8 @@ void uiDrawPhysicalJoystickLayout(void) {
   g_tft->drawRoundRect(DRIVE_NAV_AUT_X, by, DRIVE_NAV_CELL_W, bh, 2, C_BORDER);
   g_tft->drawString("Aut", DRIVE_NAV_AUT_X + 4, by + 10);
   g_tft->drawFastHLine(0, BOTTOM_BAR_Y, SCREEN_W, C_BORDER);
-
-  uiDrawLaserPadFrame(g_tft);
+  /* Laser toggle is drawn last each frame (see uiRenderingDrawDriveLaserOverlayIfNeeded)
+   * so joystick/eye overlays cannot paint over it. */
 }
 #endif
 
@@ -442,6 +469,19 @@ void uiDrawControlAuthority(bool brainLinkOk) {
     label = "OFFLINE";
     pulse = true;
     pulseColor = C_RED;
+  } else if (g_policyDenyCyd) {
+    color = 0xFDA0U; /* amber */
+    label = "POLICY";
+    pulse = true;
+    pulseColor = 0xFDA0U;
+  } else if (g_motionPolicyFromBrain == 2) {
+    color = C_YELLOW;
+    label = "WEB";
+    pulse = true;
+    pulseColor = C_YELLOW;
+  } else if (g_motionPolicyFromBrain == 1) {
+    color = C_GREEN;
+    label = "DESK";
   } else {
     switch (g_controlAuthority) {
       case CTRL_AUTONOMOUS: color = C_BLUE;  label = "AUTO"; pulse = true; pulseColor = C_BLUE;  break;
@@ -536,61 +576,79 @@ void uiDrawPageBehaviour(void) {
     g_tft->setTextSize(2);
     g_tft->drawString("Animations", 10, 6);
   }
-  
-  // Display all available animations (6 total)
-  // Animation names from animation_data.h
-  const char* animNames[] = {"Reset", "Bootup", "Inquis", "BrowR", "BrowL", "Suprs"};
-  
-  // Get current profile's favorites
+
+  static const char kAnimShortNames[][9] = {
+    "Reset", "Bootup", "Inquis", "BrowR", "BrowL", "Suprs",
+    "Nod", "LookSd", "Wave", "Sleepy", "Shake", "Perk",
+    "Sad", "Tilt", "LeanIn", "Peek", "Yawn", "Jump",
+    "Wiggle", "Cheer", "Shy", "Up", "Down", "Fidget"
+  };
+
   Profile* p = profileGet();
-  
   g_tft->setTextColor(C_ACCENT, C_BG);
   g_tft->setTextSize(1);
-  
-  // Draw 6 animation buttons (3x2 grid)
-  for (int i = 0; i < 6; i++) {
-    int bx = 16 + (i % 3) * 100;
-    int by = 50 + (i / 3) * 50;
-    
-    // Check if this animation is favorited
+
+  const int behTop = uiContentTop() + 10;
+
+  auto drawAnimCell = [&](int animId, int bx, int by, int bw, int bh) {
     bool isFavorite = false;
-    for (int f = 0; f < 5; f++) {
-      if (p->favoriteAnimations[f] == i) {
+    for (int f = 0; f < 6; f++) {
+      if (p->favoriteAnimations[f] == (uint8_t)animId) {
         isFavorite = true;
         break;
       }
     }
-    
-    // Draw button border (highlight if favorite)
     uint16_t borderColor = isFavorite ? TFT_YELLOW : C_BORDER;
-    g_tft->drawRect(bx, by, 90, 36, borderColor);
+    g_tft->drawRect(bx, by, bw, bh, borderColor);
     if (isFavorite) {
-      g_tft->drawRect(bx + 1, by + 1, 88, 34, borderColor);  // Double border for favorites
+      g_tft->drawRect(bx + 1, by + 1, bw - 2, bh - 2, borderColor);
     }
-    
+    const char* label = (animId >= 0 && animId < ANIMATION_COUNT)
+                            ? kAnimShortNames[animId]
+                            : "?";
     g_tft->setTextColor(C_ACCENT, C_BG);
-    g_tft->drawString(animNames[i], bx + 8, by + 12);
-    
-    // Show animation ID
-    char idBuf[4];
-    snprintf(idBuf, sizeof(idBuf), "%d", i);
+    g_tft->drawString(label, bx + 6, by + 12);
+    char idBuf[6];
+    snprintf(idBuf, sizeof(idBuf), "%d", animId);
     g_tft->setTextColor(C_TEXT_DIM, C_BG);
-    g_tft->drawString(idBuf, bx + 75, by + 12);
-    
-    // Draw star for favorites
+    g_tft->drawString(idBuf, bx + bw - 18, by + 12);
     if (isFavorite) {
       g_tft->setTextColor(TFT_YELLOW, C_BG);
-      g_tft->drawString("*", bx + 75, by + 22);
+      g_tft->drawString("*", bx + bw - 18, by + 22);
     }
-    
-    g_tft->setTextColor(C_ACCENT, C_BG);
+  };
+
+  for (int i = 0; i < 6; i++) {
+    int animId = (int)g_behaviourAnimPage * 6 + i;
+    if (animId >= ANIMATION_COUNT) break;
+    int bx = 16 + (i % 3) * 100;
+    int by = behTop + (i / 3) * 50;
+    drawAnimCell(animId, bx, by, 90, 36);
   }
-  
-  // Instructions
+
+  /* Small centered page strip (above hint / Back) */
+  {
+    const int pgX = BEHAV_PAGE_BTN_X;
+    const int pgY = BEHAV_PAGE_BTN_Y;
+    const int pgW = BEHAV_PAGE_BTN_W;
+    const int pgH = BEHAV_PAGE_BTN_H;
+    g_tft->fillRoundRect(pgX, pgY, pgW, pgH, 2, C_BG_DARK);
+    g_tft->drawRoundRect(pgX, pgY, pgW, pgH, 2, C_BORDER);
+    g_tft->setTextColor(C_ACCENT, C_BG_DARK);
+    g_tft->setTextSize(1);
+    char pgLab[12];
+    snprintf(pgLab, sizeof(pgLab), "Pg %u/4", (unsigned)g_behaviourAnimPage + 1u);
+    const int tw = (int)strlen(pgLab) * 6;
+    int tx = pgX + (pgW - tw) / 2;
+    if (tx < pgX + 2) tx = pgX + 2;
+    g_tft->setCursor(tx, pgY + (pgH - 8) / 2);
+    g_tft->print(pgLab);
+  }
+
   g_tft->setTextColor(C_TEXT_DIM, C_BG);
   g_tft->setTextSize(1);
-  g_tft->drawString("Tap to play | Hold to fav", 10, BOTTOM_BAR_Y - 15);
-  
+  g_tft->drawString("Tap play | Hold fav", 8, BOTTOM_BAR_Y - 10);
+
   g_tft->fillRect(SCREEN_W / 2 - 50, BOTTOM_BAR_Y + 4, 100, 32, C_ACCENT);
   g_tft->setTextColor(C_BG, C_ACCENT);
   g_tft->drawString("Back", SCREEN_W / 2 - 18, BOTTOM_BAR_Y + 14);
@@ -611,9 +669,26 @@ void uiDrawPageSystem(void) {
   }
   g_tft->setTextColor(C_TEXT_DIM, C_BG);
   g_tft->setTextSize(1);
-  g_tft->drawString("Battery: -- V", 16, 56);
-  g_tft->drawString("Current: -- A", 16, 80);
-  g_tft->drawString("Temp: -- C", 16, 104);
+  /* Motion policy — tap row cycles Any → Desk → Web (ESP-NOW to Base); touch_input SYS 40..67 */
+  {
+    const int mpX = 8, mpY = 40, mpW = 304, mpH = 28;
+    g_tft->fillRect(mpX, mpY, mpW, mpH, C_BG_DARK);
+    g_tft->drawRect(mpX, mpY, mpW, mpH, C_BORDER);
+    const char* mp = "ANY  (LROS + desk)";
+    if (g_motionPolicyFromBrain == 1) mp = "DESK only";
+    else if (g_motionPolicyFromBrain == 2) mp = "WEB only";
+    g_tft->setTextColor(g_policyDenyCyd ? C_YELLOW : C_WHITE, C_BG_DARK);
+    g_tft->setCursor(14, mpY + 6);
+    g_tft->print("Motion: ");
+    g_tft->print(mp);
+    g_tft->setTextColor(C_ACCENT, C_BG_DARK);
+    g_tft->setCursor(248, mpY + 6);
+    g_tft->print("TAP");
+  }
+  g_tft->setTextColor(C_TEXT_DIM, C_BG);
+  g_tft->drawString("Battery: -- V", 16, 74);
+  g_tft->drawString("Current: -- A", 16, 98);
+  g_tft->drawString("Temp: -- C", 16, 122);
   
   // Profiles button
   g_tft->fillRect(16, 130, 100, 32, C_ACCENT);

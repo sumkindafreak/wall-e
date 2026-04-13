@@ -1,7 +1,7 @@
 // ============================================================
 //  WALL-E ESP-NOW Receiver Implementation
-//  Receives ControlPacket from CYD controller → motorSetLeftRight
-//  Updated for Enhanced CYD Controller protocol
+//  LEGACY: PlatformIO builds main/espnow_receiver.cpp instead (motion authority, full protocol).
+//  Kept for reference / Arduino-IDE layouts that still compile this file.
 // ============================================================
 
 #include "espnow_receiver.h"

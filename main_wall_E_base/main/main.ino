@@ -47,6 +47,7 @@
 #include "motion_authority.h"
 #include "api_security.h"
 #include "eve_uart_bridge.h"
+#include "eve_target_assist.h"
 #include "laser_control.h"
 #include "sequence_engine.h"
 
@@ -125,6 +126,7 @@ void setup() {
   motionAuthorityInit();
   apiSecurityInit();
   eveUartBridgeInit();
+  eveTargetAssistInit();
 
   // Web server
   webServerInit();
@@ -272,6 +274,21 @@ void loop() {
     mr = (int16_t)constrain((int)mr, -255, 255);
     motorSetLeftRight(ml, mr);
     lastCommandMillis = now;
+  }
+
+  {
+    uint32_t am = 0;
+    if (safetyBlock) {
+      am |= EVE_ASSIST_MASK_SAFETY;
+    }
+    if (dockDriving) {
+      am |= EVE_ASSIST_MASK_DOCK;
+    }
+    if (manualFromControl) {
+      am |= EVE_ASSIST_MASK_MANUAL;
+    }
+    eveTargetAssistSetSuppressMask(am);
+    eveTargetAssistTick(now);
   }
 
   // LDR: turn flashlight on when dark

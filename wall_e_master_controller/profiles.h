@@ -54,8 +54,8 @@ struct Profile {
   // Servo neutral positions (0-180 degrees for each servo)
   uint8_t neutralPositions[10];  // Default neutral position for each servo
   
-  // Favorite animations for main screen (5 slots)
-  uint8_t favoriteAnimations[5];  // Animation IDs to display on main screen
+  // Favorite animations for main screen (6 slots — physical joystick / mood strip)
+  uint8_t favoriteAnimations[6];  // Animation IDs to display on main screen
   
   // Autonomous personality
   float autonomyCuriosity;         // 0.0-1.0

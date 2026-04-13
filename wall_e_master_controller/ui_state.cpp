@@ -7,11 +7,14 @@
 InputMode         g_inputMode = INPUT_TOUCHSCREEN;
 Page              g_currentPage = PAGE_DRIVE;
 ControlAuthority  g_controlAuthority = CTRL_LOCAL;
+uint8_t           g_motionPolicyFromBrain = 0;
+bool              g_policyDenyCyd = false;
 bool              g_estop = false;
 bool              g_advancedMode = false;
 bool              g_overlayVisible = false;
 bool              g_needStaticRedraw = true;
 uint8_t           g_helpSection = 0;
+uint8_t           g_behaviourAnimPage = 0;
 bool              g_topBannerCollapsed = false;
 uint8_t           g_autonomyUiTab = 0;
 bool              g_remoteAutonomyArm = false;
@@ -32,6 +35,8 @@ void uiStateInit(void) {
   g_currentPage = PAGE_DRIVE;
 #endif
   g_controlAuthority = CTRL_LOCAL;
+  g_motionPolicyFromBrain = 0;
+  g_policyDenyCyd = false;
   g_estop = false;
   g_advancedMode = false;
   g_overlayVisible = false;
@@ -47,6 +52,7 @@ void uiStateInit(void) {
   g_auRandomPct = 50;
   g_auWaypointFollow = false;
   g_helpSection = 0;
+  g_behaviourAnimPage = 0;
 }
 
 bool uiStateIsTouchscreen(void) {

@@ -8,9 +8,17 @@
 #include <string.h>
 #include "system_status.h"
 #include "eyes_control.h"
+#include "battery_monitor.h"
 #include "servo_control.h"
 #include "neopixel_control.h"
 #include "audio_control.h"
+#include "eve_behavior_manager.h"
+#include "battery_monitor.h"
+#include "eve_spatial_awareness.h"
+#include "eve_attachment_manager.h"
+#if EVE_ENABLE_EYES
+#include "eve_expression_state.h"
+#endif
 #include <ArduinoJson.h>
 
 enum class EveState : uint8_t {
@@ -32,6 +40,7 @@ static uint32_t s_sessionId = 0;
 static uint32_t s_lastHelloMs = 0;
 static uint32_t s_lastEveHbMs = 0;
 static uint32_t s_lastRxMs = 0;
+static uint32_t s_lastLowBatMs = 0;
 
 static void sendEveHello(void) {
   StaticJsonDocument<256> doc;
@@ -55,13 +64,52 @@ static void sendEveReady(void) {
 }
 
 static void sendEveHeartbeat(void) {
-  StaticJsonDocument<192> doc;
+  StaticJsonDocument<384> doc;
   doc["session"] = s_sessionId;
   doc["uptime_ms"] = systemStatusUptimeMs();
   doc["heap"] = ESP.getFreeHeap();
+  doc["bat_ok"] = eveBatteryDataValid();
+  doc["bat_v"] = eveBatteryVoltage();
+  doc["bat_a"] = eveBatteryCurrentA();
+  doc["bat_pct"] = eveBatteryPercent();
+  doc["bat_st"] = (int)eveBatteryStatus();
   String out;
   serializeJson(doc, out);
   uartLinkSendJson(MSG_EVE_HEARTBEAT, out.c_str());
+}
+
+static void sendEveLowBatteryJson(void) {
+  StaticJsonDocument<160> doc;
+  doc["v"] = eveBatteryVoltage();
+  doc["a"] = eveBatteryCurrentA();
+  doc["pct"] = eveBatteryPercent();
+  doc["session"] = s_sessionId;
+  String out;
+  serializeJson(doc, out);
+  uartLinkSendJson(MSG_EVE_LOW_BATTERY, out.c_str());
+  Serial.println(F("[EVE][SM] -> MSG_EVE_LOW_BATTERY"));
+}
+
+static void batteryAlarmTick(uint32_t now) {
+  if (!eveBatteryHardwareEnabled() || !eveBatteryDataValid()) return;
+
+  if (eveBatteryPercent() > EVE_BAT_CRIT_PCT) {
+    if (s_state == EveState::LOW_POWER && eveBatteryPercent() > (EVE_BAT_WARN_PCT + 5)) {
+      Serial.println(F("[EVE][SM] battery recovered -> IDLE"));
+      s_state = EveState::IDLE;
+    }
+    return;
+  }
+
+  if (now - s_lastLowBatMs < EVE_BAT_LOW_REPORT_MIN_MS) return;
+  s_lastLowBatMs = now;
+  sendEveLowBatteryJson();
+
+  if (s_state == EveState::IDLE || s_state == EveState::ATTACHED || s_state == EveState::ESCORT ||
+      s_state == EveState::INTERACT || s_state == EveState::DOCKED) {
+    Serial.println(F("[EVE][SM] critical battery -> LOW_POWER"));
+    s_state = EveState::LOW_POWER;
+  }
 }
 
 static void sendEveError(const char* msg, int code) {
@@ -100,6 +148,7 @@ void stateMachineTick(void) {
     case EveState::ESCORT:
     case EveState::INTERACT:
     case EveState::DOCKED:
+      batteryAlarmTick(now);
       if (now - s_lastEveHbMs >= EVE_HEARTBEAT_MS) {
         s_lastEveHbMs = now;
         sendEveHeartbeat();
@@ -111,13 +160,42 @@ void stateMachineTick(void) {
           s_state = EveState::WAIT_ATTACH;
           s_sessionId = 0;
           s_lastHelloMs = 0;
+          eyesNotifyWallEDisconnected();
         }
       }
       break;
     case EveState::LOW_POWER:
+      batteryAlarmTick(now);
+      if (now - s_lastEveHbMs >= EVE_HEARTBEAT_MS) {
+        s_lastEveHbMs = now;
+        sendEveHeartbeat();
+      }
+      break;
     case EveState::ERROR:
     case EveState::SLEEP:
       break;
+  }
+
+  {
+    uint8_t sf = 0;
+    if (s_state == EveState::SLEEP) {
+      sf |= EVE_SPATIAL_FLAG_SLEEP;
+    }
+    if (s_state == EveState::LOW_POWER) {
+      sf |= EVE_SPATIAL_FLAG_LOW_BATTERY;
+    }
+    if (s_state == EveState::ESCORT || s_state == EveState::INTERACT) {
+      sf |= EVE_SPATIAL_FLAG_ALERT;
+    }
+    if (eveAttachmentIsAttached()) {
+      sf |= EVE_SPATIAL_FLAG_ATTACHED;
+    }
+#if EVE_ENABLE_EYES
+    if (eveExpressionGetCurrent() == EVE_EXPR_CONFUSED) {
+      sf |= EVE_SPATIAL_FLAG_CONFUSED;
+    }
+#endif
+    eveSpatialSetBehaviorFlags(sf);
   }
 }
 
@@ -152,6 +230,7 @@ void stateMachineOnUartRx(uint8_t type, const uint8_t* payload, size_t len, uint
       sendEveReady();
       s_state = EveState::IDLE;
       neopixelSetPattern(1);
+      eyesNotifyWallEConnected();
       break;
     }
     case MSG_ATTACH_CONFIRMED:
@@ -166,10 +245,12 @@ void stateMachineOnUartRx(uint8_t type, const uint8_t* payload, size_t len, uint
     case MSG_MODE_DOCK:
       s_state = EveState::DOCKED;
       Serial.println(F("[EVE][SM] DOCK"));
+      eyesNotifyDockingState(true, eveBatteryDataValid() && eveBatteryCurrentA() > 0.03f);
       break;
     case MSG_MODE_IDLE:
       s_state = EveState::IDLE;
       Serial.println(F("[EVE][SM] IDLE"));
+      eyesNotifyDockingState(false, false);
       break;
     case MSG_MOVE_SERVO: {
       StaticJsonDocument<128> doc;
@@ -187,7 +268,7 @@ void stateMachineOnUartRx(uint8_t type, const uint8_t* payload, size_t len, uint
         break;
       }
       uint8_t tr = doc["track"] | 1;
-      audioPlayTrack(tr);
+      eveBehaviorOnRemoteSound(tr);
       break;
     }
     case MSG_STOP:

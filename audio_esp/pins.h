@@ -40,4 +40,17 @@
  *===========================================================================*/
 #define PIN_STATUS_LED    8    /* -1 to disable */
 
+/*=============================================================================
+ * Character control buttons (INPUT_PULLUP, contact to GND when pressed)
+ * ESP32-S3: chosen to avoid DFPlayer UART (17/18), mics (4/5), IR (6/7), LED (8).
+ *===========================================================================*/
+#define PIN_BTN_1         9
+#define PIN_BTN_2         10
+#define PIN_BTN_3         11
+#define PIN_BTN_4         12
+
+/** Menu enter/exit combo: hold these two together for 6 s (named for readability). */
+#define PIN_MENU_COMBO_A  PIN_BTN_1
+#define PIN_MENU_COMBO_B  PIN_BTN_2
+
 #endif

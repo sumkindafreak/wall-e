@@ -49,6 +49,12 @@
 #include "motion_authority.h"
 #include "api_security.h"
 #include "eve_uart_bridge.h"
+#include "eve_target_assist.h"
+#include "memory_manager.h"
+#include "relationship_manager.h"
+#include "shared_voicebox_manager.h"
+#include "autonomy_manager.h"
+#include "eve_link_manager.h"
 #include "laser_control.h"
 #include "sequence_engine.h"
 
@@ -72,7 +78,10 @@ void setup() {
   motionLayerInit();
   Serial.println("[Motors] Initialised");
 
-  // Display up early so user gets boot feedback
+  /* Power bus sense first — chest boot animation reads V/A from real ADC */
+  batteryInit();
+  Serial.println("[Setup] Post-battery (before chest display)");
+
   displayInit();
 
   // I2C bus: servos init first (calls Wire.begin)
@@ -110,9 +119,6 @@ void setup() {
   unifiedAutonomyInit();
   Serial.println(F("[Autonomy] Engine ready"));
 
-  // Battery monitor
-  batteryInit();
-  Serial.println("[Setup] Post-battery");
   displayUpdateBattery();
 
   // Dock system: sensors, homing. ToF deferred (can block if sensor absent)
@@ -133,6 +139,16 @@ void setup() {
   Serial.println("[Setup] Post-espnow");
   audioEspNowInit();
   Serial.println("[Setup] Post-audioEspNow");
+
+  memoryManagerInit();
+  relationshipInit();
+  eveUartBridgeInit();
+  eveTargetAssistInit();
+  sharedVoiceboxInit();
+  autonomyManagerInit();
+  eveLinkManagerInit();
+  Serial.println("[Setup] Post-living-core");
+
   nodeHealthInit();
   Serial.println("[Setup] Post-nodeHealth");
   walleEmotionPoseBridgeInit();
@@ -180,6 +196,11 @@ void loop() {
   // Web requests
   webServerHandle();
   eveUartBridgePoll();
+  memoryManagerTick();
+  relationshipTick(now);
+  sharedVoiceboxTick(now);
+  autonomyManagerTick(now);
+  eveLinkManagerTick(now);
   sequenceEngineTick(now);
 
   // Servo velocity interpolation
@@ -271,6 +292,21 @@ void loop() {
     motionLayerApplyMotorTankLimits(&ml, &mr);
     motorSetLeftRight(ml, mr);
     lastCommandMillis = now;
+  }
+
+  {
+    uint32_t am = 0;
+    if (safetyBlock) {
+      am |= EVE_ASSIST_MASK_SAFETY;
+    }
+    if (dockDriving) {
+      am |= EVE_ASSIST_MASK_DOCK;
+    }
+    if (manualFromControl) {
+      am |= EVE_ASSIST_MASK_MANUAL;
+    }
+    eveTargetAssistSetSuppressMask(am);
+    eveTargetAssistTick(now);
   }
 
   // LDR: turn flashlight on when dark

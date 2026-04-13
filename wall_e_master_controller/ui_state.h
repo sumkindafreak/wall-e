@@ -65,6 +65,10 @@ typedef enum {
 extern InputMode     g_inputMode;
 extern Page          g_currentPage;
 extern ControlAuthority g_controlAuthority;
+/** Last motion policy from Base telemetry: 0=any, 1=cyd_only, 2=web_only */
+extern uint8_t       g_motionPolicyFromBrain;
+/** True when CYD sticks are active but policy blocks drive (see Base policyDenyCyd) */
+extern bool          g_policyDenyCyd;
 extern bool          g_estop;
 extern bool          g_advancedMode;   // Triple-tap top-left
 extern bool          g_overlayVisible; // Long-press quick action
@@ -87,6 +91,8 @@ extern bool          g_auWaypointFollow;
 
 /** PAGE_HELP: 0 = topic list, 1..4 = topic body */
 extern uint8_t       g_helpSection;
+/** PAGE_BEHAVIOUR: 0..3 → six animations each (24 total) */
+extern uint8_t       g_behaviourAnimPage;
 
 // ------------------------------------------------------------
 //  Init — call from setup()

@@ -49,6 +49,20 @@
 #define JOY_CY           95  // Center Y (above bottom bar; +15px vs old layout)
 #define JOY_RADIUS      70   // Larger radius
 
+// Physical console — 2×3 favourite buttons (right half of main screen; touch must match)
+#define PHYS_FAV_BOX_W      64
+#define PHYS_FAV_BOX_H      32
+#define PHYS_FAV_COL_GAP    8
+#define PHYS_FAV_ROW_STEP   38
+#define PHYS_FAV_TOP_PAD    8
+#define PHYS_FAV_BOTTOM_PAD 6
+
+/** Behaviour — compact page toggle (center, above hint; touch_input must match) */
+#define BEHAV_PAGE_BTN_W    88
+#define BEHAV_PAGE_BTN_H    18
+#define BEHAV_PAGE_BTN_Y    172
+#define BEHAV_PAGE_BTN_X    ((SCREEN_W - BEHAV_PAGE_BTN_W) / 2)
+
 #define GRID_SPACING    20
 #define EYELET_X        296
 #define EYELET_Y        8
@@ -122,6 +136,8 @@ void uiDrawStaticServoTest(void);    // NEW: Individual servo test page
 #if USE_PHYSICAL_JOYSTICKS
 void uiDrawPhysicalJoystickLayout(void);  // Battery graph left, behaviour right
 #endif
+/** index 0..5 — favourite cells (right panel), centred; used by draw + touch_input */
+void uiPhysFavouriteCellPos(int index, int* outBx, int* outBy);
 
 // Physical joystick visual feedback
 void uiDrawPhysicalJoystickIndicators(float joy1X, float joy1Y, float joy2X, float joy2Y);

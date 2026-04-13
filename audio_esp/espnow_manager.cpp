@@ -16,6 +16,9 @@
 
 #include "audio_protocol.h"
 #include "node_health_protocol.h"
+#include "voicebox_protocol.h"
+#include "menu_protocol.h"
+#include "voicebox_router.h"
 
 #define WALLE_ESPNOW_WIFI_CHANNEL 11
 
@@ -25,9 +28,11 @@ static bool s_peer_ok = false;
 static unsigned long s_lastMicTelemMs = 0;
 static unsigned long s_lastStatusMs = 0;
 static unsigned long s_lastHealthMs = 0;
+static unsigned long s_lastUiMs = 0;
 #define MIC_TELEM_INTERVAL_MS  100
 #define STATUS_INTERVAL_MS     200
 #define NODE_HEALTH_INTERVAL_MS 900
+#define UI_TELEM_INTERVAL_MS   180
 
 static bool ensurePeer(void) {
   if (s_peer_ok) return true;
@@ -58,6 +63,13 @@ static uint8_t eventToTrack(uint8_t evt) {
 /* Handle incoming WalleAudioCommandPacket_t */
 static void onRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len) {
   (void)info;
+  if (len >= (int)sizeof(WalleVoiceboxCmdPacket_t)) {
+    const WalleVoiceboxCmdPacket_t* vx = (const WalleVoiceboxCmdPacket_t*)data;
+    if (vx->magic == WALLE_VOICEBOX_CMD_MAGIC) {
+      voiceboxRouterApplyCmd(data, len);
+      return;
+    }
+  }
   if (len < (int)sizeof(WalleAudioCommandPacket_t)) return;
   const WalleAudioCommandPacket_t* p = (const WalleAudioCommandPacket_t*)data;
   if (p->magic != WALLE_AUDIO_MAGIC) return;
@@ -169,4 +181,16 @@ void espnowManagerSendNodeHealth(void) {
   h.last_error = 0;
   h.flags = 0;
   esp_now_send(s_bcast, (uint8_t*)&h, sizeof(h));
+}
+
+bool espnowManagerSendUiTelem(const WalleAudioUiTelemPacket_t* pkt, bool force) {
+  if (!s_init || !pkt || !ensurePeer()) return false;
+  unsigned long now = millis();
+  if (!force && (now - s_lastUiMs < UI_TELEM_INTERVAL_MS)) return false;
+  s_lastUiMs = now;
+  WalleAudioUiTelemPacket_t copy = *pkt;
+  copy.magic = WALLE_AUDIO_UI_MAGIC;
+  if (copy.version == 0) copy.version = WALLE_MENU_PROTO_VERSION;
+  esp_err_t e = esp_now_send(s_bcast, (uint8_t*)&copy, sizeof(copy));
+  return e == ESP_OK;
 }
