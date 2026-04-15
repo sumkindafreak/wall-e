@@ -13,6 +13,10 @@
 #define EVE_TOF_HAVE_VL53 0
 #endif
 
+#if EVE_TOF_HAVE_VL53
+#include <Wire.h>
+#endif
+
 static EveTofRawFrame s_last;
 static uint32_t s_lastPollMs;
 
@@ -47,9 +51,6 @@ void eveTofManagerInit(void) {
   return;
 #endif
 
-  Wire.begin(EVE_I2C_SDA, EVE_I2C_SCL);
-  Wire.setClock(400000);
-
 #if EVE_TOF_SIMULATE
   s_simT0 = millis();
   Serial.println(F("[EVE_TOF] Manager: SIMULATE mode"));
@@ -57,6 +58,9 @@ void eveTofManagerInit(void) {
 #endif
 
 #if EVE_TOF_HAVE_VL53
+  Wire.begin(EVE_I2C_SDA, EVE_I2C_SCL);
+  Wire.setClock(400000);
+
   s_hw_dual = false;
   s_hw_single = false;
   s_vl_left.setBus(&Wire);
@@ -78,6 +82,8 @@ void eveTofManagerInit(void) {
   delay(80);
   if (!s_vl_right.init()) {
     Serial.println(F("[EVE_TOF] Second VL53L1X init failed"));
+    s_hw_single = true;
+    Serial.println(F("[EVE_TOF] Falling back to single-sensor mode (first VL53L1X)"));
     return;
   }
   s_vl_right.setAddress(EVE_TOF_ADDR_SECOND);
@@ -102,6 +108,7 @@ void eveTofManagerInit(void) {
 #endif
 }
 
+#if EVE_TOF_HAVE_VL53
 static bool goodReading(VL53L1X& s, uint16_t mm) {
   if (s.timeoutOccurred()) {
     return false;
@@ -111,6 +118,7 @@ static bool goodReading(VL53L1X& s, uint16_t mm) {
   }
   return true;
 }
+#endif
 
 void eveTofManagerPoll(uint32_t nowMs) {
 #if !EVE_ENABLE_TOF

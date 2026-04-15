@@ -13,6 +13,7 @@ static uint8_t s_agree = 0;
 static EveTargetModel s_out = EVE_TARGET_MODEL_NONE;
 static uint8_t s_conf = 0;
 static uint32_t s_outSince = 0;
+static uint32_t s_lastNowMs = 0;
 
 static bool nearMm(int32_t mm) {
   return mm > 0 && mm <= EVE_TOF_NEAR_MM;
@@ -75,10 +76,11 @@ void eveTargetTrackerInit(void) {
   s_out = EVE_TARGET_MODEL_NONE;
   s_conf = 0;
   s_outSince = 0;
+  s_lastNowMs = 0;
 }
 
 void eveTargetTrackerUpdate(const EveTofRawFrame* raw, uint32_t nowMs) {
-  (void)nowMs;
+  s_lastNowMs = nowMs;
   if (!raw) {
     return;
   }
@@ -114,7 +116,7 @@ void eveTargetTrackerUpdate(const EveTofRawFrame* raw, uint32_t nowMs) {
   if (s_agree >= 3) {
     if (z != s_out) {
       s_out = z;
-      s_outSince = millis();
+      s_outSince = nowMs;
       s_conf = (uint8_t)min(100, (int)s_conf + 25);
     } else {
       if (z != EVE_TARGET_MODEL_NONE && s_conf < 100) {
@@ -139,5 +141,6 @@ void eveTargetTrackerGetSnapshot(EveTargetSnapshot* out) {
   out->zone = s_out;
   out->confidencePct = s_conf;
   out->distanceMm = pickDistance(s_out);
-  out->stableStrong = (millis() - s_outSince) > 700u && s_conf > 50 && s_out != EVE_TARGET_MODEL_NONE;
+  out->stableStrong =
+      ((uint32_t)(s_lastNowMs - s_outSince) > 700u) && s_conf > 50 && s_out != EVE_TARGET_MODEL_NONE;
 }

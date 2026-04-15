@@ -98,6 +98,11 @@ static void deliverIfCrcOk(void) {
     resetParser();
     return;
   }
+  if (fVer != EVE_FRAME_VER) {
+    s_rxErr++;
+    resetParser();
+    return;
+  }
   s_rxOk++;
   if (s_rxCb) {
     s_rxCb(fType, fPayload, fLen, fSeq);

@@ -82,6 +82,11 @@ void eveFaceDisplayInit(void) {
   if (!s_buf1) {
     s_buf1 = (lv_color_t*)malloc(buf_bytes);
   }
+  if (!s_buf1) {
+    Serial.println(F("[EVE_FACE] LVGL buffer allocation failed; face display disabled"));
+    s_disp = nullptr;
+    return;
+  }
   lv_display_set_buffers(s_disp, s_buf1, nullptr, buf_bytes, LV_DISPLAY_RENDER_MODE_PARTIAL);
 
   lv_obj_t* scr = lv_screen_active();

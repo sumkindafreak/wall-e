@@ -41,6 +41,12 @@ static uint32_t s_lastHelloMs = 0;
 static uint32_t s_lastEveHbMs = 0;
 static uint32_t s_lastRxMs = 0;
 static uint32_t s_lastLowBatMs = 0;
+static uint32_t s_lastUnauthorizedLogMs = 0;
+
+static bool stateAllowsRemoteControl(void) {
+  return (s_state == EveState::IDLE || s_state == EveState::ATTACHED || s_state == EveState::ESCORT ||
+          s_state == EveState::INTERACT || s_state == EveState::DOCKED || s_state == EveState::LOW_POWER);
+}
 
 static void sendEveHello(void) {
   StaticJsonDocument<256> doc;
@@ -234,25 +240,45 @@ void stateMachineOnUartRx(uint8_t type, const uint8_t* payload, size_t len, uint
       break;
     }
     case MSG_ATTACH_CONFIRMED:
+      if (s_sessionId == 0) {
+        break;
+      }
       s_state = EveState::ATTACHED;
       eyesSetMode(1);
       Serial.println(F("[EVE][SM] ATTACHED"));
       break;
     case MSG_MODE_ESCORT:
+      if (s_sessionId == 0) {
+        break;
+      }
       s_state = EveState::ESCORT;
       Serial.println(F("[EVE][SM] ESCORT"));
       break;
     case MSG_MODE_DOCK:
+      if (s_sessionId == 0) {
+        break;
+      }
       s_state = EveState::DOCKED;
       Serial.println(F("[EVE][SM] DOCK"));
       eyesNotifyDockingState(true, eveBatteryDataValid() && eveBatteryCurrentA() > 0.03f);
       break;
     case MSG_MODE_IDLE:
+      if (s_sessionId == 0) {
+        break;
+      }
       s_state = EveState::IDLE;
       Serial.println(F("[EVE][SM] IDLE"));
       eyesNotifyDockingState(false, false);
       break;
     case MSG_MOVE_SERVO: {
+      if (s_sessionId == 0 || !stateAllowsRemoteControl()) {
+        uint32_t now = millis();
+        if ((uint32_t)(now - s_lastUnauthorizedLogMs) > 1000u) {
+          s_lastUnauthorizedLogMs = now;
+          Serial.println(F("[EVE][SM] Ignored MOVE_SERVO before handshake/state ready"));
+        }
+        break;
+      }
       StaticJsonDocument<128> doc;
       if (deserializeJson(doc, jsonBuf)) {
         break;
@@ -263,6 +289,14 @@ void stateMachineOnUartRx(uint8_t type, const uint8_t* payload, size_t len, uint
       break;
     }
     case MSG_PLAY_SOUND: {
+      if (s_sessionId == 0 || !stateAllowsRemoteControl()) {
+        uint32_t now = millis();
+        if ((uint32_t)(now - s_lastUnauthorizedLogMs) > 1000u) {
+          s_lastUnauthorizedLogMs = now;
+          Serial.println(F("[EVE][SM] Ignored PLAY_SOUND before handshake/state ready"));
+        }
+        break;
+      }
       StaticJsonDocument<64> doc;
       if (deserializeJson(doc, jsonBuf)) {
         break;
@@ -272,6 +306,14 @@ void stateMachineOnUartRx(uint8_t type, const uint8_t* payload, size_t len, uint
       break;
     }
     case MSG_STOP:
+      if (s_sessionId == 0 || !stateAllowsRemoteControl()) {
+        uint32_t now = millis();
+        if ((uint32_t)(now - s_lastUnauthorizedLogMs) > 1000u) {
+          s_lastUnauthorizedLogMs = now;
+          Serial.println(F("[EVE][SM] Ignored STOP before handshake/state ready"));
+        }
+        break;
+      }
       servoSetAngles(90, 90);
       audioPlayTrack(0);
       break;

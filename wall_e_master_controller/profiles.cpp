@@ -15,10 +15,12 @@ uint8_t g_currentProfile = PROFILE_DEMO;
 // Preferences storage
 static Preferences prefs;
 
+// USER-CUSTOMIZABLE: Default profile values.
+// These are your baseline settings before Preferences overrides are loaded.
 // Profile definitions
 Profile profiles[PROFILE_COUNT] = {
   // ============================================================
-  // PROFILE 0: KID MODE
+  // PROFILE 0: KID MODE (USER-CUSTOMIZABLE defaults)
   // Safe, slow, limited animations
   // ============================================================
   {
@@ -52,7 +54,7 @@ Profile profiles[PROFILE_COUNT] = {
   },
   
   // ============================================================
-  // PROFILE 1: DEMO MODE
+  // PROFILE 1: DEMO MODE (USER-CUSTOMIZABLE defaults)
   // Balanced for demonstrations
   // ============================================================
   {
@@ -86,7 +88,7 @@ Profile profiles[PROFILE_COUNT] = {
   },
   
   // ============================================================
-  // PROFILE 2: ADVANCED MODE
+  // PROFILE 2: ADVANCED MODE (USER-CUSTOMIZABLE defaults)
   // Full control, no limits
   // ============================================================
   {

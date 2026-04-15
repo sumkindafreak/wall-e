@@ -127,6 +127,11 @@ void uiDrawPageAutonomy(void);
 void uiDrawThinkingStrip(const TelemetryPacket* tm, bool linkOk);
 void uiDrawPageHelp(void);
 void uiDrawPageSdExplorer(void);
+void uiShowToast(const char* msg, uint32_t durationMs);
+void uiDrawToast(void);
+void uiSetFavoriteButtonHighlight(uint8_t slot, uint32_t durationMs);
+void uiSetAnimationTileHighlight(uint8_t animId, uint32_t durationMs);
+void uiUpdateBehaviourTileHighlights(void);
 void uiDrawStaticDrive(void);  // Touchscreen Drive page static
 void uiDrawStaticBehaviour(void);
 void uiDrawStaticSystem(void);

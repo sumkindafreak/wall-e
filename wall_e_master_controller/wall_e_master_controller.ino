@@ -58,6 +58,34 @@
 
 TFT_eSPI tft = TFT_eSPI();
 
+// USER-CUSTOMIZABLE: Button-press toast durations (ms).
+static const uint32_t BTN_TOAST_OK_MS = 1400u;
+static const uint32_t BTN_TOAST_WARN_MS = 1200u;
+static const uint32_t BTN_HIGHLIGHT_MS = 220u;
+static const uint32_t TOUCH_TILE_HIGHLIGHT_MS = 240u;
+
+static void triggerButtonMappedAnimation(uint8_t slot, const char* buttonName) {
+  Profile* p = profileGet();
+  if (!p || slot >= 6) return;
+  uint8_t animId = p->favoriteAnimations[slot];
+  if (animId >= ANIMATION_COUNT) {
+    char msg[48];
+    snprintf(msg, sizeof(msg), "%s: no animation assigned", buttonName ? buttonName : "Button");
+    uiShowToast(msg, BTN_TOAST_WARN_MS);
+    playUISound(SOUND_ERROR);
+    return;
+  }
+  motionTriggerAnimation(animId);
+  uiSetFavoriteButtonHighlight(slot, BTN_HIGHLIGHT_MS);
+  const char* nm = animationLibrary[animId].name;
+  char msg[56];
+  snprintf(msg, sizeof(msg), "%s -> %s (#%u)", buttonName ? buttonName : "Button",
+           nm ? nm : "Anim", (unsigned)animId);
+  uiShowToast(msg, BTN_TOAST_OK_MS);
+  Serial.printf("[BtnMap] %s -> animation %u (%s)\n", buttonName ? buttonName : "Button",
+                (unsigned)animId, nm ? nm : "Anim");
+}
+
 void setup() {
   Serial.begin(115200);
   delay(300);
@@ -731,6 +759,7 @@ void loop() {
   // Behaviour page - mood buttons trigger animations
   if (zone >= TOUCH_ZONE_ANIM_0 && zone <= TOUCH_ZONE_ANIM_23) {
     uint8_t animId = zone - TOUCH_ZONE_ANIM_0;
+    uiSetAnimationTileHighlight(animId, TOUCH_TILE_HIGHLIGHT_MS);
     motionTriggerAnimation(animId);
     playUISound(SOUND_CLICK);
     Serial.printf("[Behaviour] Animation %d triggered\n", animId);
@@ -740,6 +769,12 @@ void loop() {
   if (zone >= (TOUCH_ZONE_ANIM_0 + 100) && zone <= (TOUCH_ZONE_ANIM_23 + 100)) {
     uint8_t animId = zone - (TOUCH_ZONE_ANIM_0 + 100);
     profileToggleFavoriteAnimation(animId);
+    {
+      const char* nm = (animId < ANIMATION_COUNT) ? animationLibrary[animId].name : "Anim";
+      char msg[56];
+      snprintf(msg, sizeof(msg), "Fav toggled: %s (#%u)", nm ? nm : "Anim", (unsigned)animId);
+      uiShowToast(msg, 1200);
+    }
     playUISound(SOUND_CONFIRM);
     g_needStaticRedraw = true;
     Serial.printf("[Behaviour] Toggled favorite for animation %d\n", animId);
@@ -779,28 +814,25 @@ void loop() {
     }
   }
   
-  // Individual joystick button = Eyebrow raise (NO deadman required)
+  // USER-CUSTOMIZABLE: hardware button -> favorite slot mapping.
+  // Deadman behavior must remain safety-only.
+  // Individual joystick buttons = programmable favorites slot 0/1 (NO deadman required)
   if (btn.pressed[BTN_JOY1] && !isBothJoystickButtonsHeld()) {
-    motionTriggerAnimation(3);  // Right eyebrow
-    Serial.println(F("[Action] Right eyebrow raise (no deadman needed)"));
+    triggerButtonMappedAnimation(0, "JOY1");
   }
   
   if (btn.pressed[BTN_JOY2] && !isBothJoystickButtonsHeld()) {
-    motionTriggerAnimation(4);  // Left eyebrow
-    Serial.println(F("[Action] Left eyebrow raise (no deadman needed)"));
+    triggerButtonMappedAnimation(1, "JOY2");
   }
   
-  // Extra buttons: optional scripted queue macros OR profile mappings
+  // Extra buttons: programmable favorites slot 2..5 (deadman remains dedicated safety hold)
 #if USE_CMD_BUTTON_MACROS
   commandInputPollButtonMacros(btn);
 #else
-  for (int i = 2; i < 8; i++) {
-    if (i == 6) continue;  // Skip deadman button
-    if (btn.pressed[i]) {
-      profileHandleButtonAction(i - 2);  // Map to profile button 0-5
-      Serial.printf("[Action] Button %d pressed (no deadman needed)\n", i);
-    }
-  }
+  if (btn.pressed[BTN_EXTRA1]) triggerButtonMappedAnimation(2, "EXTRA1");
+  if (btn.pressed[BTN_EXTRA2]) triggerButtonMappedAnimation(3, "EXTRA2");
+  if (btn.pressed[BTN_EXTRA3]) triggerButtonMappedAnimation(4, "EXTRA3");
+  if (btn.pressed[BTN_EXTRA4]) triggerButtonMappedAnimation(5, "EXTRA4");
 #endif
   
   macroCheckJoystickOverride(joystickActive);
@@ -901,6 +933,8 @@ void loop() {
   }
 
   uiDrawThinkingStrip(&telem, connected);
+  uiUpdateBehaviourTileHighlights();
+  uiDrawToast();
 
   if (g_advancedMode) {
     uiDrawAdvancedModeOverlay();

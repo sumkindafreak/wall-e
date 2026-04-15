@@ -7,11 +7,13 @@
 #include <Arduino.h>
 #include "sx1509_input.h"
 
-/* 1 = EXTRA1–4 map to queue macros (see command_input.cpp). Profile button
- *     actions for those indices are skipped — set 0 to restore profile-only.
+/* USER-CUSTOMIZABLE:
+ * 1 = EXTRA1–4 map to queue macros (see command_input.cpp).
+ * 0 = normal programmable button mode (recommended; uses favorites/animations).
+ * Profile button actions for those indices are skipped when this is 1.
  */
 #ifndef USE_CMD_BUTTON_MACROS
-#define USE_CMD_BUTTON_MACROS 1
+#define USE_CMD_BUTTON_MACROS 0
 #endif
 
 void commandInputInit(void);

@@ -62,6 +62,9 @@ extern unsigned long lastCommandMillis;
 #endif
 
 static void addCORS(void);
+static bool requireApiToken(void) {
+  return apiSecurityRejectIfBadToken();
+}
 
 static bool webMotionAllowedOr403(void) {
   if (motionAuthorityAllowWeb()) return true;
@@ -186,6 +189,7 @@ static void handleRoot() {
 }
 
 static void handleForward() {
+  if (requireApiToken()) return;
   if (!webMotionAllowedOr403()) return;
   lastCommandMillis = millis();
   motorSetDriveProfile(DRIVE_PROFILE_NORMAL, "WebUI forward");
@@ -196,6 +200,7 @@ static void handleForward() {
 }
 
 static void handleReverse() {
+  if (requireApiToken()) return;
   if (!webMotionAllowedOr403()) return;
   lastCommandMillis = millis();
   motorSetDriveProfile(DRIVE_PROFILE_NORMAL, "WebUI reverse");
@@ -206,6 +211,7 @@ static void handleReverse() {
 }
 
 static void handleLeft() {
+  if (requireApiToken()) return;
   if (!webMotionAllowedOr403()) return;
   lastCommandMillis = millis();
   motorSetDriveProfile(DRIVE_PROFILE_NORMAL, "WebUI left");
@@ -216,6 +222,7 @@ static void handleLeft() {
 }
 
 static void handleRight() {
+  if (requireApiToken()) return;
   if (!webMotionAllowedOr403()) return;
   lastCommandMillis = millis();
   motorSetDriveProfile(DRIVE_PROFILE_NORMAL, "WebUI right");
@@ -226,6 +233,7 @@ static void handleRight() {
 }
 
 static void handleStop() {
+  if (requireApiToken()) return;
   lastCommandMillis = millis();
   _webDriveLeft = _webDriveRight = 0;
   _webManualSticky = false;
@@ -236,6 +244,7 @@ static void handleStop() {
 }
 
 static void handleSpeed() {
+  if (requireApiToken()) return;
   if (server.hasArg("value")) {
     int val = server.arg("value").toInt();
     val = constrain(val, 0, (int)_maxSpeed);
@@ -251,6 +260,7 @@ static void handleSpeed() {
 // Tank drive: left and right in -255..255. Smoother diagonals and curves.
 // When both zero, call motorStop() so robot always stops when joystick/sliders return to centre.
 static void handleDrive() {
+  if (requireApiToken()) return;
   if (!webMotionAllowedOr403()) return;
   if (!server.hasArg("left") || !server.hasArg("right")) {
     server.send(400, "text/plain", "Missing left or right");
@@ -291,6 +301,7 @@ static void handleSettingsGet() {
 }
 
 static void handleSettingsSet() {
+  if (requireApiToken()) return;
   if (server.hasArg("max_speed")) {
     int v = server.arg("max_speed").toInt();
     _maxSpeed = (uint8_t)constrain(v, 1, 255);
@@ -316,6 +327,7 @@ static void handleWifiScan() {
 }
 
 static void handleWifiConnect() {
+  if (requireApiToken()) return;
   if (!server.hasArg("ssid") || !server.hasArg("password")) {
     server.send(400, "application/json", "{\"error\":\"Missing ssid or password\"}");
     return;
@@ -335,6 +347,7 @@ static void handleWifiConnect() {
 }
 
 static void handleWifiDisconnect() {
+  if (requireApiToken()) return;
   wifiDisconnectSTA();
   displayUpdateWifi();
   addCORS();
@@ -342,6 +355,7 @@ static void handleWifiDisconnect() {
 }
 
 static void handleWifiClear() {
+  if (requireApiToken()) return;
   wifiClearCredentials();
   displayUpdateWifi();
   addCORS();
@@ -355,6 +369,7 @@ static void handleNotFound() {
 // --- Servo Handlers ---
 
 static void handleServoSet() {
+  if (requireApiToken()) return;
   if (!server.hasArg("ch") || !server.hasArg("pos")) {
     server.send(400, "application/json", "{\"error\":\"Missing ch or pos\"}");
     return;
@@ -371,6 +386,7 @@ static void handleServoSet() {
 }
 
 static void handleServoNeutral() {
+  if (requireApiToken()) return;
   servoNeutral(SERVO_SLOW_SPEED);
   addCORS();
   server.send(200, "application/json", "{\"ok\":true}");
@@ -389,6 +405,7 @@ static void handleImuStatus() {
 }
 
 static void handleImuRecalibrate() {
+  if (requireApiToken()) return;
   forceRecalibration();
   addCORS();
   server.send(200, "application/json", "{\"status\":\"calibrating\"}");
@@ -439,6 +456,7 @@ static void handleAutonomyStatus() {
 }
 
 static void handleAutonomyEnable() {
+  if (requireApiToken()) return;
   if (server.hasArg("enable")) {
     bool en = (server.arg("enable") == "1" || server.arg("enable") == "true");
     autonomySetEnabled(en);
@@ -449,6 +467,7 @@ static void handleAutonomyEnable() {
 
 /** Sticky manual override until /drive, /stop, or active=0 (AI Assist "take over"). */
 static void handleAutonomyManual() {
+  if (requireApiToken()) return;
   if (server.hasArg("active")) {
     _webManualSticky = (server.arg("active") == "1" || server.arg("active") == "true");
   }
@@ -457,6 +476,7 @@ static void handleAutonomyManual() {
 }
 
 static void handleMemorySetHome() {
+  if (requireApiToken()) return;
   if (gpsHasFix()) {
     memorySetHome(gpsGetLatitude(), gpsGetLongitude());
     memorySave();
@@ -467,18 +487,21 @@ static void handleMemorySetHome() {
 
 // --- Laser (GPIO on base, aim via PCA9685 pan/tilt) ---
 static void handleLaserOn() {
+  if (requireApiToken()) return;
   laserOn();
   addCORS();
   server.send(200, "text/plain", "OK");
 }
 
 static void handleLaserOff() {
+  if (requireApiToken()) return;
   laserOff();
   addCORS();
   server.send(200, "text/plain", "OK");
 }
 
 static void handleLaserBrightness() {
+  if (requireApiToken()) return;
   if (server.hasArg("value")) {
     int v = server.arg("value").toInt();
     v = constrain(v, 0, 255);
@@ -489,6 +512,7 @@ static void handleLaserBrightness() {
 }
 
 static void handleLaserSet() {
+  if (requireApiToken()) return;
   int pan = server.hasArg("pan") ? server.arg("pan").toInt() : 50;
   int tilt = server.hasArg("tilt") ? server.arg("tilt").toInt() : 50;
   laserAim(pan, tilt);
@@ -497,6 +521,7 @@ static void handleLaserSet() {
 }
 
 static void handleLaserFire() {
+  if (requireApiToken()) return;
   int pan = server.hasArg("pan") ? server.arg("pan").toInt() : 50;
   int tilt = server.hasArg("tilt") ? server.arg("tilt").toInt() : 50;
   uint32_t ms = server.hasArg("time") ? (uint32_t)server.arg("time").toInt() : 1000;
@@ -512,6 +537,7 @@ static void handleLaserStatus() {
 }
 
 static void handleLaserScan() {
+  if (requireApiToken()) return;
   bool on = false;
   if (server.hasArg("enable")) {
     on = (server.arg("enable") == "1" || server.arg("enable") == "true");
@@ -522,6 +548,7 @@ static void handleLaserScan() {
 }
 
 static void handleLaserMood() {
+  if (requireApiToken()) return;
   if (server.hasArg("mood")) {
     laserSetMoodMode((int8_t)server.arg("mood").toInt());
   }
@@ -530,6 +557,7 @@ static void handleLaserMood() {
 }
 
 static void handleLaserSmooth() {
+  if (requireApiToken()) return;
   int pan = server.hasArg("pan") ? server.arg("pan").toInt() : 50;
   int tilt = server.hasArg("tilt") ? server.arg("tilt").toInt() : 50;
   uint16_t per = server.hasArg("delay") ? (uint16_t)server.arg("delay").toInt() : 30;
@@ -566,6 +594,7 @@ static void handleVisionSnapshotUrl() {
 }
 
 static void handleAudioPlay() {
+  if (requireApiToken()) return;
   if (!server.hasArg("id")) {
     server.send(400, "text/plain", "Missing id");
     return;
@@ -581,6 +610,7 @@ static void handleAudioPlay() {
 }
 
 static void handleAudioVolume() {
+  if (requireApiToken()) return;
   if (!server.hasArg("value")) {
     server.send(400, "text/plain", "Missing value");
     return;
@@ -619,6 +649,7 @@ static void handleEmotionApi() {
 }
 
 static void handleEmotionSetApi() {
+  if (requireApiToken()) return;
   if (server.hasArg("clear") && server.arg("clear") == "1") {
     walleEmotionPoseSetManualOverride(-1);
   } else if (server.hasArg("id")) {
@@ -632,12 +663,14 @@ static void handleEmotionSetApi() {
 }
 
 static void handleAudioTestApi() {
+  if (requireApiToken()) return;
   bool ok = audioEspNowPlayTrack(1, WALLE_AUDIO_PRIORITY_WEB);
   addCORS();
   server.send(ok ? 200 : 503, "text/plain", ok ? "OK" : "FAIL");
 }
 
 static void handleDockStartApi() {
+  if (requireApiToken()) return;
 #if USE_AUTONOMOUS_DOCKING
   autonomousDockingSetRequested(true);
 #endif
@@ -676,6 +709,7 @@ static void handleAudioMic() {
 
 /** Cancel autonomous docking + return-home (matches webui /api/dock/cancel) */
 static void handleDockCancelApi() {
+  if (requireApiToken()) return;
 #if USE_AUTONOMOUS_DOCKING
   autonomousDockingSetRequested(false);
 #endif
@@ -695,11 +729,13 @@ static void handleFilesListApi() {
 }
 
 static void handleVoiceCommandApi() {
+  if (requireApiToken()) return;
   addCORS();
   server.send(200, "application/json", "{\"ok\":true,\"note\":\"not_implemented\"}");
 }
 
 static void handleAiChatApi() {
+  if (requireApiToken()) return;
   addCORS();
   server.send(200, "text/plain", "OK");
 }
@@ -713,7 +749,7 @@ static void handleMotionAuthorityGet(void) {
 }
 
 static void handleMotionAuthoritySet(void) {
-  if (apiSecurityRejectIfBadToken()) return;
+  if (requireApiToken()) return;
   if (!server.hasArg("mode")) {
     addCORS();
     server.send(400, "application/json", "{\"ok\":false,\"error\":\"missing mode\"}");
@@ -764,6 +800,7 @@ static void handleAuditApi(void) {
 }
 
 static void handleApiTokenPost(void) {
+  if (requireApiToken()) return;
   if (!server.hasArg("plain")) {
     addCORS();
     server.send(400, "application/json", "{\"ok\":false,\"error\":\"expected JSON body\"}");

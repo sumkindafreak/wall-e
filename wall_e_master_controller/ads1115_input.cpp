@@ -13,7 +13,10 @@ static int16_t centerRaw[4] = {0, 0, 0, 0};
 static const int16_t ADC_RANGE = 17000;
 static bool calibrated = false;
 
-// Tuning - MAXIMUM SPEED configuration
+// USER-CUSTOMIZABLE: Joystick feel defaults (also overridden by active profile)
+// - deadzone: ignore tiny stick noise
+// - expo: 0 linear, 1 very soft around center
+// - maxOutput: global speed cap
 static float deadzone = 0.03f;   // 3% deadzone (minimal)
 static float expo = 0.0f;        // 0% expo = LINEAR response (fastest!)
 static float maxOutput = 1.0f;   // 100% max speed (full power)

@@ -9,31 +9,10 @@
 #include <Arduino.h>
 #include <cstring>
 
-#define DOCK_CMD_MAGIC        0x434D444B
-#define DOCK_CMD_FORCE_OFF    1
-#define DOCK_CMD_RESET        2
-#define DOCK_CMD_WIFI_CONFIG  3
-#define DOCK_CMD_TIME         4
-#define DOCK_CMD_REQUEST_CHARGE 5
-#define DOCK_CMD_APPROACH_STAGE 6
-#define DOCK_CMD_DOCKING_ARM    7
-#define DOCK_CMD_DOCKING_DISARM 8
-
-typedef struct __attribute__((packed)) {
-  uint32_t magic;
-  uint32_t dock_id;
-  uint8_t  cmd;
-  uint8_t  pad[3];
-} DockCommandPacket_t;
-
-typedef struct __attribute__((packed)) {
-  uint32_t magic;
-  uint32_t dock_id;
-  uint8_t  cmd;
-  uint8_t  pad[3];
-  char     ssid[33];
-  char     pass[65];
-} DockWifiConfigPacket_t;
+static_assert(sizeof(DockCommandPacket_t) == 12, "DockCommandPacket_t wire-size drift");
+static_assert(sizeof(DockApproachStagePacket_t) == 14, "DockApproachStagePacket_t wire-size drift");
+static_assert(sizeof(DockTimePacket_t) == 16, "DockTimePacket_t wire-size drift");
+static_assert(sizeof(DockWifiConfigPacket_t) == 110, "DockWifiConfigPacket_t wire-size drift");
 
 static uint8_t s_broadcast_mac[] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
 static bool s_peer_added = false;
@@ -77,14 +56,6 @@ bool dockControllerSendWifiConfig(const char* ssid, const char* pass, uint32_t d
   esp_err_t r = esp_now_send(s_broadcast_mac, (uint8_t*)&pkt, sizeof(pkt));
   return (r == ESP_OK);
 }
-
-typedef struct __attribute__((packed)) {
-  uint32_t magic;
-  uint32_t dock_id;
-  uint8_t  cmd;
-  uint8_t  pad[3];
-  uint32_t unix_time;
-} DockTimePacket_t;
 
 bool dockControllerSendTime(uint32_t unix_time, uint32_t dock_id) {
   if (!ensureBroadcastPeer()) return false;

@@ -32,6 +32,13 @@ static char s_lastEmoStr[16] = "";
 static int s_lastJoyDotX = JOY_CX, s_lastJoyDotY = JOY_CY;
 static int s_lastLeftSpeed = 999, s_lastRightSpeed = 999;
 static const int DOT_R = 8;  // Larger dot for single joystick
+static char s_toastMsg[64] = "";
+static uint32_t s_toastUntilMs = 0;
+static bool s_toastDirty = false;
+static uint32_t s_favHighlightUntil[6] = {0, 0, 0, 0, 0, 0};
+static uint32_t s_animTileHighlightUntil[24] = {0};
+static bool s_animTileDirty = false;
+static bool s_animTileHadActiveVisible = false;
 
 void uiDrawInit(TFT_eSPI* tft) {
   g_tft = tft;
@@ -90,6 +97,11 @@ static const char* getAutonomyStateName(uint8_t state) {
     case 10: return "WAYPOINT_NAV";
     default: return "UNKNOWN";
   }
+}
+
+static bool isAnimTileHighlighted(uint8_t animId) {
+  if (animId >= 24) return false;
+  return ((int32_t)(s_animTileHighlightUntil[animId] - millis()) > 0);
 }
 
 // ------------------------------------------------------------
@@ -294,7 +306,16 @@ void uiDrawPhysicalJoystickLayout(void) {
   for (int i = 0; i < 6; i++) {
     int bx, by;
     uiPhysFavouriteCellPos(i, &bx, &by);
-    g_tft->drawRect(bx, by, PHYS_FAV_BOX_W, PHYS_FAV_BOX_H, C_BORDER);
+    bool pressedFx = ((int32_t)(s_favHighlightUntil[i] - millis()) > 0);
+    if (pressedFx) {
+      g_tft->fillRect(bx + 1, by + 1, PHYS_FAV_BOX_W - 2, PHYS_FAV_BOX_H - 2, C_ACCENT);
+      g_tft->drawRect(bx, by, PHYS_FAV_BOX_W, PHYS_FAV_BOX_H, C_WHITE);
+      g_tft->setTextColor(C_BG, C_ACCENT);
+    } else {
+      g_tft->fillRect(bx + 1, by + 1, PHYS_FAV_BOX_W - 2, PHYS_FAV_BOX_H - 2, C_BG);
+      g_tft->drawRect(bx, by, PHYS_FAV_BOX_W, PHYS_FAV_BOX_H, C_BORDER);
+      g_tft->setTextColor(C_ACCENT, C_BG);
+    }
     const char* name = displayNames[i];
     int tw = (int)strlen(name) * animCharW;
     if (tw > PHYS_FAV_BOX_W - 4) tw = PHYS_FAV_BOX_W - 4;
@@ -598,7 +619,16 @@ void uiDrawPageBehaviour(void) {
         break;
       }
     }
+    bool pressedFx = (animId >= 0 && animId < 24) ? isAnimTileHighlighted((uint8_t)animId) : false;
     uint16_t borderColor = isFavorite ? TFT_YELLOW : C_BORDER;
+    if (pressedFx) {
+      g_tft->fillRect(bx + 1, by + 1, bw - 2, bh - 2, C_ACCENT);
+      borderColor = C_WHITE;
+      g_tft->setTextColor(C_BG, C_ACCENT);
+    } else {
+      g_tft->fillRect(bx + 1, by + 1, bw - 2, bh - 2, C_BG);
+      g_tft->setTextColor(C_ACCENT, C_BG);
+    }
     g_tft->drawRect(bx, by, bw, bh, borderColor);
     if (isFavorite) {
       g_tft->drawRect(bx + 1, by + 1, bw - 2, bh - 2, borderColor);
@@ -606,7 +636,9 @@ void uiDrawPageBehaviour(void) {
     const char* label = (animId >= 0 && animId < ANIMATION_COUNT)
                             ? kAnimShortNames[animId]
                             : "?";
-    g_tft->setTextColor(C_ACCENT, C_BG);
+    if (!pressedFx) {
+      g_tft->setTextColor(C_ACCENT, C_BG);
+    }
     g_tft->drawString(label, bx + 6, by + 12);
     char idBuf[6];
     snprintf(idBuf, sizeof(idBuf), "%d", animId);
@@ -958,6 +990,79 @@ void uiDrawPageHelp(void) {
   g_tft->fillRect(SCREEN_W / 2 - 50, BOTTOM_BAR_Y + 4, 100, 32, C_ACCENT);
   g_tft->setTextColor(C_BG, C_ACCENT);
   g_tft->drawString("Back", SCREEN_W / 2 - 18, BOTTOM_BAR_Y + 14);
+}
+
+void uiShowToast(const char* msg, uint32_t durationMs) {
+  if (!msg || !msg[0]) return;
+  strncpy(s_toastMsg, msg, sizeof(s_toastMsg) - 1);
+  s_toastMsg[sizeof(s_toastMsg) - 1] = '\0';
+  if (durationMs < 500u) durationMs = 500u;
+  s_toastUntilMs = millis() + durationMs;
+  s_toastDirty = true;
+}
+
+void uiDrawToast(void) {
+  if (!g_tft) return;
+  const int th = 20;
+  const int ty = BOTTOM_BAR_Y - th - 2;
+  bool show = (s_toastMsg[0] != '\0' && (int32_t)(s_toastUntilMs - millis()) > 0);
+  static bool lastShow = false;
+  if (!show && !lastShow && !s_toastDirty) return;
+  if (!show) {
+    s_toastMsg[0] = '\0';
+  }
+  if (show) {
+    g_tft->fillRoundRect(6, ty, SCREEN_W - 12, th, 4, C_BG_DARK);
+    g_tft->drawRoundRect(6, ty, SCREEN_W - 12, th, 4, C_ACCENT_DIM);
+    g_tft->setTextSize(1);
+    g_tft->setTextColor(C_ACCENT, C_BG_DARK);
+    int tw = (int)strlen(s_toastMsg) * 6;
+    int tx = (SCREEN_W - tw) / 2;
+    if (tx < 10) tx = 10;
+    g_tft->setCursor(tx, ty + 6);
+    g_tft->print(s_toastMsg);
+  } else {
+    /* Ask for static redraw to clear old toast without smearing. */
+    g_needStaticRedraw = true;
+  }
+  lastShow = show;
+  s_toastDirty = false;
+}
+
+void uiSetFavoriteButtonHighlight(uint8_t slot, uint32_t durationMs) {
+  if (slot >= 6) return;
+  if (durationMs < 120u) durationMs = 120u;
+  s_favHighlightUntil[slot] = millis() + durationMs;
+}
+
+void uiSetAnimationTileHighlight(uint8_t animId, uint32_t durationMs) {
+  if (animId >= 24) return;
+  if (durationMs < 120u) durationMs = 120u;
+  s_animTileHighlightUntil[animId] = millis() + durationMs;
+  s_animTileDirty = true;
+}
+
+void uiUpdateBehaviourTileHighlights(void) {
+  if (!g_tft) return;
+  if (g_currentPage != PAGE_BEHAVIOUR) {
+    s_animTileHadActiveVisible = false;
+    return;
+  }
+  bool anyActiveVisible = false;
+  const uint8_t base = (uint8_t)(g_behaviourAnimPage * 6u);
+  for (uint8_t i = 0; i < 6; i++) {
+    uint8_t animId = (uint8_t)(base + i);
+    if (animId >= 24) break;
+    if (isAnimTileHighlighted(animId)) {
+      anyActiveVisible = true;
+      break;
+    }
+  }
+  if (s_animTileDirty || anyActiveVisible != s_animTileHadActiveVisible) {
+    uiDrawPageBehaviour();
+    s_animTileDirty = false;
+  }
+  s_animTileHadActiveVisible = anyActiveVisible;
 }
 
 // ------------------------------------------------------------

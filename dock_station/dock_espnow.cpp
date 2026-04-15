@@ -180,17 +180,23 @@ bool dockEspNowHandleRecv(const uint8_t *data, int len) {
   if (len >= (int)sizeof(DockWifiConfigPacket_t)) {
     const DockWifiConfigPacket_t *p = (const DockWifiConfigPacket_t *)data;
     if (p->cmd == DOCK_CMD_WIFI_CONFIG && (p->dock_id == 0 || p->dock_id == DOCK_ID)) {
-      if (p->ssid[0] == '\0') return true;
+      char ssid[sizeof(p->ssid)];
+      char pass[sizeof(p->pass)];
+      memcpy(ssid, p->ssid, sizeof(ssid));
+      memcpy(pass, p->pass, sizeof(pass));
+      ssid[sizeof(ssid) - 1] = '\0';
+      pass[sizeof(pass) - 1] = '\0';
+      if (ssid[0] == '\0') return true;
       Preferences prefs;
       prefs.begin("dock_wifi", false);
-      prefs.putString("sta_ssid", String(p->ssid));
-      prefs.putString("sta_pass", String(p->pass));
+      prefs.putString("sta_ssid", String(ssid));
+      prefs.putString("sta_pass", String(pass));
       prefs.end();
       Serial.print(F("[DOCK] WiFi config received from WALL-E: "));
-      Serial.println(p->ssid);
+      Serial.println(ssid);
       WiFi.disconnect(true);
       delay(200);
-      WiFi.begin(p->ssid, p->pass);
+      WiFi.begin(ssid, pass);
       Serial.println(F("[DOCK] Reconnecting..."));
       return true;
     }

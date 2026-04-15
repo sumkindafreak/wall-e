@@ -50,6 +50,8 @@ typedef struct __attribute__((packed)) {
 
 // Telemetry packet to send back (UPDATED with autonomy data)
 typedef struct __attribute__((packed)) {
+  uint32_t magic;
+  uint8_t  version;
   float   batteryVoltage;
   float   currentDraw;
   float   temperature;
@@ -73,6 +75,9 @@ typedef struct __attribute__((packed)) {
   uint8_t motionPolicy;
   uint8_t policyDenyCyd;
 } TelemetryPacket;
+
+#define WALLE_TELEMETRY_MAGIC   0x54454C4Du  /* "TELM" */
+#define WALLE_TELEMETRY_VERSION 1u
 
 // Action codes
 #define ACTION_NONE        0
@@ -100,11 +105,46 @@ typedef struct __attribute__((packed)) {
 extern unsigned long lastCommandMillis;
 static uint8_t s_controllerMac[6] = {0};  // Remember controller MAC for telemetry send
 static bool s_estopLast = false;  // Only print [E-STOP] on transition
+static uint32_t s_lastRejectedControlLogMs = 0;
 
 // NEW: Track last received speeds for manual control detection
 static int8_t s_lastLeftSpeed = 0;
 static int8_t s_lastRightSpeed = 0;
 static uint32_t s_lastManualCommandMs = 0;
+
+static bool hasKnownControllerMac(void) {
+  for (int i = 0; i < 6; i++) {
+    if (s_controllerMac[i] != 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool isControlSourceAllowed(const esp_now_recv_info_t* info) {
+  if (!info) {
+    return false;
+  }
+  if (!hasKnownControllerMac()) {
+    memcpy(s_controllerMac, info->src_addr, 6);
+    Serial.print("[ESP-NOW] Bound controller MAC: ");
+    for (int i = 0; i < 6; i++) {
+      Serial.printf("%02X", s_controllerMac[i]);
+      if (i < 5) Serial.print(":");
+    }
+    Serial.println();
+    return true;
+  }
+  if (memcmp(s_controllerMac, info->src_addr, 6) == 0) {
+    return true;
+  }
+  uint32_t now = millis();
+  if ((uint32_t)(now - s_lastRejectedControlLogMs) > 1000u) {
+    s_lastRejectedControlLogMs = now;
+    Serial.println("[ESP-NOW] Rejected control packet from unknown MAC");
+  }
+  return false;
+}
 
 // ESP-NOW callback (signature for ESP32 Arduino Core 3.x)
 static void onRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len) {
@@ -162,11 +202,9 @@ static void onRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len
   }
 
   if (len < CONTROL_PACKET_HEADER_BYTES) return;
+  if (!isControlSourceAllowed(info)) return;
 
   const ControlPacket* p = (const ControlPacket*)data;
-  
-  // Remember controller MAC for telemetry replies (from info struct in 3.x)
-  memcpy(s_controllerMac, info->src_addr, 6);
 
   const bool cydAllowed = motionAuthorityAllowCyd();
 
@@ -347,6 +385,8 @@ void espnowSendTelemetry() {
   }
 
   TelemetryPacket telem = {};
+  telem.magic = WALLE_TELEMETRY_MAGIC;
+  telem.version = WALLE_TELEMETRY_VERSION;
   
   // Battery data (from battery_monitor.h/cpp)
   const BatteryData& bat = batteryGetData();

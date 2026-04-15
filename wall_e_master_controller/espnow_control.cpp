@@ -43,10 +43,12 @@ static void onSent(const uint8_t* mac, esp_now_send_status_t status) {
 
 static void onRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len) {
   (void)info;
-  if (len >= (int)sizeof(TelemetryPacket)) {
-    memcpy(&s_telemetry, data, sizeof(TelemetryPacket));
-    s_lastTelemMs = millis();
-  }
+  if (len != (int)sizeof(TelemetryPacket)) return;
+  TelemetryPacket pkt;
+  memcpy(&pkt, data, sizeof(pkt));
+  if (pkt.magic != WALLE_TELEMETRY_MAGIC || pkt.version != WALLE_TELEMETRY_VERSION) return;
+  s_telemetry = pkt;
+  s_lastTelemMs = millis();
 }
 
 void espnowInit(void) {
@@ -104,6 +106,8 @@ void espnowInit(void) {
   }
 
   memset(&s_telemetry, 0, sizeof(s_telemetry));
+  s_telemetry.magic = WALLE_TELEMETRY_MAGIC;
+  s_telemetry.version = WALLE_TELEMETRY_VERSION;
 }
 
 void espnowSend(const ControlPacket* pkt) {
@@ -151,6 +155,8 @@ void espnowUpdate(void) {
   if (now - s_lastTelemMs > ESPNOW_TELEM_TIMEOUT_MS) {
     s_telemetry.batteryVoltage = 0;
     s_telemetry.safetyState = 0xFF;
+    s_telemetry.magic = WALLE_TELEMETRY_MAGIC;
+    s_telemetry.version = WALLE_TELEMETRY_VERSION;
   }
 
   if (now - s_lastNodeHealthMs >= 1000) {

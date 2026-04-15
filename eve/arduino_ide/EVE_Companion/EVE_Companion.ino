@@ -19,6 +19,9 @@
 #include "neopixel_control.h"
 #include "audio_control.h"
 #include "battery_monitor.h"
+#include "eve_behavior_manager.h"
+#include "eve_attachment_manager.h"
+#include "eve_status_manager.h"
 #include "eve_spatial_awareness.h"
 
 static void onUartRx(uint8_t type, const uint8_t* payload, size_t len, uint8_t seq) {
@@ -53,6 +56,10 @@ void setup() {
 
   stateMachineInit();
 
+  eveBehaviorManagerInit();
+  eveAttachmentManagerInit();
+  eveStatusManagerInit();
+
   Serial.print(F("[EVE] Free heap: "));
   Serial.println(ESP.getFreeHeap());
 }
@@ -61,6 +68,9 @@ void loop() {
   uartLinkPoll();
   eveBatteryTick();
   stateMachineTick();
+  eveBehaviorManagerTick();
+  eveAttachmentManagerTick();
+  eveStatusManagerTick();
   systemStatusTick();
   eyesTick();
   tofTick();

@@ -9,6 +9,8 @@
 #include <Arduino.h>
 #include <Preferences.h>
 
+// USER-CUSTOMIZABLE: Profile slots shown in touchscreen profile page.
+// Keep count in sync if you add/remove profiles.
 // Profile IDs
 #define PROFILE_KID       0
 #define PROFILE_DEMO      1
@@ -23,6 +25,8 @@
 #define BTN_ACTION_SOUND          4
 #define BTN_ACTION_CUSTOM         5
 
+// USER-CUSTOMIZABLE: Main profile struct. Each field is intended to be tunable.
+// Ranges are documented beside each field.
 // Profile structure
 struct Profile {
   const char* name;
@@ -54,7 +58,9 @@ struct Profile {
   // Servo neutral positions (0-180 degrees for each servo)
   uint8_t neutralPositions[10];  // Default neutral position for each servo
   
+  // USER-CUSTOMIZABLE:
   // Favorite animations for main screen (6 slots — physical joystick / mood strip)
+  // Also used for hardware button mapping in .ino.
   uint8_t favoriteAnimations[6];  // Animation IDs to display on main screen
   
   // Autonomous personality

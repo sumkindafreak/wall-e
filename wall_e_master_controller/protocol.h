@@ -9,6 +9,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#define WALLE_TELEMETRY_MAGIC   0x54454C4Du  /* "TELM" */
+#define WALLE_TELEMETRY_VERSION 1u
+
 // ------------------------------------------------------------
 //  Drive State — abstract model for input layer
 // ------------------------------------------------------------
@@ -37,6 +40,8 @@ typedef struct __attribute__((packed)) {
 //  Telemetry Packet — received from WALL-E Base
 // ------------------------------------------------------------
 typedef struct __attribute__((packed)) {
+  uint32_t magic;
+  uint8_t  version;
   float   batteryVoltage;
   float   currentDraw;
   float   temperature;

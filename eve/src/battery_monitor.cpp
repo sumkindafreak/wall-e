@@ -16,6 +16,7 @@ static uint32_t s_lastMs = 0;
 static bool s_verbose = true;
 
 static const float DIV_RATIO = (float)EVE_BAT_R2 / (float)(EVE_BAT_R1 + EVE_BAT_R2);
+static const float BAT_HARD_INVALID_V = 0.20f;
 
 static float readVoltageAdc(void) {
   uint32_t sum = 0;
@@ -45,15 +46,26 @@ static float readCurrentAdc(void) {
 }
 
 static void apply(float v, float a) {
-  if (v < EVE_BAT_MIN_V) {
+  if (v <= BAT_HARD_INVALID_V) {
     s_v = v;
     s_a = a;
     s_pct = 0;
     s_valid = false;
     s_st = EVE_BAT_UNKNOWN;
     if (s_verbose) {
-      Serial.printf("[EVE][BAT] %.2fV below %.2fV min — invalid / no divider\n", (double)v,
-                    (double)EVE_BAT_MIN_V);
+      Serial.printf("[EVE][BAT] %.2fV invalid reading — monitor wiring/divider\n", (double)v);
+    }
+    return;
+  }
+
+  if (v < EVE_BAT_MIN_V) {
+    s_v = v;
+    s_a = a;
+    s_pct = 0;
+    s_valid = true;
+    s_st = EVE_BAT_CRITICAL;
+    if (s_verbose) {
+      Serial.printf("[EVE][BAT] %.2fV below %.2fV min — CRITICAL\n", (double)v, (double)EVE_BAT_MIN_V);
     }
     return;
   }

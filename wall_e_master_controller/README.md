@@ -88,6 +88,7 @@ The master does **not** talk to the dock or vision nodes directly in the stock d
 
 - **Touch** — Calibrate in `touch_input` / profile code for your CYD revision.
 - **Display** — UI layout in `profiles` / `ui_draw` for 2432S028 resolution.
+- **Customization map** — See [CUSTOMIZATION_GUIDE.md](CUSTOMIZATION_GUIDE.md) and `USER-CUSTOMIZABLE` labels in source.
 
 ---
 

@@ -10,10 +10,12 @@
 
 static uint32_t s_coolUntil = 0;
 static uint32_t s_lastRollMs = 0;
+static uint32_t s_lastCooldownLogMs = 0;
 
 void eveAcknowledgementInit(void) {
   s_coolUntil = 0;
   s_lastRollMs = 0;
+  s_lastCooldownLogMs = 0;
 }
 
 static bool confusedVisual(void) {
@@ -49,7 +51,10 @@ bool eveAcknowledgementEvaluate(const EveTargetSnapshot* snap, uint32_t nowMs, u
   }
 
   if (nowMs < s_coolUntil) {
-    Serial.println(F("[EVE_TOF] Cooldown active, skipping visible response"));
+    if ((uint32_t)(nowMs - s_lastCooldownLogMs) > 1000u) {
+      s_lastCooldownLogMs = nowMs;
+      Serial.println(F("[EVE_TOF] Cooldown active, skipping visible response"));
+    }
     return false;
   }
 
