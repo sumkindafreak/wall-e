@@ -12,6 +12,7 @@
 #include "servo_control.h"
 #include "neopixel_control.h"
 #include "audio_control.h"
+#include "power_monitor.h"
 
 static void onUartRx(uint8_t type, const uint8_t* payload, size_t len, uint8_t seq) {
   stateMachineOnUartRx(type, payload, len, seq);
@@ -35,6 +36,7 @@ void setup() {
   servoInit();
   neopixelInit();
   audioInit();
+  powerMonitorInit();
 
 #if EVE_PRESENT_PIN >= 0
   pinMode(EVE_PRESENT_PIN, INPUT_PULLUP);
@@ -55,4 +57,5 @@ void loop() {
   servoTick();
   neopixelTick();
   audioTick();
+  powerMonitorTick();
 }

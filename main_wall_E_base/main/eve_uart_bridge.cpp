@@ -23,6 +23,7 @@ enum EveMsgType : uint8_t {
   MSG_EVE_LOW_BATTERY = 0x05,
   MSG_EVE_SLEEP = 0x06,
   MSG_EVE_ERROR = 0x07,
+  MSG_EVE_POWER_STATUS = 0x08,   /* live battery telemetry from EVE */
 };
 
 enum ParseState : uint8_t {
@@ -55,6 +56,10 @@ static uint32_t s_lastRxMs = 0;
 static uint8_t s_lastType = 0;
 static uint32_t s_session = 0;
 static char s_lastJson[192] = "";
+
+/* ---- EVE power telemetry ---- */
+static EvePowerTelemetry s_powerTelem = {};
+static EveBatteryState   s_prevBatState = EveBatteryState::EVE_BAT_OK;
 
 static uint16_t crc16_ccitt(const uint8_t* data, size_t len) {
   uint16_t crc = 0xFFFF;
@@ -94,9 +99,60 @@ static void onFrame(void) {
   if (fLen > 0 && fLen < sizeof(fPayload)) {
     fPayload[fLen] = '\0';
     strncpy(s_lastJson, (const char*)fPayload, sizeof(s_lastJson) - 1);
+
+    /* Parse JSON fields common to multiple message types. */
     StaticJsonDocument<256> doc;
     DeserializationError jer = deserializeJson(doc, s_lastJson);
-    if (!jer && doc.containsKey("session")) s_session = (uint32_t)(doc["session"] | 0);
+
+    if (!jer) {
+      if (doc.containsKey("session")) s_session = (uint32_t)(doc["session"] | 0);
+
+      /* ---- Handle power status packet ---- */
+      if (fType == (uint8_t)MSG_EVE_POWER_STATUS) {
+        EvePowerTelemetry t;
+        t.voltage          = doc["v"]   | 0.0f;
+        t.current          = doc["i"]   | 0.0f;
+        t.percent          = (uint8_t)(doc["pct"]  | 0);
+        t.state            = (EveBatteryState)(uint8_t)(doc["state"] | 0);
+        t.charging         = doc["chg"] | false;
+        t.heartbeat        = (uint32_t)(doc["hb"]  | 0);
+        t.eveTimestamp_ms  = (uint32_t)(doc["ts"]  | 0);
+        t.receivedAt_ms    = s_lastRxMs;
+        t.valid            = true;
+
+        Serial.printf("[WALL-E][EVEPwr] V=%.2fV I=%.3fA pct=%u%% chg=%d state=%u hb=%lu\n",
+                      t.voltage, t.current, t.percent,
+                      (int)t.charging, (uint8_t)t.state, (unsigned long)t.heartbeat);
+
+        /* Log and react to battery state changes. */
+        if (!s_powerTelem.valid || t.state != s_prevBatState) {
+          const char* labels[] = { "OK", "LOW", "CRITICAL", "CHARGING", "FULL" };
+          uint8_t idx = (uint8_t)t.state;
+          const char* label = (idx < 5) ? labels[idx] : "UNKNOWN";
+
+          if (s_powerTelem.valid) {
+            uint8_t prevIdx = (uint8_t)s_prevBatState;
+            const char* prevLabel = (prevIdx < 5) ? labels[prevIdx] : "UNKNOWN";
+            Serial.printf("[WALL-E][EVEPwr] State change: %s -> %s\n", prevLabel, label);
+          } else {
+            Serial.printf("[WALL-E][EVEPwr] Initial state: %s\n", label);
+          }
+
+          s_prevBatState = t.state;
+
+          switch (t.state) {
+            case EveBatteryState::EVE_BAT_OK:       onEveBatteryOk();       break;
+            case EveBatteryState::EVE_BAT_LOW:      onEveBatteryLow();      break;
+            case EveBatteryState::EVE_BAT_CRITICAL: onEveBatteryCritical(); break;
+            case EveBatteryState::EVE_BAT_CHARGING: onEveCharging();        break;
+            case EveBatteryState::EVE_BAT_FULL:     onEveBatteryFull();     break;
+            default: break;
+          }
+        }
+
+        s_powerTelem = t;
+      }
+    }
   }
   resetParser();
 }
@@ -174,13 +230,14 @@ void eveUartBridgePoll(void) {
 
 static const char* typeName(uint8_t t) {
   switch (t) {
-    case MSG_EVE_HELLO: return "EVE_HELLO";
-    case MSG_WALL_E_ACK: return "WALL_E_ACK";
-    case MSG_EVE_READY: return "EVE_READY";
-    case MSG_EVE_HEARTBEAT: return "EVE_HEARTBEAT";
-    case MSG_EVE_LOW_BATTERY: return "EVE_LOW_BATTERY";
-    case MSG_EVE_SLEEP: return "EVE_SLEEP";
-    case MSG_EVE_ERROR: return "EVE_ERROR";
+    case MSG_EVE_HELLO:         return "EVE_HELLO";
+    case MSG_WALL_E_ACK:        return "WALL_E_ACK";
+    case MSG_EVE_READY:         return "EVE_READY";
+    case MSG_EVE_HEARTBEAT:     return "EVE_HEARTBEAT";
+    case MSG_EVE_LOW_BATTERY:   return "EVE_LOW_BATTERY";
+    case MSG_EVE_SLEEP:         return "EVE_SLEEP";
+    case MSG_EVE_ERROR:         return "EVE_ERROR";
+    case MSG_EVE_POWER_STATUS:  return "EVE_POWER_STATUS";
     default: return "unknown";
   }
 }
@@ -213,4 +270,77 @@ String eveUartBridgeGetJSON(void) {
   }
   j += "}";
   return j;
+}
+
+// ---------------------------------------------------------------------------
+// Power telemetry getters
+// ---------------------------------------------------------------------------
+
+const EvePowerTelemetry& eveGetPowerTelemetry(void) {
+  return s_powerTelem;
+}
+
+bool eveIsPowerTelemetryFresh(void) {
+  if (!s_powerTelem.valid) return false;
+  uint32_t age = millis() - s_powerTelem.receivedAt_ms;
+  return age < (uint32_t)EVE_POWER_TELEM_STALE_MS;
+}
+
+String eveGetPowerTelemetryJSON(void) {
+  const EvePowerTelemetry& t = s_powerTelem;
+  bool fresh = eveIsPowerTelemetryFresh();
+
+  String j = "{";
+  j += "\"valid\":";     j += t.valid  ? "true" : "false";
+  j += ",\"fresh\":";    j += fresh    ? "true" : "false";
+  j += ",\"age_ms\":";   j += t.valid  ? (uint32_t)(millis() - t.receivedAt_ms) : (uint32_t)0;
+  /* Note: millis() - receivedAt_ms uses unsigned 32-bit wrap-around arithmetic,
+     so the result is correct even after the ~49.7-day millis() rollover. */
+  j += ",\"voltage\":";  j += String(t.voltage, 2);
+  j += ",\"current\":";  j += String(t.current, 3);
+  j += ",\"percent\":";  j += (uint32_t)t.percent;
+  j += ",\"state\":";    j += (uint32_t)(uint8_t)t.state;
+  j += ",\"charging\":"; j += t.charging ? "true" : "false";
+  j += ",\"heartbeat\":"; j += (uint32_t)t.heartbeat;
+  j += ",\"ts_eve\":";   j += (uint32_t)t.eveTimestamp_ms;
+  j += "}";
+  return j;
+}
+
+// ---------------------------------------------------------------------------
+// WALL-E reaction hooks for EVE battery state changes.
+// These are called automatically when EVE sends a power-status packet with a
+// different state than the previous one.
+//
+// Default implementation: serial logging + placeholder comments.
+// Override by replacing these functions or extending them with your own code.
+// ---------------------------------------------------------------------------
+
+void onEveBatteryOk(void) {
+  Serial.println(F("[WALL-E][EVEPwr] EVE battery OK — normal operation resumed"));
+  /* Future: cancel any low-battery behaviour, resume normal motion profile. */
+}
+
+void onEveBatteryLow(void) {
+  Serial.println(F("[WALL-E][EVEPwr] EVE battery LOW — begin return-to-dock logic"));
+  /* Future: display warning on TFT, play alert sound, guide EVE toward dock,
+     reduce WALL-E motion to preserve time for escort/docking sequence. */
+}
+
+void onEveBatteryCritical(void) {
+  Serial.println(F("[WALL-E][EVEPwr] EVE battery CRITICAL — emergency dock protocol"));
+  /* Future: highest-priority dock command, play urgent audio, pause all other
+     tasks until EVE is confirmed docked / charging. */
+}
+
+void onEveCharging(void) {
+  Serial.println(F("[WALL-E][EVEPwr] EVE is CHARGING — stand by"));
+  /* Future: display charging indicator, play calm sound, disable escort state,
+     enter idle/sentry mode while EVE recovers. */
+}
+
+void onEveBatteryFull(void) {
+  Serial.println(F("[WALL-E][EVEPwr] EVE battery FULL — ready for action"));
+  /* Future: celebrate animation, re-enable escort / full-autonomy mode,
+     play ready sound, send MSG_MODE_ESCORT or MSG_ATTACH_CONFIRMED to EVE. */
 }
