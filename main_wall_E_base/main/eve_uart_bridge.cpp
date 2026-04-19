@@ -293,7 +293,9 @@ String eveGetPowerTelemetryJSON(void) {
   String j = "{";
   j += "\"valid\":";     j += t.valid  ? "true" : "false";
   j += ",\"fresh\":";    j += fresh    ? "true" : "false";
-  j += ",\"age_ms\":";   j += t.valid  ? (uint32_t)(millis() - t.receivedAt_ms) : 0;
+  j += ",\"age_ms\":";   j += t.valid  ? (uint32_t)(millis() - t.receivedAt_ms) : (uint32_t)0;
+  /* Note: millis() - receivedAt_ms uses unsigned 32-bit wrap-around arithmetic,
+     so the result is correct even after the ~49.7-day millis() rollover. */
   j += ",\"voltage\":";  j += String(t.voltage, 2);
   j += ",\"current\":";  j += String(t.current, 3);
   j += ",\"percent\":";  j += (uint32_t)t.percent;

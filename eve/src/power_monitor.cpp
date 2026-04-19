@@ -209,8 +209,9 @@ void updateBatteryState(void) {
    * BATTERY_CHARGING_HYST_A is a positive margin to prevent toggling.
    */
   if (!wasCharging) {
-    /* Start charging when current drops below the threshold. */
-    if (i <= BATTERY_CHARGING_CURRENT_A) {
+    /* Start charging when current is strictly more negative than the threshold.
+     * e.g. BATTERY_CHARGING_CURRENT_A = -0.10: charging starts when i < -0.10 A. */
+    if (i < BATTERY_CHARGING_CURRENT_A) {
       s_status.charging = true;
     }
   } else {
