@@ -11,6 +11,7 @@
 #include "servo_control.h"
 #include "neopixel_control.h"
 #include "audio_control.h"
+#include "power_monitor.h"
 #include <ArduinoJson.h>
 
 enum class EveState : uint8_t {
@@ -32,6 +33,7 @@ static uint32_t s_sessionId = 0;
 static uint32_t s_lastHelloMs = 0;
 static uint32_t s_lastEveHbMs = 0;
 static uint32_t s_lastRxMs = 0;
+static uint32_t s_lastPowerStatusMs = 0;
 
 static void sendEveHello(void) {
   StaticJsonDocument<256> doc;
@@ -73,11 +75,29 @@ static void sendEveError(const char* msg, int code) {
   uartLinkSendJson(MSG_EVE_ERROR, out.c_str());
 }
 
+/** Transmit live power telemetry to WALL-E (JSON payload). */
+static void sendEvePowerStatus(void) {
+  const PowerStatus& ps = getPowerStatus();
+  StaticJsonDocument<256> doc;
+  doc["node"]  = "EVE";
+  doc["v"]     = ps.voltage;
+  doc["i"]     = ps.current;
+  doc["pct"]   = ps.percent;
+  doc["state"] = (uint8_t)ps.state;
+  doc["chg"]   = ps.charging;
+  doc["hb"]    = ps.heartbeat;
+  doc["ts"]    = ps.timestamp_ms;
+  String out;
+  serializeJson(doc, out);
+  uartLinkSendJson(MSG_EVE_POWER_STATUS, out.c_str());
+}
+
 void stateMachineInit(void) {
   s_state = EveState::WAIT_ATTACH;
   s_lastHelloMs = 0;
   s_lastEveHbMs = 0;
   s_lastRxMs = millis();
+  s_lastPowerStatusMs = 0;
   Serial.println(F("[EVE][SM] WAIT_ATTACH"));
 }
 
@@ -103,6 +123,11 @@ void stateMachineTick(void) {
       if (now - s_lastEveHbMs >= EVE_HEARTBEAT_MS) {
         s_lastEveHbMs = now;
         sendEveHeartbeat();
+      }
+      /* Send power status at a separate (configurable) interval. */
+      if (now - s_lastPowerStatusMs >= EVE_POWER_STATUS_INTERVAL_MS) {
+        s_lastPowerStatusMs = now;
+        sendEvePowerStatus();
       }
       if (s_state == EveState::ESCORT || s_state == EveState::INTERACT) {
         if (now - s_lastRxMs > EVE_LINK_LOST_MS) {

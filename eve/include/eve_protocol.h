@@ -20,6 +20,8 @@ enum EveMsgType : uint8_t {
   MSG_EVE_LOW_BATTERY = 0x05,
   MSG_EVE_SLEEP = 0x06,
   MSG_EVE_ERROR = 0x07,
+  /** Live battery + power telemetry (JSON: v, i, pct, state, chg, hb, ts). */
+  MSG_EVE_POWER_STATUS = 0x08,
 
   // WALL-E -> EVE
   MSG_ATTACH_CONFIRMED = 0x10,

@@ -52,6 +52,26 @@ static const unsigned long EVE_UART_BAUD = 115200;
 #define EVE_NEOPIXEL_COUNT 8
 
 // -----------------------------------------------------------------------------
+// Battery / power monitoring (ACS712 current sensor + voltage divider)
+// Set EVE_ENABLE_POWER_MONITOR to 1 once sensors are wired up.
+// Change the ADC pin numbers below to match your PCB layout.
+// -----------------------------------------------------------------------------
+/** Set to 1 to enable power monitoring (ADC reads + battery state machine). */
+#define EVE_ENABLE_POWER_MONITOR 1
+
+/** ADC pin for battery voltage divider output (GPIO number). */
+#define EVE_BAT_VOLT_ADC_PIN  4
+
+/** ADC pin for ACS712 current sensor output (GPIO number). */
+#define EVE_BAT_CURR_ADC_PIN  5
+
+/**
+ * Optional digital input for a charger-present signal (e.g. from charging dock).
+ * Set to -1 if not wired — charging detection falls back to current direction only.
+ */
+#define EVE_CHARGER_PRESENT_PIN (-1)
+
+// -----------------------------------------------------------------------------
 // Feature enables — turn on only after hardware matches pins above
 // -----------------------------------------------------------------------------
 #define EVE_ENABLE_EYES 0
@@ -67,3 +87,5 @@ static const uint32_t EVE_HELLO_RETRY_MS = 500;
 static const uint32_t EVE_HEARTBEAT_MS = 250;
 /** No inbound UART frame for this long in strict modes (ESCORT/INTERACT) → link lost */
 static const uint32_t EVE_LINK_LOST_MS = 8000;
+/** How often EVE sends a power-status packet to WALL-E (ms). */
+static const uint32_t EVE_POWER_STATUS_INTERVAL_MS = 500;
