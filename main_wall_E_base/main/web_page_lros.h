@@ -3693,6 +3693,10 @@ body.lros-app-revealed #app {
         <span class="operator-chip-lbl">Drive profile</span>
         <span class="operator-chip-val" id="op-profile-val">—</span>
       </div>
+      <div class="operator-chip" title="EVE companion UART (base ↔ EVE)">
+        <span class="operator-chip-lbl">EVE</span>
+        <span class="operator-chip-val" id="op-eve-val">—</span>
+      </div>
       <div class="operator-chip" title="Browser ↔ base link (HTTP + optional WebSocket)">
         <span class="operator-chip-lbl">Link</span>
         <span class="operator-chip-val" id="op-link-val">—</span>
@@ -3718,6 +3722,7 @@ body.lros-app-revealed #app {
       <span class="node-pill off" data-pill="audio" title="Audio">AUD</span>
       <span class="node-pill off" data-pill="dock" title="Dock">DOCK</span>
       <span class="node-pill off" data-pill="vision" title="Vision">VIS</span>
+      <span class="node-pill off" data-pill="eve" title="EVE (UART)">EVE</span>
     </div>
     <div class="status-right">
       <div class="status-batt" id="status-batt" title="Battery">
@@ -4629,6 +4634,50 @@ body.lros-app-revealed #app {
       </div>
     </div>
 
+    <!-- EVE companion (UART + bond + target assist) -->
+    <div class="page more-subpage" id="page-eve">
+      <header class="subpage-head">
+        <div class="subpage-head-main">
+          <p class="subpage-kicker">LROS · EVE</p>
+          <h2 class="page-title subpage-title">EVE</h2>
+          <p class="page-lead">UART link, shared voicebox, bond state, and target-assist (same data as <span class="mono">/api/living/telemetry</span> plus <span class="mono">/api/eve/status</span>).</p>
+        </div>
+      </header>
+      <div class="subpage-deck subpage-deck--2col">
+        <div class="card more-deck-card">
+          <div class="card-header">UART bridge</div>
+          <div class="card-body">
+            <div class="status-row"><span class="label">Link</span><span class="value" id="eve-uart-link">—</span></div>
+            <div class="status-row"><span class="label">Last RX age</span><span class="value mono" id="eve-uart-age">—</span></div>
+            <div class="status-row"><span class="label">Last frame</span><span class="value mono" id="eve-uart-type">—</span></div>
+            <div class="status-row"><span class="label">Frames / CRC err</span><span class="value mono" id="eve-uart-frames">—</span></div>
+            <p class="stat-sub" style="margin:8px 0 0">Payload preview</p>
+            <div class="log-item mono" style="word-break:break-all;max-height:4.5em;overflow:auto" id="eve-uart-payload">—</div>
+          </div>
+        </div>
+        <div class="card more-deck-card">
+          <div class="card-header">Voice &amp; bond</div>
+          <div class="card-body">
+            <div class="status-row"><span class="label">Voicebox mode</span><span class="value" id="eve-voicebox">—</span></div>
+            <div class="status-row"><span class="label">Shared WALL-E+EVE</span><span class="value" id="eve-vb-shared">—</span></div>
+            <div class="status-row"><span class="label">Bond strength</span><span class="value" id="eve-bond-str">—</span></div>
+            <div class="status-row"><span class="label">Trust / comfort / curious</span><span class="value mono" id="eve-bond-tcc">—</span></div>
+            <div class="status-row"><span class="label">Shared dock events</span><span class="value" id="eve-bond-docks">—</span></div>
+          </div>
+        </div>
+        <div class="card more-deck-card subpage-card-span">
+          <div class="card-header">Target assist (EVE → base)</div>
+          <div class="card-body">
+            <p class="stat-sub" style="margin:0 0 10px">Biases treads when EVE reports target zone JSON over UART.</p>
+            <div class="status-row"><span class="label">State</span><span class="value mono" id="eve-as-state">—</span></div>
+            <div class="status-row"><span class="label">Zone</span><span class="value mono" id="eve-as-zone">—</span></div>
+            <div class="status-row"><span class="label">Bias</span><span class="value mono" id="eve-as-bias">—</span></div>
+            <div class="status-row"><span class="label">Assist data</span><span class="value" id="eve-as-stale">—</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- POWER -->
     <div class="page more-subpage" id="page-power">
       <header class="subpage-head">
@@ -4993,8 +5042,9 @@ body.lros-app-revealed #app {
               <span class="node-pill off" data-pill="audio">AUD</span>
               <span class="node-pill off" data-pill="dock">DOCK</span>
               <span class="node-pill off" data-pill="vision">VIS</span>
+              <span class="node-pill off" data-pill="eve">EVE</span>
             </div>
-            <p class="stat-sub" id="settings-node-updated">Updated with <span class="mono">/api/system/health</span>.</p>
+            <p class="stat-sub" id="settings-node-updated">Updated with <span class="mono">/api/system/health</span> + <span class="mono">/api/living/telemetry</span> (EVE pill).</p>
           </div>
         </div>
 
@@ -5042,6 +5092,7 @@ body.lros-app-revealed #app {
               <code>/api/autonomy</code><code>/api/autonomy/enable</code><code>/api/autonomy/set_home</code>
               <code>/api/navigation/route</code><code>/api/navigation/status</code><code>/api/navigation/stop</code>
               <code>/imu/status</code><code>/battery/status</code><code>/servo/set</code><code>/settings</code>
+              <code>/api/eve/status</code><code>/api/living/telemetry</code><code>/api/motion/operator</code>
             </div>
           </div>
         </div>
@@ -5070,6 +5121,7 @@ body.lros-app-revealed #app {
         <a class="nav-tile" href="#" onclick="switchTab('navigation');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>Navigation</a>
         <a class="nav-tile" href="#" onclick="switchTab('vision');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>Vision</a>
         <a class="nav-tile" href="#" onclick="switchTab('audio');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>Audio</a>
+        <a class="nav-tile" href="#" onclick="switchTab('eve');return false" title="EVE UART, bond, assist"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="8" cy="12" r="3"/><circle cx="16" cy="9" r="2.5"/><path d="M11 12h2M14 7l-1 2"/></svg>EVE</a>
         <a class="nav-tile" href="#" onclick="switchTab('ai');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 2a10 10 0 0 1 10 10c0 5.5-4.5 10-10 10S2 17.5 2 12 6.5 2 12 2z"/><circle cx="12" cy="12" r="2"/></svg>AI &amp; Auto</a>
         <a class="nav-tile" href="#" onclick="switchTab('missions');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Missions</a>
         <a class="nav-tile" href="#" onclick="switchTab('sequence');return false"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="1"/><line x1="7" y1="5" x2="7" y2="19"/><line x1="17" y1="5" x2="17" y2="19"/><path d="M10 9h1M13 9h1M10 12h1M13 12h1M10 15h1M13 15h1" stroke-linecap="round"/></svg>Sequence</a>
@@ -7277,6 +7329,9 @@ function navSendRouteToRobot() {
 /**
  * LROS Sequence generator — load/save/run timelines on the Brain (Preferences).
  * API: GET /api/sequences/list, get, save (POST JSON), delete (POST), run, stop, status
+ *
+ * Step fields: optional "when": { "battery_pct_min", "battery_pct_max", "dock_fsm", "vision_event" }
+ * — if present and not satisfied, the step is skipped (see sequence_engine.cpp).
  */
 (function (global) {
   'use strict';
@@ -7754,6 +7809,7 @@ function switchTab(name) {
     setTimeout(function () { LrosSequences.onTabShow(); }, 0);
   }
   if (name === 'telemetry' || name === 'power') fetchStatus();
+  if (name === 'eve') pollLivingTelemetry();
   if (name === 'drive') {
     var aiPanel = document.getElementById('drive-ai-panel');
     document.getElementById('drive-joystick').style.display = driveMode === 'joystick' ? 'flex' : 'none';
@@ -7915,6 +7971,7 @@ function updateOperatorConsoleOffline() {
   setById('op-link-val', 'OFFLINE');
   setById('op-fresh-val', '—');
   setById('op-lock-val', 'Robot offline or link lost');
+  setById('op-eve-val', '—');
   document.body.classList.add('lros-operator-offline');
   try {
     window.__lrosOperatorSnapshot = null;
@@ -8098,9 +8155,100 @@ function pollNodeHealth() {
     }
     var snu = document.getElementById('settings-node-updated');
     if (snu) {
-      snu.innerHTML = 'Last sync <span class="mono">' + new Date().toLocaleTimeString() + '</span> · <span class="mono">/api/system/health</span>';
+      snu.innerHTML = 'Last sync <span class="mono">' + new Date().toLocaleTimeString() + '</span> · <span class="mono">/api/system/health</span> + EVE from <span class="mono">/api/living/telemetry</span>';
     }
   }).catch(function() {});
+}
+
+/** EVE pill + operator chip + EVE page — UART is not an ESP-NOW node; use living + /api/eve/status */
+function applyLivingEveUI(liv, uart) {
+  var eveOn = liv && liv.eve_uart === true;
+  var nodes = document.querySelectorAll('.node-pill[data-pill="eve"]');
+  var prev = _pillState.eve;
+  _pillState.eve = eveOn;
+  nodes.forEach(function (el) {
+    el.classList.remove('ok', 'warn', 'off');
+    if (eveOn) el.classList.add('ok');
+    else el.classList.add('off');
+    if (prev !== undefined && prev !== eveOn) {
+      el.classList.add('edge');
+      setTimeout(function () { el.classList.remove('edge'); }, 500);
+    }
+  });
+  var opE = document.getElementById('op-eve-val');
+  if (opE) {
+    if (uart && uart.ok !== false) {
+      if (uart.link_ok) {
+        var ag = Number(uart.last_rx_age_ms) || 0;
+        opE.textContent = ag < 20000 ? 'LIVE' : 'STALE';
+      } else {
+        opE.textContent = 'OFF';
+      }
+    } else if (liv && typeof liv.eve_uart === 'boolean') {
+      opE.textContent = liv.eve_uart ? 'ON' : 'OFF';
+    } else {
+      opE.textContent = '—';
+    }
+  }
+  try {
+    window.__lrosLiving = liv;
+  } catch (e) {}
+  try {
+    window.__lrosEveUart = uart;
+  } catch (e) {}
+  if (currentVisiblePage !== 'eve') return;
+  if (uart && uart.ok !== false) {
+    setById('eve-uart-link', uart.link_ok ? 'Connected' : 'No link');
+    setById('eve-uart-age', uart.last_rx_age_ms != null ? String(uart.last_rx_age_ms) + ' ms' : '—');
+    setById('eve-uart-type', uart.last_type || '—');
+    setById('eve-uart-frames', (uart.frames_ok != null ? uart.frames_ok : '—') + ' / ' + (uart.crc_errors != null ? uart.crc_errors : '—'));
+    var pl = uart.payload;
+    if (pl == null) setById('eve-uart-payload', '—');
+    else {
+      var t = String(pl);
+      if (t.length > 400) t = t.slice(0, 400) + '…';
+      setById('eve-uart-payload', t);
+    }
+  } else {
+    setById('eve-uart-link', '—');
+    setById('eve-uart-age', '—');
+    setById('eve-uart-type', '—');
+    setById('eve-uart-frames', '—');
+    setById('eve-uart-payload', '—');
+  }
+  if (liv) {
+    setById('eve-voicebox', liv.voicebox_mode != null ? String(liv.voicebox_mode) : '—');
+    setById('eve-vb-shared', liv.voicebox_shared != null ? (liv.voicebox_shared ? 'yes' : 'no') : '—');
+    setById('eve-bond-str', liv.bond_strength != null ? String(liv.bond_strength) : '—');
+    var t = [];
+    if (liv.bond_trust != null) t.push('T' + liv.bond_trust);
+    if (liv.bond_comfort != null) t.push('C' + liv.bond_comfort);
+    if (liv.bond_curious != null) t.push('Q' + liv.bond_curious);
+    setById('eve-bond-tcc', t.length ? t.join(' · ') : '—');
+    setById('eve-bond-docks', liv.bond_shared_docks != null ? String(liv.bond_shared_docks) : '—');
+    var ea = liv.eve_assist;
+    if (ea) {
+      setById('eve-as-state', ea.state_name != null ? String(ea.state_name) : (ea.state != null ? String(ea.state) : '—'));
+      setById('eve-as-zone', ea.zone != null ? String(ea.zone) : '—');
+      setById('eve-as-bias', ea.bias != null ? String(ea.bias) : '—');
+      setById('eve-as-stale', ea.stale ? 'Stale (ignore for motion)' : 'Fresh');
+    } else {
+      setById('eve-as-state', '—');
+      setById('eve-as-zone', '—');
+      setById('eve-as-bias', '—');
+      setById('eve-as-stale', '—');
+    }
+  }
+}
+
+function pollLivingTelemetry() {
+  var h = apiAuthHeaders();
+  Promise.all([
+    fetch(api('/api/living/telemetry'), { cache: 'no-store', headers: h }).then(function (r) { return r.json(); }).catch(function () { return null; }),
+    fetch(api('/api/eve/status'), { cache: 'no-store', headers: h }).then(function (r) { return r.json(); }).catch(function () { return null; })
+  ]).then(function (arr) {
+    applyLivingEveUI(arr[0], arr[1]);
+  });
 }
 
 // ─── Drive ──────────────────────────────────────────────────
@@ -10375,9 +10523,11 @@ function initAll() {
   fetchStatus();
   pollNodeHealth();
   pollMotionOperator();
+  pollLivingTelemetry();
   setInterval(fetchStatus, 5000);
   setInterval(pollNodeHealth, 1500);
   setInterval(pollMotionOperator, 1500);
+  setInterval(pollLivingTelemetry, 2000);
   setInterval(pollVisionEvents, 2500);
   try { fetch(api('/stop')); } catch(_) {}
   pushActivity('Dashboard ready', '\uD83C\uDFE0');

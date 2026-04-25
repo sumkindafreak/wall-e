@@ -6,6 +6,9 @@
 param([switch]$Upload)
 
 $ErrorActionPreference = "Stop"
+& (Join-Path $PSScriptRoot "scripts\verify_protocol_headers.ps1")
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
 $projects = @(
     @{ Name = "Base"; Path = "main_wall_E_base"; Env = "wall_e_brain_s3" },
     @{ Name = "Controller"; Path = "wall_e_master_controller"; Env = "cyd_esp32_2432s028" },

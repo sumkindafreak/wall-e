@@ -1,0 +1,15 @@
+#include "dock_eve_link.h"
+#include "pin_config.h"
+#include <string.h>
+static DockEveFrameCallback s_frameCb = nullptr;
+static uint8_t s_txSeq = 0, s_buf[EVE_MAX_PAYLOAD], s_ver = 0, s_type = 0, s_seq = 0, s_crcLo = 0;
+static uint16_t s_len = 0, s_idx = 0;
+enum ParseState : uint8_t { SOF0, SOF1, VER, TYPE, LEN0, LEN1, SEQ, PAYLOAD, CRC0, CRC1 };
+static ParseState s_state = SOF0;
+static uint16_t crc16_ccitt(const uint8_t* data, size_t len) { uint16_t crc = 0xFFFF; for (size_t i = 0; i < len; i++) { crc ^= (uint16_t)data[i] << 8; for (int b = 0; b < 8; b++) crc = (crc & 0x8000) ? (uint16_t)((crc << 1) ^ 0x1021) : (uint16_t)(crc << 1); } return crc; }
+static void resetParser(void) { s_state = SOF0; s_len = 0; s_idx = 0; }
+static void deliver(uint8_t crcHi) { uint8_t crcBuf[5 + EVE_MAX_PAYLOAD]; crcBuf[0] = s_ver; crcBuf[1] = s_type; crcBuf[2] = (uint8_t)(s_len & 0xFF); crcBuf[3] = (uint8_t)(s_len >> 8); crcBuf[4] = s_seq; if (s_len > 0) memcpy(crcBuf + 5, s_buf, s_len); uint16_t calc = crc16_ccitt(crcBuf, 5 + s_len); uint16_t wire = (uint16_t)s_crcLo | ((uint16_t)crcHi << 8); if (calc == wire && s_ver == EVE_FRAME_VER && s_frameCb) s_frameCb(s_type, s_buf, s_len, s_seq); resetParser(); }
+void dockEveLinkInit(void) { DOCK_HW_SERIAL.begin(DOCK_UART_BAUD, SERIAL_8N1, DOCK_PIN_UART_RX, DOCK_PIN_UART_TX); DOCK_HW_SERIAL.setRxBufferSize(512); resetParser(); Serial.print(F("[EVE-LINK] UART RX=")); Serial.print(DOCK_PIN_UART_RX); Serial.print(F(" TX=")); Serial.println(DOCK_PIN_UART_TX); Serial.flush(); }
+void dockEveLinkSetFrameCallback(DockEveFrameCallback cb) { s_frameCb = cb; }
+void dockEveLinkPoll(uint32_t maxBytes) { for (uint32_t n = 0; n < maxBytes && DOCK_HW_SERIAL.available() > 0; n++) { uint8_t c = (uint8_t)DOCK_HW_SERIAL.read(); switch (s_state) { case SOF0: if (c == EVE_SOF0) s_state = SOF1; break; case SOF1: s_state = (c == EVE_SOF1) ? VER : SOF0; break; case VER: s_ver = c; s_state = TYPE; break; case TYPE: s_type = c; s_state = LEN0; break; case LEN0: s_len = c; s_state = LEN1; break; case LEN1: s_len |= (uint16_t)c << 8; if (s_len > EVE_MAX_PAYLOAD) resetParser(); else s_state = SEQ; break; case SEQ: s_seq = c; s_idx = 0; s_state = s_len ? PAYLOAD : CRC0; break; case PAYLOAD: s_buf[s_idx++] = c; if (s_idx >= s_len) s_state = CRC0; break; case CRC0: s_crcLo = c; s_state = CRC1; break; case CRC1: deliver(c); break; } } }
+bool dockEveLinkSendJson(EveMsgType type, const char* jsonUtf8) { if (!jsonUtf8) return false; size_t payloadLen = strlen(jsonUtf8); if (payloadLen > EVE_MAX_PAYLOAD) return false; uint8_t frame[5 + EVE_MAX_PAYLOAD + 2]; frame[0] = EVE_FRAME_VER; frame[1] = (uint8_t)type; frame[2] = (uint8_t)(payloadLen & 0xFF); frame[3] = (uint8_t)(payloadLen >> 8); frame[4] = ++s_txSeq; memcpy(frame + 5, jsonUtf8, payloadLen); uint16_t crc = crc16_ccitt(frame, 5 + payloadLen); frame[5 + payloadLen] = (uint8_t)(crc & 0xFF); frame[6 + payloadLen] = (uint8_t)(crc >> 8); DOCK_HW_SERIAL.write(EVE_SOF0); DOCK_HW_SERIAL.write(EVE_SOF1); return DOCK_HW_SERIAL.write(frame, payloadLen + 7) == payloadLen + 7; }

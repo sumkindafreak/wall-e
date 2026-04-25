@@ -26,6 +26,9 @@ struct ButtonState {
 
 bool sx1509Init();
 void sx1509Update();
+/** Optional: multi-button chord for ESP reset countdown (0 = inactive). */
+void sx1509PollEspResetChord();
+uint8_t sx1509GetResetCountdownDigit();
 const ButtonState& getButtonState();
 
 bool isBothJoystickButtonsHeld();

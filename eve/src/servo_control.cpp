@@ -3,6 +3,7 @@
 
 static int16_t s_headPanTarget = 90;
 static int16_t s_headPanCurrent = 90;
+static int16_t s_rightArmTarget = 90;
 
 void servoInit(void) {
 #if EVE_ENABLE_SERVOS
@@ -11,10 +12,15 @@ void servoInit(void) {
   Serial.println(F("[EVE][SERVO] disabled"));
 #endif
   s_headPanTarget = s_headPanCurrent = 90;
+  s_rightArmTarget = 90;
 }
 
 void servoSetHeadPanTarget(int16_t deg) {
   s_headPanTarget = (int16_t)constrain((int)deg, 45, 135);
+}
+
+void servoSetRightArmTarget(int16_t deg) {
+  s_rightArmTarget = (int16_t)constrain((int)deg, 0, 180);
 }
 
 void servoTick(void) {

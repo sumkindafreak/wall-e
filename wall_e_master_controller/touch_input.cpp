@@ -158,6 +158,8 @@ void touchInit(void) {
   s_touchSPI.begin(XPT2046_CLK, XPT2046_MISO, XPT2046_MOSI, XPT2046_CS);
   s_ts.begin(s_touchSPI);
   s_ts.setRotation(1);
+  /* Start activity clock at boot so safety timeout does not use millis()-0. */
+  s_lastInputMs = millis();
 }
 
 XPT2046_Touchscreen* touchGetTs(void) { return &s_ts; }

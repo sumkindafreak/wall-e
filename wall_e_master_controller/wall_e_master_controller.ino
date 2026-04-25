@@ -12,6 +12,7 @@
 
 #include <Arduino.h>
 #include <TFT_eSPI.h>
+#include <esp_err.h>
 #include <esp_task_wdt.h>
 #include <math.h>
 
@@ -54,9 +55,46 @@
 #include "sd_browser.h"
 
 #define TFT_BL 21
-#define WDT_TIMEOUT_SEC 3
+/* Full-screen redraw, SD, anim can exceed a few seconds on SPI; 3s WDT caused resets. */
+#define WDT_TIMEOUT_SEC 10
 
 TFT_eSPI tft = TFT_eSPI();
+
+/** Only call esp_task_wdt_reset when loop task is actually on the TWDT (avoids IDF error spam). */
+static bool s_taskWdtFeedOk = false;
+
+static void walleTaskWdtInit(void) {
+  esp_task_wdt_config_t wdt_config = {
+      .timeout_ms = WDT_TIMEOUT_SEC * 1000,
+      .idle_core_mask = 0,
+      .trigger_panic = true,
+  };
+  esp_err_t e = esp_task_wdt_init(&wdt_config);
+  if (e != ESP_OK && e != ESP_ERR_INVALID_STATE) {
+    Serial.printf("[WDT] init failed (%d) — TWDT disabled, no feed\n", (int)e);
+    s_taskWdtFeedOk = false;
+    return;
+  }
+  e = esp_task_wdt_add(NULL);
+  if (e != ESP_OK && e != ESP_ERR_INVALID_STATE) {
+    Serial.printf("[WDT] esp_task_wdt_add failed (%d) — not feeding\n", (int)e);
+    s_taskWdtFeedOk = false;
+    return;
+  }
+  e = esp_task_wdt_reset();
+  s_taskWdtFeedOk = (e == ESP_OK);
+  if (s_taskWdtFeedOk) {
+    Serial.printf("[WDT] loop task OK (%ds)\n", WDT_TIMEOUT_SEC);
+  } else {
+    Serial.printf("[WDT] reset test failed (%d) — disabling feed\n", (int)e);
+  }
+}
+
+static inline void walleTaskWdtFeed(void) {
+  if (s_taskWdtFeedOk) {
+    (void)esp_task_wdt_reset();
+  }
+}
 
 // USER-CUSTOMIZABLE: Button-press toast durations (ms).
 static const uint32_t BTN_TOAST_OK_MS = 1400u;
@@ -91,15 +129,7 @@ void setup() {
   delay(300);
   Serial.println("\n[WALL-E Master] CYD Command Console");
 
-  // Configure watchdog timer (ESP-IDF 5.x API)
-  esp_task_wdt_config_t wdt_config = {
-    .timeout_ms = WDT_TIMEOUT_SEC * 1000,
-    .idle_core_mask = 0,
-    .trigger_panic = true
-  };
-  esp_task_wdt_init(&wdt_config);
-  esp_task_wdt_add(NULL);
-  Serial.printf("[WDT] Enabled (%ds timeout)\n", WDT_TIMEOUT_SEC);
+  walleTaskWdtInit();
 
   pinMode(TFT_BL, OUTPUT);
   digitalWrite(TFT_BL, HIGH);
@@ -156,19 +186,24 @@ void loop() {
   const uint32_t loopStartUs = micros();
   unsigned long now = millis();
   
-  // Feed watchdog to prevent reset
-  esp_task_wdt_reset();
+  walleTaskWdtFeed();
 
   ads1115Update();
   sx1509Update();
 
   bool screenTouch = false;
   uint16_t sx = 0, sy = 0;
-  if (touchGetTs()->touched()) {
-    TS_Point tp = touchGetTs()->getPoint();
-    sx = (uint16_t)constrain(map(tp.x, TOUCH_X_MIN, TOUCH_X_MAX, 0, 319), 0, 319);
-    sy = (uint16_t)constrain(map(tp.y, TOUCH_Y_MIN, TOUCH_Y_MAX, 0, 239), 0, 239);
-    screenTouch = true;
+  {
+    XPT2046_Touchscreen* ts = touchGetTs();
+    /* Match touch_input: IRQ low + read + min pressure (avoids extra SPI, stuck reads). */
+    if (ts->tirqTouched() && ts->touched()) {
+      TS_Point tp = ts->getPoint();
+      if (tp.z > TOUCH_MIN_PRESSURE) {
+        sx = (uint16_t)constrain(map(tp.x, TOUCH_X_MIN, TOUCH_X_MAX, 0, 319), 0, 319);
+        sy = (uint16_t)constrain(map(tp.y, TOUCH_Y_MIN, TOUCH_Y_MAX, 0, 239), 0, 239);
+        screenTouch = true;
+      }
+    }
   }
   devConsoleProcessTouch(sx, sy, screenTouch);
 
@@ -229,10 +264,12 @@ void loop() {
     devConsoleFeedPacketTiming(PACKET_SEND_INTERVAL_MS * 1000u, (uint32_t)(micros() - loopStartUs));
     devConsoleUpdate(now);
     devConsoleDraw(&tft);
+    walleTaskWdtFeed();
     packetUpdate(now, &dsZ, g_estop);
     systemStatusTick(now);
     audioUpdate(now);
     sdUpdate();
+    walleTaskWdtFeed();
     delay(1);
     return;
   }
@@ -873,9 +910,11 @@ void loop() {
 
   // Static redraw on page/overlay change
   if (g_needStaticRedraw) {
+    walleTaskWdtFeed();
     uiDrawCurrentPage();
     if (g_overlayVisible) uiDrawQuickActionOverlay();
     g_needStaticRedraw = false;
+    walleTaskWdtFeed();
   }
 
   // Dynamic update
@@ -943,5 +982,6 @@ void loop() {
   /* Laser button must be painted after all other Drive overlays (joystick dots, eye, toasts). */
   uiRenderingDrawDriveLaserOverlayIfNeeded();
 
+  walleTaskWdtFeed();
   delay(1);
 }

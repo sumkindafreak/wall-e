@@ -180,6 +180,11 @@ void espnowManagerSendNodeHealth(void) {
   h.uptime_ms = (uint32_t)now;
   h.last_error = 0;
   h.flags = 0;
+  h.free_heap = ESP.getFreeHeap();
+  h.loop_p95_ms = 0;
+  h.wifi_rssi = (int8_t)WiFi.RSSI();
+  h.sd_ok = 1; /* DFPlayer SD */
+  h.last_peer_rx_age_ms = 0xFFFFFFFFu;
   esp_now_send(s_bcast, (uint8_t*)&h, sizeof(h));
 }
 

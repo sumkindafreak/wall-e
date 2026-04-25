@@ -16,11 +16,15 @@
 void espnowInit(void);
 /** Broadcast E-stop sound to audio ESP (edge-triggered). */
 void espnowBroadcastAudioEstopEdge(bool estop_pressed);
+/** Broadcast play-track to audio ESP (DFPlayer index 1–255). */
+void espnowBroadcastAudioPlayTrack(uint8_t track);
 void espnowSend(const ControlPacket* pkt);
 void espnowUpdate(void);
 
 bool espnowIsConnected(void);
 bool espnowTelemetryValid(void);
+/** True when last TelemetryPacket has seq-gap or base TX-fail flags (link noisy but not offline). */
+bool espnowTelemetryLinkDegraded(void);
 void espnowGetTelemetry(TelemetryPacket* out);
 uint16_t espnowGetPacketRate(void);  // Packets/s (rolling)
 void espnowSetPeerMac(const uint8_t mac[6]);

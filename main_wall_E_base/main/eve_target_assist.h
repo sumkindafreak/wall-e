@@ -26,3 +26,6 @@ EveAssistState eveTargetAssistGetState(void);
 float eveTargetAssistGetTurnBias(void);
 /** Small differential to add before motor ramp (-255..255 scale base command) */
 void eveTargetAssistGetMotorDelta(int16_t* dLeft, int16_t* dRight);
+
+/** Compact JSON for WebUI / living telemetry (zone, bias, stale). */
+String eveTargetAssistGetStatusJSON(void);

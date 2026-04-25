@@ -11,7 +11,9 @@
 // ============================================================
 
 #include <Arduino.h>
+#include <esp_system.h>
 #include "motor_control.h"
+#include "ota_manager.h"
 #include "wifi_manager.h"
 #include "web_server.h"
 #include "display_manager.h"
@@ -59,7 +61,7 @@
 #include "sequence_engine.h"
 
 // ============================================================
-//  Failsafe
+//  Failsafe: stop tracks if no drive command path refreshes this timer.
 // ============================================================
 #define FAILSAFE_TIMEOUT_MS 500UL
 
@@ -72,6 +74,7 @@ void setup() {
   Serial.begin(115200);
   delay(200);
   Serial.println("\n[WALL-E] Starting...");
+  Serial.printf("[Boot] esp_reset_reason=%d\n", (int)esp_reset_reason());
 
   // Motors safe first — always
   motorInit();
@@ -129,6 +132,7 @@ void setup() {
   wifiManagerInit();
   displayUpdateWifi();
   Serial.println("[Setup] Post-wifi");
+  otaManagerInit();
 
   // Web server
   webServerInit();
@@ -195,6 +199,7 @@ void loop() {
 
   // Web requests
   webServerHandle();
+  otaManagerHandle();
   eveUartBridgePoll();
   memoryManagerTick();
   relationshipTick(now);

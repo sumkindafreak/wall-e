@@ -8,9 +8,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-
-#define WALLE_TELEMETRY_MAGIC   0x54454C4Du  /* "TELM" */
-#define WALLE_TELEMETRY_VERSION 1u
+#include "walle_link_packet.h" /* ControlPacket, TelemetryPacket, v2 comms + CRC */
 
 // ------------------------------------------------------------
 //  Drive State — abstract model for input layer
@@ -20,53 +18,6 @@ typedef struct {
   int8_t  rightSpeed;   // -100 to 100
   bool    precisionMode;
 } DriveState;
-
-// ------------------------------------------------------------
-//  Control Packet — sent to WALL-E Base via ESP-NOW
-// ------------------------------------------------------------
-typedef struct __attribute__((packed)) {
-  int8_t   leftSpeed;
-  int8_t   rightSpeed;
-  uint8_t  driveMode;     // 0=manual, 1=precision
-  uint8_t  behaviourMode; // mood override
-  uint8_t  action;        // trigger event (scan, beep, lookaround, etc.)
-  uint16_t systemFlags;   // bitmask flags
-  uint8_t  servoTargets[10];  // NEW: 10 servo positions (0-180 degrees)
-  uint8_t  aux0;            // ACTION_AUTONOMY_REMOTE: config key (see below)
-  uint8_t  aux1;            // ACTION_AUTONOMY_REMOTE: value 0-255
-} ControlPacket;
-
-// ------------------------------------------------------------
-//  Telemetry Packet — received from WALL-E Base
-// ------------------------------------------------------------
-typedef struct __attribute__((packed)) {
-  uint32_t magic;
-  uint8_t  version;
-  float   batteryVoltage;
-  float   currentDraw;
-  float   temperature;
-  uint8_t moodState;
-  uint8_t autonomousState;
-  uint8_t safetyState;
-  
-  // Autonomy telemetry (NEW)
-  uint8_t autonomyEnabled;      // 0=disabled, 1=enabled
-  uint8_t autonomyState;        // AutoState enum value
-  float   sonarDistanceCm;      // Current sonar reading
-  float   compassHeading;       // Current heading (0-360)
-  float   gpsLatitude;          // GPS latitude (high precision)
-  float   gpsLongitude;         // GPS longitude (high precision)
-  uint8_t gpsValid;             // GPS fix status
-  uint8_t waypointMode;         // Waypoint navigation active
-  float   waypointDistanceM;    // Distance to current waypoint (meters)
-  float   waypointBearingDeg;   // Bearing to waypoint (0-360)
-  uint8_t currentWaypoint;      // Current waypoint index
-  uint8_t totalWaypoints;       // Total waypoint count
-  /** Base motion policy: 0=any, 1=cyd_only, 2=web_only (see MotionAuthorityMode on base) */
-  uint8_t motionPolicy;
-  /** 1 if CYD sticks are active but policy blocks drive (e.g. web_only + non-idle sticks) */
-  uint8_t policyDenyCyd;
-} TelemetryPacket;
 
 // ------------------------------------------------------------
 //  Action codes (packet.action)
@@ -86,6 +37,8 @@ typedef struct __attribute__((packed)) {
 #define ACTION_AUTONOMY_REMOTE  11
 /** Set motion authority: aux0 = 0 any, 1 cyd_only, 2 web_only (paired CYD only; same trust as drive) */
 #define ACTION_MOTION_POLICY    12
+/** Forward CYD EVE panel targets to base → EVE UART (aux0=head pan deg, aux1=right arm deg) */
+#define ACTION_EVE_UART_SERVO   13
 
 /** Keys for ACTION_AUTONOMY_REMOTE (aux0) */
 #define AUTONOMY_KEY_DETECT_CLOSE_CM    1   /* aux1: cm 10-150 */

@@ -26,6 +26,17 @@ Default firmware UART mapping (DevKit-style, **override in `config.h` if your PC
 
 Baud rate: **115200 8N1** (see `EVE_UART_BAUD` in `config.h`).
 
+## Charger/dock link: same pogo UART
+
+EVE's charger/dock can use the same pogo UART pins as the WALL-E hand link when
+the dock and WALL-E are mutually exclusive physical peers. In that setup the
+ESP32-C3 dock listens for EVE's framed `MSG_EVE_HELLO`, replies with
+`MSG_WALL_E_ACK` using `peer:"eve_dock_c3"`, then sends `MSG_MODE_DOCK`.
+
+Charging should remain off until the framed handshake completes, and the dock
+should cut the charge path if `MSG_EVE_HEARTBEAT` stops for the configured
+timeout.
+
 ## EVE peripherals (logical groups)
 
 Pins are **placeholders** until your PCB is final — set real values once in `config.h`.

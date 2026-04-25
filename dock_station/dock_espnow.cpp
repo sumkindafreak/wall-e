@@ -122,6 +122,11 @@ void dockEspNowSendNodeHealth(void) {
   if (st >= STATE_DOCKED_IDLE && st != STATE_NOT_DOCKED && st != STATE_BOOT) f |= WALLE_NODE_FLAG_DOCKED;
   if (st == STATE_FAULT) f |= WALLE_NODE_FLAG_FAULT;
   h.flags = f;
+  h.free_heap = ESP.getFreeHeap();
+  h.loop_p95_ms = 0;
+  h.wifi_rssi = (int8_t)WiFi.RSSI();
+  h.sd_ok = 0;
+  h.last_peer_rx_age_ms = 0xFFFFFFFFu;
   esp_now_send(broadcast_mac, (uint8_t*)&h, sizeof(h));
 }
 

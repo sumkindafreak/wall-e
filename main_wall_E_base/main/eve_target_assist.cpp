@@ -139,6 +139,41 @@ float eveTargetAssistGetTurnBias(void) {
   return s_bias;
 }
 
+static const char* assistStateName(EveAssistState s) {
+  switch (s) {
+    case ASSIST_NONE: return "NONE";
+    case ASSIST_BIAS_LEFT: return "BIAS_LEFT";
+    case ASSIST_BIAS_RIGHT: return "BIAS_RIGHT";
+    case ASSIST_ALIGN_CENTER: return "ALIGN_CENTER";
+    case ASSIST_HOLD_TARGET: return "HOLD_TARGET";
+    case ASSIST_SUPPRESSED_BY_SAFETY: return "SUPPRESSED_SAFETY";
+    case ASSIST_SUPPRESSED_BY_MANUAL: return "SUPPRESSED_MANUAL";
+    default: return "UNKNOWN";
+  }
+}
+
+String eveTargetAssistGetStatusJSON(void) {
+  uint32_t now = millis();
+  uint32_t age = s_lastRxMs ? (uint32_t)(now - s_lastRxMs) : 0u;
+  bool stale = (s_lastRxMs == 0) || (age > kStaleMs);
+  String j = "{\"state\":";
+  j += (int)s_state;
+  j += ",\"state_name\":\"";
+  j += assistStateName(s_state);
+  j += "\",\"zone\":\"";
+  j += s_lastZone;
+  j += "\",\"bias\":";
+  j += String(s_bias, 4);
+  j += ",\"tracking\":";
+  j += s_tracking ? "true" : "false";
+  j += ",\"last_rx_age_ms\":";
+  j += (uint32_t)age;
+  j += ",\"stale\":";
+  j += stale ? "true" : "false";
+  j += "}";
+  return j;
+}
+
 void eveTargetAssistGetMotorDelta(int16_t* dLeft, int16_t* dRight) {
   if (!dLeft || !dRight) {
     return;

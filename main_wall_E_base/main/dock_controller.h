@@ -30,3 +30,8 @@ bool dockControllerSendApproachStage(uint8_t stage, uint32_t dock_id);
 /* Dock must receive ARM before driving arrow MOSFETs (when dock has DOCK_ARROWS_REQUIRE_WALLE_ARM + WiFi). */
 bool dockControllerSendDockingArm(uint32_t dock_id);
 bool dockControllerSendDockingDisarm(uint32_t dock_id);
+
+/* Telemetry ack pulses (docking/charge — OR with CYD comms ack on base). */
+void dockControllerNotifyApproachSendOk(void);
+void dockControllerNotifyChargeSendOk(void);
+uint8_t dockControllerGetLiveAckMask(void);

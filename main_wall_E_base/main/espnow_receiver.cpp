@@ -28,56 +28,16 @@
 #include "audio_esp_status.h"
 #include "servo_manager.h"
 #include "laser_control.h"
+#include "dock_controller.h"
+#include "walle_link_packet.h"
+#include "eve_uart_bridge.h"
+#include <string.h>
 #include <WiFi.h>
 #include <esp_now.h>
 #include <esp_wifi.h>
 
-// Must match wall_e_master_controller/protocol.h ControlPacket (packed)
-typedef struct __attribute__((packed)) {
-  int8_t   leftSpeed;
-  int8_t   rightSpeed;
-  uint8_t  driveMode;
-  uint8_t  behaviourMode;
-  uint8_t  action;
-  uint16_t systemFlags;
-  uint8_t  servoTargets[10];
-  uint8_t  aux0;
-  uint8_t  aux1;
-} ControlPacket;
-
 #define CONTROL_PACKET_HEADER_BYTES  7
-#define CONTROL_PACKET_FULL_BYTES    (int)sizeof(ControlPacket)
-
-// Telemetry packet to send back (UPDATED with autonomy data)
-typedef struct __attribute__((packed)) {
-  uint32_t magic;
-  uint8_t  version;
-  float   batteryVoltage;
-  float   currentDraw;
-  float   temperature;
-  uint8_t moodState;
-  uint8_t autonomousState;
-  uint8_t safetyState;
-  
-  // Autonomy telemetry
-  uint8_t autonomyEnabled;
-  uint8_t autonomyState;
-  float   sonarDistanceCm;
-  float   compassHeading;
-  float   gpsLatitude;
-  float   gpsLongitude;
-  uint8_t gpsValid;
-  uint8_t waypointMode;
-  float   waypointDistanceM;
-  float   waypointBearingDeg;
-  uint8_t currentWaypoint;
-  uint8_t totalWaypoints;
-  uint8_t motionPolicy;
-  uint8_t policyDenyCyd;
-} TelemetryPacket;
-
-#define WALLE_TELEMETRY_MAGIC   0x54454C4Du  /* "TELM" */
-#define WALLE_TELEMETRY_VERSION 1u
+#define CONTROL_PACKET_FULL_BYTES    (int)WALLE_CTRL_OBSOLETE_BYTES
 
 // Action codes
 #define ACTION_NONE        0
@@ -93,6 +53,7 @@ typedef struct __attribute__((packed)) {
 #define ACTION_STOP_ALL    10
 #define ACTION_AUTONOMY_REMOTE  11
 #define ACTION_MOTION_POLICY    12
+#define ACTION_EVE_UART_SERVO   13  /* aux0=head deg 45–135, aux1=right arm 0–180 */
 
 // System flags
 #define FLAG_ESTOP      0x0001
@@ -111,6 +72,23 @@ static uint32_t s_lastRejectedControlLogMs = 0;
 static int8_t s_lastLeftSpeed = 0;
 static int8_t s_lastRightSpeed = 0;
 static uint32_t s_lastManualCommandMs = 0;
+
+/* CYD control v2: sequence + CRC (legacy 19 B unchanged for old CYD) */
+static uint16_t s_lastAcceptedCydSeq = 0xFFFFu;
+static uint8_t  s_telemAckLatch = 0;
+static uint32_t s_lastBadCrcLogMs = 0;
+static uint32_t s_lastOldSeqLogMs = 0;
+static uint32_t s_lastSeqGapLogMs = 0;
+static uint32_t s_lastSeqGapEventMs = 0;
+static uint32_t s_lastTelemTxFailMs = 0;
+static uint8_t  s_telemSendFailStreak = 0;
+static bool     s_ctrlPeerReady = false;
+static bool     s_pendingCtrlPeerRebind = false;
+static uint16_t s_apiCommsLastSeq = 0;
+static uint8_t  s_apiCommsLastAck = 0;
+
+#define TELEM_RSV0_STICKY_MS 2000u
+#define PEER_REBIND_FAIL_STREAK 4u
 
 static bool hasKnownControllerMac(void) {
   for (int i = 0; i < 6; i++) {
@@ -146,15 +124,44 @@ static bool isControlSourceAllowed(const esp_now_recv_info_t* info) {
   return false;
 }
 
+static void onBaseTelemetrySent(const uint8_t* /*mac*/, esp_now_send_status_t status) {
+  if (status != ESP_NOW_SEND_SUCCESS) {
+    s_lastTelemTxFailMs = millis();
+    if (s_telemSendFailStreak < 255) {
+      s_telemSendFailStreak++;
+    }
+    if (s_telemSendFailStreak >= PEER_REBIND_FAIL_STREAK) {
+      s_pendingCtrlPeerRebind = true;
+    }
+  } else {
+    s_telemSendFailStreak = 0;
+  }
+}
+
+static void baseRecoverControllerPeerIfNeeded() {
+  if (!s_pendingCtrlPeerRebind || !hasKnownControllerMac()) {
+    return;
+  }
+  s_pendingCtrlPeerRebind = false;
+  esp_err_t d = esp_now_del_peer(s_controllerMac);
+  (void)d;
+  s_ctrlPeerReady = false;
+  s_telemSendFailStreak = 0;
+  Serial.println(F("[ESP-NOW] Rebound CYD peer after telemetry send failures"));
+}
+
 // ESP-NOW callback (signature for ESP32 Arduino Core 3.x)
 static void onRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len) {
   audioTelemOnPacket(data, len);
 
-  if (len >= (int)sizeof(WalleNodeHealthPacket_t)) {
+  if (len >= 8) {
     const WalleNodeHealthPacket_t* hp = (const WalleNodeHealthPacket_t*)data;
-    if (hp->magic == WALLE_NODE_HEALTH_MAGIC && hp->version == WALLE_NODE_HEALTH_VERSION) {
-      nodeHealthOnPacket(data, len);
-      return;
+    if (hp->magic == WALLE_NODE_HEALTH_MAGIC) {
+      if ((hp->version == 1 && len >= (int)WALLE_NODE_HEALTH_V1_SIZE) ||
+          (hp->version == 2 && len >= (int)WALLE_NODE_HEALTH_V2_SIZE)) {
+        nodeHealthOnPacket(data, len);
+        return;
+      }
     }
   }
 
@@ -201,11 +208,51 @@ static void onRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len
     }
   }
 
-  if (len < CONTROL_PACKET_HEADER_BYTES) return;
+  if (len < (int)WALLE_CTRL_OBSOLETE_BYTES) return;
   if (!isControlSourceAllowed(info)) return;
 
-  const ControlPacket* p = (const ControlPacket*)data;
-
+  ControlPacket cp = {};
+  memcpy(&cp, data, (size_t)len < sizeof(ControlPacket) ? (size_t)len : sizeof(ControlPacket));
+  const bool legacy = (len < (int)WALLE_CTRL_PACKET_V2);
+  if (!legacy) {
+    if (len < (int)WALLE_CTRL_PACKET_V2) return;
+    if (walle_crc8_dallas((const uint8_t*)&cp, WALLE_CTRL_CRC_LEN) != cp.crc8) {
+      uint32_t t = millis();
+      if (t - s_lastBadCrcLogMs > 1000u) {
+        s_lastBadCrcLogMs = t;
+        Serial.println(F("[CTRL] CRC8 mismatch (dropped)"));
+      }
+      return;
+    }
+  }
+  {
+    const bool estopF = (cp.systemFlags & FLAG_ESTOP) != 0;
+    if (!legacy && !estopF) {
+      const uint16_t d = (uint16_t)(cp.seq - s_lastAcceptedCydSeq);
+      if (s_lastAcceptedCydSeq != 0xFFFF) {
+        if (d == 0) return;
+        if (d > 0x7FFF) {
+          uint32_t t = millis();
+          if (t - s_lastOldSeqLogMs > 500u) {
+            s_lastOldSeqLogMs = t;
+            Serial.println(F("[CTRL] Stale or replay seq (dropped)"));
+          }
+          return;
+        }
+        if (d > (uint16_t)WALLE_CTRL_MAX_SEQ_JUMP) {
+          s_lastSeqGapEventMs = millis();
+          uint32_t t = millis();
+          if (t - s_lastSeqGapLogMs > 500u) {
+            s_lastSeqGapLogMs = t;
+            Serial.println(F("[CTRL] Seq jump too large (dropped, link flag)"));
+          }
+          return;
+        }
+      }
+    }
+    if (!legacy) s_lastAcceptedCydSeq = cp.seq;
+  }
+  const ControlPacket* p = &cp;
   const bool cydAllowed = motionAuthorityAllowCyd();
 
   /* Always track CYD stick intent for /api/motion/operator POLICY + telemetry policyDenyCyd */
@@ -222,6 +269,7 @@ static void onRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len
     laserOff();
     displaySetCommand(CMD_IDLE);
     lastCommandMillis = millis();
+    s_telemAckLatch |= (uint8_t)WALLE_ACK_ESTOP;
     if (!s_estopLast) {
       Serial.println("[E-STOP]");
       audioEspNowSendEvent(WALLE_AUDIO_EVT_ESTOP, WALLE_AUDIO_PRIORITY_ESTOP);
@@ -254,19 +302,22 @@ static void onRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len
     laserOff();
     displaySetCommand(CMD_IDLE);
     Serial.println(F("[Action] STOP_ALL"));
-  } else if (p->action == ACTION_AUTONOMY_REMOTE && len >= (int)sizeof(ControlPacket)) {
+  } else if (p->action == ACTION_AUTONOMY_REMOTE && len >= 19) {
     autonomyApplyRemoteConfig(p->aux0, p->aux1);
-  } else if (p->action == ACTION_MOTION_POLICY && len >= (int)sizeof(ControlPacket)) {
+  } else if (p->action == ACTION_MOTION_POLICY && len >= 19) {
     if (p->aux0 <= (uint8_t)MOTION_AUTH_WEB_ONLY) {
       motionAuthoritySet((MotionAuthorityMode)p->aux0);
+      s_telemAckLatch |= (uint8_t)WALLE_ACK_MOTION_POLICY;
       Serial.printf("[MotionAuth] CYD policy -> %s\n", motionAuthorityModeName((MotionAuthorityMode)p->aux0));
     }
+  } else if (p->action == ACTION_EVE_UART_SERVO && len >= 19) {
+    (void)eveUartBridgeSendCydServo(p->aux0, p->aux1);
   } else if (p->action != ACTION_NONE) {
     Serial.printf("[Action] %d\n", p->action);
   }
 
   /* Servo + laser from CYD (0–180° in packet → base uses 0–100 scale) */
-  if (cydAllowed && len >= CONTROL_PACKET_FULL_BYTES) {
+  if (cydAllowed && len >= (int)WALLE_CTRL_OBSOLETE_BYTES) {
     if (p->systemFlags & FLAG_LASER) {
       laserSetBrightness(255);
     } else {
@@ -335,6 +386,7 @@ void espnowReceiverInit() {
     return;
   }
   esp_now_register_recv_cb(onRecv);
+  esp_now_register_send_cb(onBaseTelemetrySent);
   // AP MAC receives on channel 11 — use this when controller needs specific MAC
   Serial.print("[ESP-NOW] Receiver ready. Use this MAC for controller: ");
   Serial.println(WiFi.softAPmacAddress());
@@ -357,36 +409,36 @@ void espnowSendTelemetry() {
   }
   if (!hasController) return;
 
-  // Check if controller is registered as a peer, if not add it
-  static bool peerAdded = false;
-  if (!peerAdded && hasController) {
+  baseRecoverControllerPeerIfNeeded();
+
+  if (!s_ctrlPeerReady && hasController) {
     esp_now_peer_info_t peerInfo = {};
     memcpy(peerInfo.peer_addr, s_controllerMac, 6);
     peerInfo.channel = 0;  // Use same channel as current WiFi
     peerInfo.encrypt = false;
     peerInfo.ifidx = WIFI_IF_AP;  // Use AP interface for base
-    
+
     esp_err_t result = esp_now_add_peer(&peerInfo);
     if (result == ESP_OK) {
-      Serial.print("[ESP-NOW] Controller peer added: ");
+      Serial.print(F("[ESP-NOW] Controller peer added: "));
       for (int i = 0; i < 6; i++) {
         Serial.printf("%02X", s_controllerMac[i]);
         if (i < 5) Serial.print(":");
       }
       Serial.println();
-      peerAdded = true;
+      s_ctrlPeerReady = true;
     } else if (result == ESP_ERR_ESPNOW_EXIST) {
-      // Already added, that's fine
-      peerAdded = true;
+      s_ctrlPeerReady = true;
     } else {
-      Serial.printf("[ESP-NOW] Failed to add peer: %d\n", result);
+      Serial.print(F("[ESP-NOW] Failed to add peer: "));
+      Serial.println((int)result);
       return;
     }
   }
 
   TelemetryPacket telem = {};
   telem.magic = WALLE_TELEMETRY_MAGIC;
-  telem.version = WALLE_TELEMETRY_VERSION;
+  telem.version = (uint8_t)WALLE_TELEMETRY_VERSION;
   
   // Battery data (from battery_monitor.h/cpp)
   const BatteryData& bat = batteryGetData();
@@ -421,7 +473,41 @@ void espnowSendTelemetry() {
         (telem.motionPolicy == (uint8_t)MOTION_AUTH_WEB_ONLY && sticksIntent) ? 1 : 0;
   }
 
+  {
+    if (s_lastAcceptedCydSeq == 0xFFFF) {
+      telem.last_control_seq_applied = 0;
+    } else {
+      telem.last_control_seq_applied = s_lastAcceptedCydSeq;
+    }
+    uint8_t a = s_telemAckLatch;
+    a |= dockControllerGetLiveAckMask();
+    telem.control_ack_bits = a;
+    s_telemAckLatch = 0;
+    {
+      uint8_t rsv = 0;
+      const uint32_t tnow = millis();
+      if (s_lastSeqGapEventMs != 0 &&
+          (uint32_t)(tnow - s_lastSeqGapEventMs) < TELEM_RSV0_STICKY_MS) {
+        rsv = (uint8_t)(rsv | WALLE_TELEM_RSV0_SEQ_GAP);
+      }
+      if (s_lastTelemTxFailMs != 0 &&
+          (uint32_t)(tnow - s_lastTelemTxFailMs) < TELEM_RSV0_STICKY_MS) {
+        rsv = (uint8_t)(rsv | WALLE_TELEM_RSV0_TELEM_TX_FAIL);
+      }
+      if (eveUartBridgeIsLinkUp()) {
+        rsv = (uint8_t)(rsv | WALLE_TELEM_RSV0_EVE_UART);
+      }
+      telem.rsv0 = rsv;
+    }
+    s_apiCommsLastSeq = telem.last_control_seq_applied;
+    s_apiCommsLastAck = telem.control_ack_bits;
+  }
+
   esp_err_t result = esp_now_send(s_controllerMac, (uint8_t*)&telem, sizeof(TelemetryPacket));
+  if (result != ESP_OK) {
+    s_lastTelemTxFailMs = millis();
+    s_pendingCtrlPeerRebind = true;
+  }
   
   // Debug output every 50 sends (~5 seconds at 10Hz)
   static int sendCount = 0;
@@ -441,4 +527,9 @@ bool espnowIsManualControlActive() {
   }
   // Or if recent command
   return (millis() - s_lastManualCommandMs) < 500;
+}
+
+void espnowReceiverGetCydCommsForApi(uint16_t* lastSeq, uint8_t* ackBits) {
+  if (lastSeq) *lastSeq = s_apiCommsLastSeq;
+  if (ackBits) *ackBits = s_apiCommsLastAck;
 }

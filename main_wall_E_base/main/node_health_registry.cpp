@@ -4,6 +4,7 @@
 #include "node_health_registry.h"
 #include "node_health_protocol.h"
 #include "battery_monitor.h"
+#include "loop_stats.h"
 #include <WiFi.h>
 #include <esp_now.h>
 #include <esp_wifi.h>
@@ -70,6 +71,8 @@ void nodeHealthInit(void) {
   s_last_base_fill_ms = 0;
 }
 
+extern unsigned long lastCommandMillis;
+
 static void fillBaseSlot(uint32_t now) {
   NodeSlot& sl = s_slot[WALLE_NODE_BASE];
   const BatteryData& b = batteryGetData();
@@ -84,20 +87,40 @@ static void fillBaseSlot(uint32_t now) {
   sl.pkt.uptime_ms = now;
   sl.pkt.last_error = 0;
   sl.pkt.flags = 0;
+  sl.pkt.free_heap = ESP.getFreeHeap();
+  sl.pkt.loop_p95_ms = loopStatsGetP95Ms();
+  sl.pkt.wifi_rssi = (int8_t)WALLE_NODE_RSSI_UNKNOWN; /* softAP: no single-client RSSI here */
+  sl.pkt.sd_ok = 0; /* add SD if wired on base */
+  if (lastCommandMillis > 0u && now >= lastCommandMillis) {
+    sl.pkt.last_peer_rx_age_ms = (uint32_t)(now - lastCommandMillis);
+  } else {
+    sl.pkt.last_peer_rx_age_ms = 0xFFFFFFFFu;
+  }
   sl.last_seen_ms = now;
   sl.ever_seen = true;
 }
 
 void nodeHealthOnPacket(const uint8_t* data, int len) {
-  if (!data || len < (int)sizeof(WalleNodeHealthPacket_t)) return;
+  if (!data || len < 8) return;
   const WalleNodeHealthPacket_t* p = (const WalleNodeHealthPacket_t*)data;
-  if (p->magic != WALLE_NODE_HEALTH_MAGIC || p->version != WALLE_NODE_HEALTH_VERSION) return;
+  if (p->magic != WALLE_NODE_HEALTH_MAGIC) return;
+  if (p->version < 1 || p->version > 2) return;
+  if (p->version == 1) {
+    if (len < (int)WALLE_NODE_HEALTH_V1_SIZE) return;
+  } else {
+    if (len < (int)WALLE_NODE_HEALTH_V2_SIZE) return;
+  }
   if (p->node_id >= WALLE_NODE_COUNT) return;
   /* Local BASE slot is filled from battery/ESP — ignore echoed or stray BASE packets. */
   if (p->node_id == WALLE_NODE_BASE) return;
 
   NodeSlot& sl = s_slot[p->node_id];
-  memcpy(&sl.pkt, p, sizeof(WalleNodeHealthPacket_t));
+  memset(&sl.pkt, 0, sizeof(sl.pkt));
+  size_t cpy = (p->version == 1) ? (size_t)WALLE_NODE_HEALTH_V1_SIZE : (size_t)WALLE_NODE_HEALTH_V2_SIZE;
+  memcpy(&sl.pkt, data, cpy);
+  if (p->version == 1) {
+    sl.pkt.version = 1; /* v1 node; extended fields were zeroed */
+  }
   sl.last_seen_ms = millis();
   sl.ever_seen = true;
 }
@@ -114,6 +137,11 @@ void nodeHealthOnDockBeacon(const DockBeaconPacket_t* bp) {
   sl.pkt.temp_c = WALLE_NODE_HEALTH_UNKNOWN_TEMP;
   sl.pkt.uptime_ms = bp->uptime_ms;
   sl.pkt.last_error = (bp->state == DOCK_ST_FAULT) ? 1u : 0u;
+  sl.pkt.free_heap = 0;
+  sl.pkt.loop_p95_ms = 0;
+  sl.pkt.wifi_rssi = (int8_t)WALLE_NODE_RSSI_UNKNOWN;
+  sl.pkt.sd_ok = 0;
+  sl.pkt.last_peer_rx_age_ms = 0xFFFFFFFFu;
 
   uint16_t f = 0;
   if (bp->beam_present) f |= WALLE_NODE_FLAG_DOCKED;
@@ -138,6 +166,11 @@ void nodeHealthMarkVisionSeen(void) {
   sl.pkt.uptime_ms = now;
   sl.pkt.last_error = 0;
   sl.pkt.flags = 0;
+  sl.pkt.free_heap = ESP.getFreeHeap();
+  sl.pkt.loop_p95_ms = 0;
+  sl.pkt.wifi_rssi = (int8_t)WALLE_NODE_RSSI_UNKNOWN;
+  sl.pkt.sd_ok = 0;
+  sl.pkt.last_peer_rx_age_ms = 0xFFFFFFFFu;
   sl.last_seen_ms = now;
   sl.ever_seen = true;
 }
@@ -182,7 +215,7 @@ uint16_t nodeHealthGetFlags(uint8_t node_id) {
 
 String nodeHealthGetJSON(void) {
   uint32_t now = millis();
-  String j = "{\"v\":1,\"timeout_ms\":";
+  String j = "{\"v\":2,\"timeout_ms\":";
   j += (uint32_t)NODE_HEALTH_TIMEOUT_MS;
   j += ",\"global_hb_ms\":";
   j += now;
@@ -210,6 +243,20 @@ String nodeHealthGetJSON(void) {
       j += ",\"age_ms\":"; j += age;
     } else {
       j += ",\"age_ms\":null";
+    }
+    j += ",\"hver\":"; j += (int)sl.pkt.version;
+    if (sl.pkt.version >= 2) {
+      j += ",\"free_heap\":"; j += (uint32_t)sl.pkt.free_heap;
+      j += ",\"loop_p95_ms\":"; j += (uint32_t)sl.pkt.loop_p95_ms;
+      j += ",\"rssi\":";
+      if (sl.pkt.wifi_rssi == WALLE_NODE_RSSI_UNKNOWN) j += "null";
+      else j += String((int)sl.pkt.wifi_rssi);
+      j += ",\"sd_ok\":"; j += (unsigned)sl.pkt.sd_ok;
+      if (sl.pkt.last_peer_rx_age_ms == 0xFFFFFFFFu) {
+        j += ",\"last_peer_age_ms\":null";
+      } else {
+        j += ",\"last_peer_age_ms\":"; j += (uint32_t)sl.pkt.last_peer_rx_age_ms;
+      }
     }
     j += '}';
   }

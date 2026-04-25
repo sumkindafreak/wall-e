@@ -13,3 +13,6 @@ void espnowSendTelemetry(); // Call periodically (e.g., every 100ms) to update c
 
 // NEW: Check if manual control is active
 bool espnowIsManualControlActive();
+
+/** Last values echoed to CYD (ack bits + last accepted seq) — for /api living JSON */
+void espnowReceiverGetCydCommsForApi(uint16_t* lastSeq, uint8_t* ackBits);

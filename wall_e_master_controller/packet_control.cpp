@@ -8,6 +8,7 @@
 #include "motion_engine.h"
 #include "cyd_laser_ui.h"
 #include "ui_state.h"
+#include "walle_link_packet.h"
 #include <string.h>
 #include <Arduino.h>
 
@@ -15,6 +16,7 @@ static unsigned long s_lastSendMs = 0;
 static uint8_t s_pendingAction = ACTION_NONE;
 static uint8_t s_pendingAux0 = 0;
 static uint8_t s_pendingAux1 = 0;
+static uint16_t s_controlTxSeq = 0;
 
 void packetInit(void) {
   espnowInit();
@@ -50,6 +52,8 @@ void packetUpdate(unsigned long now, const DriveState* ds, bool estop) {
     /* aux already set */
   } else if (s_pendingAction == ACTION_MOTION_POLICY) {
     pkt.aux1 = 0;
+  } else if (s_pendingAction == ACTION_EVE_UART_SERVO) {
+    /* aux0 / aux1 = EVE head + arm (keep) */
   } else {
     pkt.aux0 = 0;
     pkt.aux1 = 0;
@@ -67,6 +71,7 @@ void packetUpdate(unsigned long now, const DriveState* ds, bool estop) {
     }
   }
 
+  walleControlPacketSeal(&pkt, &s_controlTxSeq);
   espnowSend(&pkt);
   espnowBroadcastAudioEstopEdge(estop);
 }
@@ -86,6 +91,12 @@ void packetSetMotionPolicy(uint8_t mode) {
   s_pendingAction = ACTION_MOTION_POLICY;
   s_pendingAux0 = mode;
   s_pendingAux1 = 0;
+}
+
+void packetSetEveServo(uint8_t headPanDeg, uint8_t rightArmDeg) {
+  s_pendingAction = ACTION_EVE_UART_SERVO;
+  s_pendingAux0 = headPanDeg;
+  s_pendingAux1 = rightArmDeg;
 }
 
 bool packetTelemetryValid(void) {

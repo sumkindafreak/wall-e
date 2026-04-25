@@ -4,18 +4,40 @@
 
 #include "dock_controller.h"
 #include "dock_protocol.h"
+#include "walle_link_packet.h"
 #include <WiFi.h>
 #include <esp_now.h>
 #include <Arduino.h>
 #include <cstring>
 
 static_assert(sizeof(DockCommandPacket_t) == 12, "DockCommandPacket_t wire-size drift");
-static_assert(sizeof(DockApproachStagePacket_t) == 14, "DockApproachStagePacket_t wire-size drift");
+static_assert(sizeof(DockApproachStagePacket_t) == 12, "DockApproachStagePacket_t wire-size drift");
 static_assert(sizeof(DockTimePacket_t) == 16, "DockTimePacket_t wire-size drift");
 static_assert(sizeof(DockWifiConfigPacket_t) == 110, "DockWifiConfigPacket_t wire-size drift");
 
 static uint8_t s_broadcast_mac[] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
 static bool s_peer_added = false;
+
+static uint32_t s_lastApproachSendOkMs = 0;
+static uint32_t s_lastChargeSendOkMs = 0;
+#ifndef DOCK_CTRL_ACK_PULSE_MS
+#define DOCK_CTRL_ACK_PULSE_MS 500u
+#endif
+
+void dockControllerNotifyApproachSendOk(void) { s_lastApproachSendOkMs = millis(); }
+void dockControllerNotifyChargeSendOk(void) { s_lastChargeSendOkMs = millis(); }
+
+uint8_t dockControllerGetLiveAckMask(void) {
+  uint32_t t = millis();
+  uint8_t m = 0;
+  if (s_lastApproachSendOkMs && (t - s_lastApproachSendOkMs) < DOCK_CTRL_ACK_PULSE_MS) {
+    m |= (uint8_t)WALLE_ACK_APPROACH_STAGE;
+  }
+  if (s_lastChargeSendOkMs && (t - s_lastChargeSendOkMs) < DOCK_CTRL_ACK_PULSE_MS) {
+    m |= (uint8_t)WALLE_ACK_CHARGE_REQUEST;
+  }
+  return m;
+}
 
 static bool ensureBroadcastPeer(void) {
   if (s_peer_added) return true;
@@ -81,7 +103,14 @@ bool dockControllerSendReset(uint32_t dock_id) {
 }
 
 bool dockControllerSendRequestCharge(uint32_t dock_id) {
-  return sendCmd(dock_id, DOCK_CMD_REQUEST_CHARGE);
+  if (!ensureBroadcastPeer()) return false;
+  DockCommandPacket_t pkt = {};
+  pkt.magic = DOCK_CMD_MAGIC;
+  pkt.dock_id = dock_id;
+  pkt.cmd = DOCK_CMD_REQUEST_CHARGE;
+  esp_err_t r = esp_now_send(s_broadcast_mac, (uint8_t*)&pkt, sizeof(pkt));
+  if (r == ESP_OK) dockControllerNotifyChargeSendOk();
+  return (r == ESP_OK);
 }
 
 bool dockControllerSendApproachStage(uint8_t stage, uint32_t dock_id) {
@@ -92,6 +121,7 @@ bool dockControllerSendApproachStage(uint8_t stage, uint32_t dock_id) {
   pkt.cmd = DOCK_CMD_APPROACH_STAGE;
   pkt.stage = (stage <= APPROACH_DOCKED) ? stage : APPROACH_FAR;
   esp_err_t r = esp_now_send(s_broadcast_mac, (uint8_t *)&pkt, sizeof(pkt));
+  if (r == ESP_OK) dockControllerNotifyApproachSendOk();
   return (r == ESP_OK);
 }
 

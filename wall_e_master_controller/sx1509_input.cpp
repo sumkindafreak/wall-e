@@ -47,6 +47,14 @@ bool sx1509Init() {
   return true;
 }
 
+void sx1509PollEspResetChord() {
+  /* No chord logic on this hardware variant; LVGL build polls hook for future use. */
+}
+
+uint8_t sx1509GetResetCountdownDigit() {
+  return 0u;
+}
+
 void sx1509Update() {
   if (!sx1509Ready) return; // Skip if device not initialized
   

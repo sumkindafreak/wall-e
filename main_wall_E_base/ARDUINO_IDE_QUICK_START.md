@@ -17,7 +17,7 @@ Arduino requires: **sketch folder name = main `.ino` name** (without `.ino`).
 `…/wall-e/main_wall_E_base/main`  
 then open `main.ino`.
 
-All `*.cpp` / `*.h` in that same `main/` folder are built with the sketch. Protocol headers that must live next to the sources (so Arduino finds them without extra include paths) are kept there, e.g. `audio_protocol.h`, `node_health_protocol.h` — keep them in sync with `wall_e_audio/` when you change protocols.
+All `*.cpp` / `*.h` in that same `main/` folder are built with the sketch. Shared wire-protocol headers are **re-exported** from `firmware_common/include/` via thin `*.h` shims in this folder (e.g. `audio_protocol.h` → one `#include` to the canonical file). Edit protocols only in [`firmware_common/include/`](../firmware_common/include).
 
 There is also a **root** `main_wall_E_base/main.ino` used by PlatformIO layouts; for Arduino day-to-day, treat **`main/main.ino`** as your real sketch.
 
@@ -64,7 +64,7 @@ Same rule: **folder name = `.ino` name**.
 | `dock_station/` | `dock_station` | `dock_station.ino` |
 | `wall_e_master_controller/` | `wall_e_master_controller` | `wall_e_master_controller.ino` |
 
-Local copies of shared headers (e.g. `audio_esp/node_health_protocol.h`) exist so Arduino does not rely on `../wall_e_audio` include paths.
+The same re-export pattern applies: each sketch folder has tiny `*.h` shims that `#include` the canonical headers under `firmware_common/include/`.
 
 ---
 

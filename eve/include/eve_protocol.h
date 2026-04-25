@@ -21,6 +21,8 @@ enum EveMsgType : uint8_t {
   MSG_EVE_SLEEP = 0x06,
   MSG_EVE_ERROR = 0x07,
   MSG_EVE_TARGET_AWARENESS = 0x08,
+  /** JSON `{"m":"token"}` — shared behaviour / bi-directional companion (base: walle_shared_behaviour) */
+  MSG_EVE_COMPANION = 0x09,
 
   // WALL-E -> EVE
   MSG_ATTACH_CONFIRMED = 0x10,

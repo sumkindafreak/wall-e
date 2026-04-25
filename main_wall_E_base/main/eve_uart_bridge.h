@@ -27,5 +27,8 @@ bool eveUartBridgeIsLinkUp(void);
 /** Send MSG_PLAY_SOUND with DFPlayer track index on EVE (non-blocking UART write). */
 bool eveUartBridgeSendPlaySound(uint8_t track);
 
+/** CYD UI: head pan + right arm targets (JSON), when EVE firmware supports it. */
+bool eveUartBridgeSendCydServo(uint8_t headPanDeg, uint8_t rightArmDeg);
+
 /** Handshake: optional session echo for EVE state machine. */
 bool eveUartBridgeSendWallEAck(uint32_t session);

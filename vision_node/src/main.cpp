@@ -13,8 +13,15 @@
 #include <WebServer.h>
 #include <WiFi.h>
 
+#if __has_include("secrets.h")
+#include "secrets.h"
+#endif
+#ifndef WALLE_AP_SSID
 #define WALLE_AP_SSID     "WALL-E-Control"
+#endif
+#ifndef WALLE_AP_PASSWORD
 #define WALLE_AP_PASSWORD "walle1234"
+#endif
 
 #define FRAME_W    160
 #define FRAME_H    120

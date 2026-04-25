@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "author": "Showduino Studio",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "wokwi-esp32-devkit-v1", "id": "esp", "top": -2, "left": -4, "attrs": {} },
+    { "type": "wokwi-ili9341", "id": "tft", "top": -90, "left": 300, "attrs": { "rotation": "90" } }
+  ],
+  "connections": [
+    [ "esp:3V3", "tft:VCC", "red", [ "v0" ] ],
+    [ "esp:GND", "tft:GND", "black", [ "v0" ] ],
+    [ "esp:D23", "tft:MOSI", "green", [ "h0" ] ],
+    [ "esp:D19", "tft:MISO", "blue", [ "h0" ] ],
+    [ "esp:D18", "tft:SCK", "orange", [ "h0" ] ],
+    [ "esp:D15", "tft:CS", "yellow", [ "h0" ] ],
+    [ "esp:D2", "tft:DC", "purple", [ "h0" ] ],
+    [ "esp:D4", "tft:RST", "gray", [ "h0" ] ],
+    [ "esp:3V3", "tft:LED", "red", [ "v0" ] ]
+  ],
+  "dependencies": {}
+}

@@ -40,3 +40,8 @@ Thumbs.db
 /*.webp
 /Eve - 2748077/
 /old working bluetooth wall-e/
+
+# Local secrets (copy from *.example)
+main_wall_E_base/main/ota_secrets.h
+vision_node_arduino/secrets.h
+vision_node/secrets.h

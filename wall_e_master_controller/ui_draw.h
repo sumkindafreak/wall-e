@@ -116,7 +116,7 @@ void uiDrawUpdateDynamic(const TelemetryStripData* telem, const DriveState* ds,
                          int joyDotX, int joyDotY);
 void uiDrawTelemetryStrip(const TelemetryStripData* telem);
 /** @param brainLinkOk true when recent TelemetryPacket from Base (ESP-NOW) */
-void uiDrawControlAuthority(bool brainLinkOk);
+void uiDrawControlAuthority(bool brainLinkOk, bool linkQualityDegraded);
 void uiDrawQuickActionOverlay(void);  // Calibrate IMU, Reset Motors, Supervised, Reboot
 void uiDrawAdvancedModeOverlay(void); // Raw motor %, IMU, CPU, latency
 void uiDrawEStopRegion(bool highlighted);

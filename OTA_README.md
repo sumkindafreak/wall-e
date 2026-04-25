@@ -6,7 +6,7 @@ All WiFi-enabled WALL-E devices support OTA firmware updates.
 
 | Device | Method | Access |
 |--------|--------|--------|
-| **Base** (main_wall_E_base) | ArduinoOTA + Web | `http://192.168.4.1/update` or port 3232 |
+| **Base** (main_wall_E_base) | ArduinoOTA | Port **3232** (after WiFi is up; hostname `wall-e-base` / mDNS `wall-e-base.local`). Optional password: copy `main/ota_secrets.h.example` → `ota_secrets.h`. |
 | **Controller** (wall_e_master_controller) | ArduinoOTA | Port 3232 (connects to WALL-E AP) |
 | **Dock** (dock_station) | ArduinoOTA | Port 3232 (on home WiFi) |
 
@@ -46,12 +46,9 @@ pio run -t upload
 ./ota_build_all.sh upload       # Linux/macOS
 ```
 
-### 3. Web Update (Base only)
+### 3. Browser upload (Base)
 
-1. Build base: `cd main_wall_E_base && pio run`
-2. Open `http://192.168.4.1/update` in a browser (connect to WALL-E-Control AP)
-3. Select the `.bin` from `.pio/build/wall_e_brain_s3/firmware.bin`
-4. Click Update
+There is **no** `/update` browser handler in the current `web_server` build. Use **ArduinoOTA** on port **3232** (or PlatformIO `upload_protocol = espota`) for the base.
 
 ## Network Setup
 

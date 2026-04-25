@@ -27,6 +27,7 @@ enum EveMsgType : uint8_t {
   MSG_EVE_ERROR = 0x07,
   MSG_EVE_TARGET_AWARENESS = 0x08,
   MSG_PLAY_SOUND = 0x33,
+  MSG_CYD_EVE_SERVO = 0x35,
 };
 
 enum ParseState : uint8_t {
@@ -280,6 +281,18 @@ bool eveUartBridgeSendPlaySound(uint8_t track) {
   snprintf(buf, sizeof(buf), "{\"track\":%u}", (unsigned)track);
   Serial.printf("[EVE] -> PLAY_SOUND tr=%u\n", (unsigned)track);
   return eveSendFrame(MSG_PLAY_SOUND, buf);
+#endif
+}
+
+bool eveUartBridgeSendCydServo(uint8_t headPanDeg, uint8_t rightArmDeg) {
+#if !EVE_BRIDGE_ENABLE
+  (void)headPanDeg;
+  (void)rightArmDeg;
+  return false;
+#else
+  char buf[64];
+  snprintf(buf, sizeof(buf), "{\"h\":%u,\"a\":%u}", (unsigned)headPanDeg, (unsigned)rightArmDeg);
+  return eveSendFrame(MSG_CYD_EVE_SERVO, buf);
 #endif
 }
 

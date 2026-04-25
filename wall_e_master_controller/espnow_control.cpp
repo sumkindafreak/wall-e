@@ -5,6 +5,7 @@
 #include "espnow_control.h"
 #include "audio_protocol.h"
 #include "node_health_protocol.h"
+#include "sd_manager.h"
 #include <WiFi.h>
 #include <esp_now.h>
 #include <esp_wifi.h>
@@ -43,10 +44,17 @@ static void onSent(const uint8_t* mac, esp_now_send_status_t status) {
 
 static void onRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len) {
   (void)info;
-  if (len != (int)sizeof(TelemetryPacket)) return;
-  TelemetryPacket pkt;
-  memcpy(&pkt, data, sizeof(pkt));
-  if (pkt.magic != WALLE_TELEMETRY_MAGIC || pkt.version != WALLE_TELEMETRY_VERSION) return;
+  if (len < (int)WALLE_TELEMETRY_SIZE_V1) return;
+  TelemetryPacket pkt = {};
+  size_t cpy = (size_t)len < sizeof(TelemetryPacket) ? (size_t)len : sizeof(TelemetryPacket);
+  memcpy(&pkt, data, cpy);
+  if (pkt.magic != WALLE_TELEMETRY_MAGIC) return;
+  if (pkt.version < 1) return;
+  if (cpy < sizeof(TelemetryPacket) || pkt.version < WALLE_TELEMETRY_VERSION) {
+    pkt.last_control_seq_applied = 0;
+    pkt.control_ack_bits = 0;
+    pkt.rsv0 = 0;
+  }
   s_telemetry = pkt;
   s_lastTelemMs = millis();
 }
@@ -142,6 +150,17 @@ void espnowUpdate(void) {
       Serial.println("  3. Brain is on WiFi channel 11");
       Serial.println("  4. Distance < 50m, no metal obstacles");
     }
+
+    if (s_sendFailCount > 20 && s_peerMac[0] != 0xFF) {
+      esp_err_t d = esp_now_del_peer(s_peerMac);
+      esp_now_peer_info_t p = {};
+      memcpy(p.peer_addr, s_peerMac, 6);
+      p.channel = 11;
+      p.encrypt = false;
+      p.ifidx = WIFI_IF_STA;
+      esp_err_t a = esp_now_add_peer(&p);
+      Serial.printf("[ESP-NOW] Peer refresh (fails=%u) del=%d add=%d\n", (unsigned)s_sendFailCount, (int)d, (int)a);
+    }
     
     if (!telemValid && (now - s_lastTelemMs > 10000)) {
       Serial.println("[ESP-NOW] ⚠️  NO TELEMETRY - Brain may not be sending back");
@@ -171,6 +190,15 @@ void espnowUpdate(void) {
     h.uptime_ms = (uint32_t)now;
     h.last_error = 0;
     h.flags = 0;
+    h.free_heap = ESP.getFreeHeap();
+    h.loop_p95_ms = 0;
+    h.wifi_rssi = (int8_t)WiFi.RSSI();
+    h.sd_ok = sdIsAvailable() ? 1u : 0u;
+    if (espnowTelemetryValid()) {
+      h.last_peer_rx_age_ms = (uint32_t)(now - s_lastTelemMs);
+    } else {
+      h.last_peer_rx_age_ms = 0xFFFFFFFFu;
+    }
     esp_now_send(s_peerMac, (uint8_t*)&h, sizeof(h));
   }
 }
@@ -181,6 +209,13 @@ bool espnowIsConnected(void) {
 
 bool espnowTelemetryValid(void) {
   return (millis() - s_lastTelemMs) < ESPNOW_TELEM_TIMEOUT_MS;
+}
+
+bool espnowTelemetryLinkDegraded(void) {
+  if (!espnowTelemetryValid()) {
+    return false;
+  }
+  return (s_telemetry.rsv0 & (WALLE_TELEM_RSV0_SEQ_GAP | WALLE_TELEM_RSV0_TELEM_TX_FAIL)) != 0;
 }
 
 void espnowGetTelemetry(TelemetryPacket* out) {
@@ -206,6 +241,21 @@ void espnowBroadcastAudioEstopEdge(bool estop_pressed)
     esp_now_send(bcast, (uint8_t *)&pkt, sizeof(pkt));
   }
   prev = estop_pressed;
+}
+
+void espnowBroadcastAudioPlayTrack(uint8_t track) {
+  if (track == 0) {
+    return;
+  }
+  uint8_t bcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+  WalleAudioCommandPacket_t pkt = {
+      .magic = WALLE_AUDIO_MAGIC,
+      .cmd = WALLE_AU_CMD_PLAY_TRACK,
+      .param = track,
+      .reserved = 0,
+      .priority = WALLE_AUDIO_PRIORITY_NORMAL,
+  };
+  esp_now_send(bcast, (uint8_t*)&pkt, sizeof(pkt));
 }
 
 uint16_t espnowGetPacketRate(void) {

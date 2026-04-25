@@ -23,6 +23,9 @@ void packetSetAutonomyConfig(uint8_t key, uint8_t value);
 /** One-shot motion authority (ACTION_MOTION_POLICY): mode 0=any, 1=cyd_only, 2=web_only */
 void packetSetMotionPolicy(uint8_t mode);
 
+/** One-shot EVE targets (ACTION_EVE_UART_SERVO) for LVGL / extended UI */
+void packetSetEveServo(uint8_t headPanDeg, uint8_t rightArmDeg);
+
 // Telemetry (read from ESP-NOW)
 bool packetTelemetryValid(void);
 void packetGetTelemetry(TelemetryPacket* out);

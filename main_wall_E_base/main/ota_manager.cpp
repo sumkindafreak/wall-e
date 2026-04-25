@@ -7,13 +7,21 @@
 #include <ArduinoOTA.h>
 #include <WiFi.h>
 
+#if defined __has_include
+#  if __has_include("ota_secrets.h")
+#    include "ota_secrets.h"
+#  endif
+#endif
+
 #define OTA_HOSTNAME  "wall-e-base"
-#define OTA_PASSWORD  ""  /* Set non-empty for security */
+#ifndef WALLE_OTA_PASSWORD
+#define WALLE_OTA_PASSWORD ""
+#endif
 
 void otaManagerInit() {
   ArduinoOTA.setHostname(OTA_HOSTNAME);
-  if (OTA_PASSWORD[0] != '\0') {
-    ArduinoOTA.setPassword(OTA_PASSWORD);
+  if (WALLE_OTA_PASSWORD[0] != '\0') {
+    ArduinoOTA.setPassword(WALLE_OTA_PASSWORD);
   }
 
   ArduinoOTA.onStart([]() {

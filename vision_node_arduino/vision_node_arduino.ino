@@ -18,6 +18,16 @@
 #include <WebServer.h>
 #include <WiFi.h>
 
+#if __has_include("secrets.h")
+#include "secrets.h"
+#endif
+#ifndef WALLE_AP_SSID
+#define WALLE_AP_SSID     "WALL-E-Control"
+#endif
+#ifndef WALLE_AP_PASSWORD
+#define WALLE_AP_PASSWORD "walle1234"
+#endif
+
 #define FRAME_W    160
 #define FRAME_H    120
 #define XCLK_FREQ  20000000
@@ -59,9 +69,7 @@ uint32_t s_frameCount = 0;
 static bool s_sdOk = false;
 static uint32_t s_sdLogInterval = 0;
 
-/* WiFi: connect to base brain AP for web UI snapshot streaming */
-#define WALLE_AP_SSID     "WALL-E-Control"
-#define WALLE_AP_PASSWORD "walle1234"
+/* WiFi: connect to base brain AP for web UI snapshot streaming (override via secrets.h) */
 static WebServer s_httpServer(80);
 static uint32_t s_visionNodeIp = 0;
 static uint32_t s_lastRecognMs = 0;

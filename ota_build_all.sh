@@ -4,6 +4,10 @@
 # Usage: ./ota_build_all.sh
 # Upload: ./ota_build_all.sh upload
 
+set -e
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+"$SCRIPT_DIR/scripts/verify_protocol_headers.sh"
+
 UPLOAD="${1:-}"
 
 projects=(

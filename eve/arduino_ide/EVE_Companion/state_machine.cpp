@@ -42,6 +42,7 @@ static uint32_t s_lastEveHbMs = 0;
 static uint32_t s_lastRxMs = 0;
 static uint32_t s_lastLowBatMs = 0;
 static uint32_t s_lastUnauthorizedLogMs = 0;
+static char s_peerLabel[24] = "none";
 
 static bool stateAllowsRemoteControl(void) {
   return (s_state == EveState::IDLE || s_state == EveState::ATTACHED || s_state == EveState::ESCORT ||
@@ -129,6 +130,9 @@ static void sendEveError(const char* msg, int code) {
 
 void stateMachineInit(void) {
   s_state = EveState::WAIT_ATTACH;
+  s_sessionId = 0;
+  strncpy(s_peerLabel, "none", sizeof(s_peerLabel) - 1);
+  s_peerLabel[sizeof(s_peerLabel) - 1] = '\0';
   s_lastHelloMs = 0;
   s_lastEveHbMs = 0;
   s_lastRxMs = millis();
@@ -165,6 +169,8 @@ void stateMachineTick(void) {
           sendEveError("link_timeout", 1);
           s_state = EveState::WAIT_ATTACH;
           s_sessionId = 0;
+          strncpy(s_peerLabel, "none", sizeof(s_peerLabel) - 1);
+          s_peerLabel[sizeof(s_peerLabel) - 1] = '\0';
           s_lastHelloMs = 0;
           eyesNotifyWallEDisconnected();
         }
@@ -230,8 +236,16 @@ void stateMachineOnUartRx(uint8_t type, const uint8_t* payload, size_t len, uint
         return;
       }
       s_sessionId = doc["session"] | 0u;
+      const char* peer = doc["peer"] | "wall_e";
+      if (!peer || peer[0] == '\0') {
+        peer = "wall_e";
+      }
+      strncpy(s_peerLabel, peer, sizeof(s_peerLabel) - 1);
+      s_peerLabel[sizeof(s_peerLabel) - 1] = '\0';
       Serial.print(F("[EVE][SM] WALL_E_ACK session="));
       Serial.println(s_sessionId);
+      Serial.print(F("[EVE][SM] peer="));
+      Serial.println(s_peerLabel);
       s_state = EveState::HANDSHAKE;
       sendEveReady();
       s_state = EveState::IDLE;
@@ -323,4 +337,29 @@ void stateMachineOnUartRx(uint8_t type, const uint8_t* payload, size_t len, uint
     default:
       break;
   }
+}
+
+uint32_t stateMachineGetSessionId(void) {
+  return s_sessionId;
+}
+
+bool stateMachineAllowsCompanionUart(void) {
+  if (s_sessionId == 0) {
+    return false;
+  }
+  switch (s_state) {
+    case EveState::IDLE:
+    case EveState::ATTACHED:
+    case EveState::ESCORT:
+    case EveState::INTERACT:
+    case EveState::DOCKED:
+    case EveState::LOW_POWER:
+      return true;
+    default:
+      return false;
+  }
+}
+
+const char* stateMachineGetPeerLabel(void) {
+  return s_peerLabel;
 }

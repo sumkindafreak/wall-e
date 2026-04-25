@@ -20,6 +20,13 @@ In this project, the **base** usually creates softAP **`WALL-E-Control`**. All E
 
 ---
 
+## Control link (Base ↔ CYD)
+
+- **Sequence + CRC:** CYD v2 `ControlPacket` uses a monotonic `seq` and CRC-8. The base **drops** staled/replayed seq (backward wraps) and **drops** forward jumps larger than `WALLE_CTRL_MAX_SEQ_JUMP` (see `firmware_common/include/walle_link_packet.h`), and sets a short **WEAK** link hint on the controller when that happens.
+- **Telemetry send failures:** If base → CYD `esp_now_send` fails repeatedly, the base may **delete and re-add** the controller peer. The master may **refresh** its own ESP-NOW peer if TX failures spike (see `wall_e_master_controller/espnow_control.cpp`).
+
+---
+
 ## Related
 
 - [../ARCHITECTURE.md](../ARCHITECTURE.md)  

@@ -168,7 +168,7 @@ void uiDrawStaticDrive(void) {
     g_tft->setTextColor(C_WHITE, C_BG_DARK);
     g_tft->setTextSize(2);
     g_tft->drawString("WALL-E", 10, 6);
-    uiDrawControlAuthority(packetTelemetryValid());
+    uiDrawControlAuthority(packetTelemetryValid(), espnowTelemetryLinkDegraded());
   }
   
   // Force initial telemetry and control authority draw
@@ -274,7 +274,7 @@ void uiDrawPhysicalJoystickLayout(void) {
     g_tft->setTextColor(C_WHITE, C_BG_DARK);
     g_tft->setTextSize(2);
     g_tft->drawString("WALL-E Console", 10, 6);
-    uiDrawControlAuthority(packetTelemetryValid());
+    uiDrawControlAuthority(packetTelemetryValid(), espnowTelemetryLinkDegraded());
   }
 
   int midX = SCREEN_W / 2;
@@ -471,7 +471,7 @@ static uint16_t lerpRGB(uint16_t a, uint16_t b, float t) {
   return (r << 11) | (g << 5) | bv;
 }
 
-void uiDrawControlAuthority(bool brainLinkOk) {
+void uiDrawControlAuthority(bool brainLinkOk, bool linkQualityDegraded) {
   if (!g_tft) return;
   const int y = 4;
   uint16_t color = C_GREEN;
@@ -490,6 +490,11 @@ void uiDrawControlAuthority(bool brainLinkOk) {
     label = "OFFLINE";
     pulse = true;
     pulseColor = C_RED;
+  } else if (linkQualityDegraded) {
+    color = 0xFDA0U;
+    label = "WEAK";
+    pulse = true;
+    pulseColor = 0xFDA0U;
   } else if (g_policyDenyCyd) {
     color = 0xFDA0U; /* amber */
     label = "POLICY";
@@ -570,7 +575,8 @@ void uiDrawUpdateDynamic(const TelemetryStripData* telem, const DriveState* ds,
 
   if (telem) uiDrawTelemetryStrip(telem);
   if (!g_topBannerCollapsed) {
-    uiDrawControlAuthority(telem && telem->connected);
+    const bool linkOk = telem && telem->connected;
+    uiDrawControlAuthority(linkOk, linkOk && espnowTelemetryLinkDegraded());
   }
 }
 

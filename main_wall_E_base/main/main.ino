@@ -9,7 +9,9 @@
 // ============================================================
 
 #include <Arduino.h>
+#include <esp_system.h>
 #include "motor_control.h"
+#include "ota_manager.h"
 #include "wifi_manager.h"
 #include "web_server.h"
 #include "display_manager.h"
@@ -50,9 +52,11 @@
 #include "eve_target_assist.h"
 #include "laser_control.h"
 #include "sequence_engine.h"
+#include "loop_stats.h"
 
 // ============================================================
-//  Failsafe
+//  Failsafe: stop tracks if no drive command path refreshes this timer (~50 Hz CYD + autonomy paths).
+//  Raise only if a flaky ESP-NOW link causes unwanted cutouts (at cost of runaway window).
 // ============================================================
 #define FAILSAFE_TIMEOUT_MS 500UL
 
@@ -65,6 +69,7 @@ void setup() {
   Serial.begin(115200);
   delay(200);
   Serial.println("\n[WALL-E] Starting...");
+  Serial.printf("[Boot] esp_reset_reason=%d\n", (int)esp_reset_reason());
 
   // Motors safe first — always
   motorInit();
@@ -122,6 +127,7 @@ void setup() {
   wifiManagerInit();
   displayUpdateWifi();
   Serial.println("[Setup] Post-wifi");
+  otaManagerInit();
 
   motionAuthorityInit();
   apiSecurityInit();
@@ -162,6 +168,7 @@ void setup() {
   Serial.println("[Setup] Post-flashlight");
 
   lastCommandMillis = millis();
+  loopStatsReset();
   Serial.println("[WALL-E] Ready");
 }
 
@@ -172,6 +179,7 @@ unsigned long lastTelemSendMs = 0;
 #define TELEM_SEND_INTERVAL_MS 100  // 10 Hz telemetry updates
 
 void loop() {
+  const uint32_t tLoop0 = micros();
   delay(1);  /* Yield first — prevents TG1WDT before any blocking */
   unsigned long now = millis();
   yield();
@@ -183,6 +191,7 @@ void loop() {
 
   // Web requests
   webServerHandle();
+  otaManagerHandle();
   eveUartBridgePoll();
   sequenceEngineTick(now);
 
@@ -316,6 +325,11 @@ void loop() {
 
   // L298N: ramp toward targets and drive PWM (after motorSetLeftRight + failsafe motorStop)
   motorHandle();
+
+  {
+    uint32_t du = micros() - tLoop0;
+    loopStatsOnLoopEnd(du);
+  }
 
   delay(1);  /* Yield — prevents TG1WDT_SYS_RST */
   yield();

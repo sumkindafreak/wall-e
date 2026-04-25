@@ -104,6 +104,7 @@ function switchTab(name) {
     setTimeout(function () { LrosSequences.onTabShow(); }, 0);
   }
   if (name === 'telemetry' || name === 'power') fetchStatus();
+  if (name === 'eve') pollLivingTelemetry();
   if (name === 'drive') {
     var aiPanel = document.getElementById('drive-ai-panel');
     document.getElementById('drive-joystick').style.display = driveMode === 'joystick' ? 'flex' : 'none';
@@ -265,6 +266,7 @@ function updateOperatorConsoleOffline() {
   setById('op-link-val', 'OFFLINE');
   setById('op-fresh-val', '—');
   setById('op-lock-val', 'Robot offline or link lost');
+  setById('op-eve-val', '—');
   document.body.classList.add('lros-operator-offline');
   try {
     window.__lrosOperatorSnapshot = null;
@@ -448,9 +450,100 @@ function pollNodeHealth() {
     }
     var snu = document.getElementById('settings-node-updated');
     if (snu) {
-      snu.innerHTML = 'Last sync <span class="mono">' + new Date().toLocaleTimeString() + '</span> · <span class="mono">/api/system/health</span>';
+      snu.innerHTML = 'Last sync <span class="mono">' + new Date().toLocaleTimeString() + '</span> · <span class="mono">/api/system/health</span> + EVE from <span class="mono">/api/living/telemetry</span>';
     }
   }).catch(function() {});
+}
+
+/** EVE pill + operator chip + EVE page — UART is not an ESP-NOW node; use living + /api/eve/status */
+function applyLivingEveUI(liv, uart) {
+  var eveOn = liv && liv.eve_uart === true;
+  var nodes = document.querySelectorAll('.node-pill[data-pill="eve"]');
+  var prev = _pillState.eve;
+  _pillState.eve = eveOn;
+  nodes.forEach(function (el) {
+    el.classList.remove('ok', 'warn', 'off');
+    if (eveOn) el.classList.add('ok');
+    else el.classList.add('off');
+    if (prev !== undefined && prev !== eveOn) {
+      el.classList.add('edge');
+      setTimeout(function () { el.classList.remove('edge'); }, 500);
+    }
+  });
+  var opE = document.getElementById('op-eve-val');
+  if (opE) {
+    if (uart && uart.ok !== false) {
+      if (uart.link_ok) {
+        var ag = Number(uart.last_rx_age_ms) || 0;
+        opE.textContent = ag < 20000 ? 'LIVE' : 'STALE';
+      } else {
+        opE.textContent = 'OFF';
+      }
+    } else if (liv && typeof liv.eve_uart === 'boolean') {
+      opE.textContent = liv.eve_uart ? 'ON' : 'OFF';
+    } else {
+      opE.textContent = '—';
+    }
+  }
+  try {
+    window.__lrosLiving = liv;
+  } catch (e) {}
+  try {
+    window.__lrosEveUart = uart;
+  } catch (e) {}
+  if (currentVisiblePage !== 'eve') return;
+  if (uart && uart.ok !== false) {
+    setById('eve-uart-link', uart.link_ok ? 'Connected' : 'No link');
+    setById('eve-uart-age', uart.last_rx_age_ms != null ? String(uart.last_rx_age_ms) + ' ms' : '—');
+    setById('eve-uart-type', uart.last_type || '—');
+    setById('eve-uart-frames', (uart.frames_ok != null ? uart.frames_ok : '—') + ' / ' + (uart.crc_errors != null ? uart.crc_errors : '—'));
+    var pl = uart.payload;
+    if (pl == null) setById('eve-uart-payload', '—');
+    else {
+      var t = String(pl);
+      if (t.length > 400) t = t.slice(0, 400) + '…';
+      setById('eve-uart-payload', t);
+    }
+  } else {
+    setById('eve-uart-link', '—');
+    setById('eve-uart-age', '—');
+    setById('eve-uart-type', '—');
+    setById('eve-uart-frames', '—');
+    setById('eve-uart-payload', '—');
+  }
+  if (liv) {
+    setById('eve-voicebox', liv.voicebox_mode != null ? String(liv.voicebox_mode) : '—');
+    setById('eve-vb-shared', liv.voicebox_shared != null ? (liv.voicebox_shared ? 'yes' : 'no') : '—');
+    setById('eve-bond-str', liv.bond_strength != null ? String(liv.bond_strength) : '—');
+    var t = [];
+    if (liv.bond_trust != null) t.push('T' + liv.bond_trust);
+    if (liv.bond_comfort != null) t.push('C' + liv.bond_comfort);
+    if (liv.bond_curious != null) t.push('Q' + liv.bond_curious);
+    setById('eve-bond-tcc', t.length ? t.join(' · ') : '—');
+    setById('eve-bond-docks', liv.bond_shared_docks != null ? String(liv.bond_shared_docks) : '—');
+    var ea = liv.eve_assist;
+    if (ea) {
+      setById('eve-as-state', ea.state_name != null ? String(ea.state_name) : (ea.state != null ? String(ea.state) : '—'));
+      setById('eve-as-zone', ea.zone != null ? String(ea.zone) : '—');
+      setById('eve-as-bias', ea.bias != null ? String(ea.bias) : '—');
+      setById('eve-as-stale', ea.stale ? 'Stale (ignore for motion)' : 'Fresh');
+    } else {
+      setById('eve-as-state', '—');
+      setById('eve-as-zone', '—');
+      setById('eve-as-bias', '—');
+      setById('eve-as-stale', '—');
+    }
+  }
+}
+
+function pollLivingTelemetry() {
+  var h = apiAuthHeaders();
+  Promise.all([
+    fetch(api('/api/living/telemetry'), { cache: 'no-store', headers: h }).then(function (r) { return r.json(); }).catch(function () { return null; }),
+    fetch(api('/api/eve/status'), { cache: 'no-store', headers: h }).then(function (r) { return r.json(); }).catch(function () { return null; })
+  ]).then(function (arr) {
+    applyLivingEveUI(arr[0], arr[1]);
+  });
 }
 
 // ─── Drive ──────────────────────────────────────────────────
@@ -2725,9 +2818,11 @@ function initAll() {
   fetchStatus();
   pollNodeHealth();
   pollMotionOperator();
+  pollLivingTelemetry();
   setInterval(fetchStatus, 5000);
   setInterval(pollNodeHealth, 1500);
   setInterval(pollMotionOperator, 1500);
+  setInterval(pollLivingTelemetry, 2000);
   setInterval(pollVisionEvents, 2500);
   try { fetch(api('/stop')); } catch(_) {}
   pushActivity('Dashboard ready', '\uD83C\uDFE0');
