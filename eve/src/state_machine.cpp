@@ -14,6 +14,7 @@
 #include "audio_control.h"
 #include "eve_behavior_manager.h"
 #include "battery_monitor.h"
+#include "eve_desktop_companion.h"
 #include "eve_spatial_awareness.h"
 #include "eve_attachment_manager.h"
 #if EVE_ENABLE_EYES
@@ -136,6 +137,7 @@ void stateMachineInit(void) {
   s_lastHelloMs = 0;
   s_lastEveHbMs = 0;
   s_lastRxMs = millis();
+  eveDesktopCompanionInit();
   Serial.println(F("[EVE][SM] WAIT_ATTACH"));
 }
 
@@ -208,6 +210,13 @@ void stateMachineTick(void) {
     }
 #endif
     eveSpatialSetBehaviorFlags(sf);
+  }
+
+  const bool dockDesktopActive = (s_state == EveState::DOCKED);
+  const bool dockCharging = eveBatteryDataValid() && eveBatteryCurrentA() > 0.03f;
+  eveDesktopCompanionSetActive(dockDesktopActive, dockCharging);
+  if (dockDesktopActive) {
+    eveDesktopCompanionTick(now);
   }
 }
 

@@ -18,8 +18,8 @@ The current defaults target the small ESP32-C3 board with an onboard OLED like t
 | ------------------------ | ------------------- |
 | OLED SDA                 | GPIO5               |
 | OLED SCL                 | GPIO6               |
-| Dock UART RX             | GPIO20              |
-| Dock UART TX             | GPIO21              |
+| Dock UART RX             | GPIO3               |
+| Dock UART TX             | GPIO4               |
 | Charge MOSFET gate       | GPIO10              |
 | NeoPixel/status LED data | GPIO7               |
 | Optional dock button     | disabled by default |
@@ -48,8 +48,8 @@ The local `eve_protocol.h` mirrors EVE's protocol constants so this sketch can s
 
 | Signal                     | Notes                                                                             |
 | -------------------------- | --------------------------------------------------------------------------------- |
-| Dock TX / GPIO21 -> EVE RX | Cross UART                                                                        |
-| Dock RX / GPIO20 <- EVE TX |                                                                                   |
+| Dock TX / GPIO4 -> EVE RX  | Cross UART                                                                        |
+| Dock RX / GPIO3 <- EVE TX  |                                                                                   |
 | GND                        | Common                                                                            |
 | MOSFET gate                | `DOCK_PIN_CHG_GATE` (default GPIO 10) — verify N/P-channel vs your charger wiring |
 | NeoPixel                   | `DOCK_PIN_NEOPIXEL` (default GPIO 7), 5 V as needed                               |
@@ -83,5 +83,7 @@ If the main loop starves the **task watchdog** (long UART drain, tight work), th
 
 1. Open `eve_dock_esp32s3.ino` in the Arduino IDE. Arduino requires the main `.ino` name to match this folder name; the firmware itself is configured for the ESP32-C3 OLED board.
 2. **Tools → Board** must match the chip. If the boot log says **ESP32-C3** (e.g. `ESP-ROM:esp32c3-…`), choose **ESP32C3 Dev Module** (or your board package), not ESP32-S3.
-3. Compile and upload. Your ROM string is the source of truth for which family you have.
+3. For first boot, leave `DOCK_SAFE_BOOT_ONLY` set to `1` in `pin_config.h`. Serial Monitor should show `[BOOT] EVE dock sketch reached setup()` and `[SAFE] alive`.
+4. If you only see the ESP-ROM banner, set **USB CDC On Boot** to **Enabled**, re-upload, open Serial Monitor at `115200`, then press reset.
+5. After serial is proven, set `DOCK_SAFE_BOOT_ONLY` to `0` to enable OLED, MOSFET, NeoPixel, and EVE UART.
 
