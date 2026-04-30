@@ -37,3 +37,29 @@ void memoryManagerPersistVoiceboxMode(const char* modeName) {
   f.printf("{\"mode\":\"%s\",\"ms\":%lu}\n", modeName, (unsigned long)millis());
   f.close();
 }
+
+String memoryManagerEventsJson(size_t maxBytes) {
+  String out = "[";
+  if (!s_fs) {
+    out += "]";
+    return out;
+  }
+  File f = LittleFS.open(WALLE_EVENTS_FILE, "r");
+  if (!f) {
+    out += "]";
+    return out;
+  }
+
+  bool first = true;
+  while (f.available() && out.length() < maxBytes) {
+    String line = f.readStringUntil('\n');
+    line.trim();
+    if (line.length() == 0) continue;
+    if (!first) out += ",";
+    out += line;
+    first = false;
+  }
+  f.close();
+  out += "]";
+  return out;
+}

@@ -438,6 +438,18 @@ void lvglUiActionSetVolumePct(int16_t pct) {
   else playUISound(SOUND_MODE_CHANGE);
 }
 
+void lvglUiActionDockGo(void) {
+  packetSetPendingAction(ACTION_DOCK_GO);
+  playUISound(SOUND_CONFIRM);
+  lvglUiShowToast("WALL-E docking requested", 1200);
+}
+
+void lvglUiActionDockCancel(void) {
+  packetSetPendingAction(ACTION_DOCK_CANCEL);
+  playUISound(SOUND_CLICK);
+  lvglUiShowToast("Docking cancelled", 1000);
+}
+
 void lvglUiActionProfileSet(uint8_t id) {
   profileSet(id);
   playUISound(SOUND_MODE_CHANGE);

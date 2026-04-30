@@ -14,6 +14,7 @@
 #include "interest_engine.h"
 #include "personality_engine.h"
 #include "memory_engine.h"
+#include "memory_manager.h"
 #include "return_home_engine.h"
 #include "compass_sensor.h"
 #include "vision_behaviour.h"
@@ -775,6 +776,102 @@ static void handleEveStatusApi(void) {
   server.send(200, "application/json", eveUartBridgeGetJSON());
 }
 
+static void handleEvePersonalityApi(void) {
+  if (requireApiToken()) return;
+  int curiosity = server.hasArg("curiosity") ? server.arg("curiosity").toInt() : 60;
+  int responsiveness = server.hasArg("responsiveness") ? server.arg("responsiveness").toInt() : 60;
+  int activity = server.hasArg("activity") ? server.arg("activity").toInt() : 45;
+  int comfort = server.hasArg("comfort") ? server.arg("comfort").toInt() : 55;
+  int excitement = server.hasArg("excitement") ? server.arg("excitement").toInt() : 35;
+  int sleepiness = server.hasArg("sleepiness") ? server.arg("sleepiness").toInt() : 20;
+
+  curiosity = constrain(curiosity, 0, 100);
+  responsiveness = constrain(responsiveness, 0, 100);
+  activity = constrain(activity, 0, 100);
+  comfort = constrain(comfort, 0, 100);
+  excitement = constrain(excitement, 0, 100);
+  sleepiness = constrain(sleepiness, 0, 100);
+
+  char cmd[192];
+  snprintf(cmd, sizeof(cmd),
+           "{\"cmd\":\"personality\",\"curiosity\":%d,\"responsiveness\":%d,"
+           "\"activity\":%d,\"comfort\":%d,\"excitement\":%d,\"sleepiness\":%d}",
+           curiosity, responsiveness, activity, comfort, excitement, sleepiness);
+  bool ok = eveUartBridgeSendBusCommand(cmd);
+  addCORS();
+  String j = "{\"ok\":";
+  j += ok ? "true" : "false";
+  j += ",\"uart_link\":";
+  j += eveUartBridgeIsLinkUp() ? "true" : "false";
+  j += ",\"command\":";
+  j += cmd;
+  j += "}";
+  server.send(ok ? 200 : 503, "application/json", j);
+}
+
+static void handleEveMicApi(void) {
+  if (requireApiToken()) return;
+  const bool test = server.hasArg("test") && server.arg("test") != "0";
+  bool ok = false;
+  char cmd[192];
+  if (test) {
+    snprintf(cmd, sizeof(cmd), "{\"cmd\":\"mic_test\"}");
+    ok = eveUartBridgeSendBusCommand(cmd);
+  } else {
+    const int enabled = server.hasArg("enabled") ? server.arg("enabled").toInt() : 1;
+    const int spike = constrain(server.hasArg("spike") ? server.arg("spike").toInt() : 1800, 1, 20000);
+    const int clap = constrain(server.hasArg("clap") ? server.arg("clap").toInt() : 4200, 1, 30000);
+    const int quiet = constrain(server.hasArg("quiet") ? server.arg("quiet").toInt() : 180, 1, 10000);
+    const int cooldown = constrain(server.hasArg("cooldown") ? server.arg("cooldown").toInt() : 2500, 250, 60000);
+    snprintf(cmd, sizeof(cmd),
+             "{\"cmd\":\"mic_settings\",\"enabled\":%s,\"spike\":%d,\"clap\":%d,\"quiet\":%d,\"cooldown\":%d}",
+             enabled ? "true" : "false", spike, clap, quiet, cooldown);
+    ok = eveUartBridgeSendBusCommand(cmd);
+  }
+  addCORS();
+  String j = "{\"ok\":";
+  j += ok ? "true" : "false";
+  j += ",\"uart_link\":";
+  j += eveUartBridgeIsLinkUp() ? "true" : "false";
+  j += ",\"command\":";
+  j += cmd;
+  j += "}";
+  server.send(ok ? 200 : 503, "application/json", j);
+}
+
+static void handleSharedLearningApi(void) {
+  String j = "{\"ok\":true,\"fs_ready\":";
+  j += memoryManagerFsReady() ? "true" : "false";
+  j += ",\"entries\":";
+  j += memoryManagerEventsJson();
+  j += "}";
+  addCORS();
+  server.send(200, "application/json", j);
+}
+
+static void handleUartMonitorApi(void) {
+  addCORS();
+  server.send(200, "application/json", eveUartBridgeGetMonitorJSON());
+}
+
+static void handleCompanionPanelApi(void) {
+  String j = "{\"ok\":true,\"transport\":\"uart_only\",\"eve\":";
+  j += eveUartBridgeGetJSON();
+  j += ",\"dock\":";
+  j += "{";
+  j += "\"fsm\":\""; j += autonomousDockingGetStateName(); j += "\"";
+#if USE_AUTONOMOUS_DOCKING
+  j += ",\"active\":"; j += autonomousDockingIsActive() ? "true" : "false";
+#else
+  j += ",\"active\":false";
+#endif
+  j += ",\"dock_node_online\":"; j += nodeHealthIsOnline(WALLE_NODE_DOCK) ? "true" : "false";
+  j += ",\"dock_flags\":"; j += (uint32_t)nodeHealthGetFlags(WALLE_NODE_DOCK);
+  j += "}}";
+  addCORS();
+  server.send(200, "application/json", j);
+}
+
 static void handleLivingTelemetryApi(void) {
   addCORS();
   server.send(200, "application/json", telemetryManagerGetJSON());
@@ -882,6 +979,11 @@ void webServerInit() {
   server.on("/api/motion/authority/set", HTTP_GET, handleMotionAuthoritySet);
 
   server.on("/api/eve/status", HTTP_GET, handleEveStatusApi);
+  server.on("/api/eve/personality", HTTP_GET, handleEvePersonalityApi);
+  server.on("/api/eve/mic", HTTP_GET, handleEveMicApi);
+  server.on("/api/companion/panel", HTTP_GET, handleCompanionPanelApi);
+  server.on("/api/learning/shared", HTTP_GET, handleSharedLearningApi);
+  server.on("/api/uart/log", HTTP_GET, handleUartMonitorApi);
   server.on("/api/living/telemetry", HTTP_GET, handleLivingTelemetryApi);
   server.on("/api/vision/events", HTTP_GET, handleVisionEventsApi);
   server.on("/api/dashboard", HTTP_GET, handleDashboardApi);

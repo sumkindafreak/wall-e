@@ -65,23 +65,37 @@ static const unsigned long EVE_UART_BAUD = 115200;
 #define EVE_SERVO_R_PIN (-1)
 #define EVE_NEOPIXEL_PIN (-1)
 #define EVE_NEOPIXEL_COUNT 8
+// ESP32-S3 dev boards commonly expose the onboard addressable RGB LED on GPIO48.
+// This is independent of the external EVE NeoPixel strip enable below.
+#define EVE_ONBOARD_RGB_HEARTBEAT 1
+#define EVE_ONBOARD_RGB_PIN 48
+#define EVE_ONBOARD_RGB_BRIGHTNESS 24u
 
 // -----------------------------------------------------------------------------
-// Battery: voltage divider on pack (or 5 V rail sense) + optional inline current sensor
-// Use ADC1-capable GPIOs (not 17/18 UART). Set pin to -1 to disable that channel.
-// Default: 4 = voltage, 5 = current — adjust to match your EVE PCB.
-// Divider: BAT+ -- R1 --+-- ADC pin -- R2 -- GND  (same topology as WALL-E base)
+// Battery: INA219 I2C breakout (bus voltage + bidirectional current), OR legacy ADC
+// INA219: wire per breakout (V+ to supply high side, V- toward load, same GND as ESP32).
+// Library: PlatformIO lib_deps "adafruit/Adafruit INA219" + "adafruit/Adafruit BusIO".
+// When EVE_BATTERY_INA219 is 1, EVE_BAT_ADC_PIN / EVE_CUR_ADC_PIN are ignored.
+// If you also use ToF on I2C, set EVE_I2C_SDA/SCL to the same pins as below so one bus.
 // -----------------------------------------------------------------------------
+#define EVE_BATTERY_INA219 1
+#define EVE_INA219_I2C_ADDR 0x40
+#define EVE_INA219_SDA 8
+#define EVE_INA219_SCL 9
+
+/** Legacy voltage divider on ADC (only when EVE_BATTERY_INA219 is 0). R1 upper, R2 to GND. */
 #define EVE_BAT_ADC_PIN 4
 #define EVE_CUR_ADC_PIN 5
 #define EVE_ENABLE_BATTERY_MONITOR 1
 
 #define EVE_BAT_R1 10000
 #define EVE_BAT_R2 10000
-#define EVE_BAT_MIN_V 3.25f
-#define EVE_BAT_MAX_V 4.20f
+/** 2S Li-ion / LiPo (~7.4 V nominal on pack). Tune if you use NiMH or different chemistry. */
+#define EVE_BAT_MIN_V 6.0f
+#define EVE_BAT_MAX_V 8.4f
 #define EVE_BAT_CALIB 1.0f
 
+/** Legacy hall/ACS analog current sense (only when EVE_BATTERY_INA219 is 0). */
 #define EVE_CUR_ZERO_V 1.65f
 #define EVE_CUR_SENSITIVITY_V_PER_A 0.122f
 
@@ -116,6 +130,24 @@ static const unsigned long EVE_UART_BAUD = 115200;
 #define EVE_ENABLE_SERVOS 0
 #define EVE_ENABLE_NEOPIXEL 0
 #define EVE_ENABLE_AUDIO 0
+
+// Docked WebUI: EVE hosts a local AP only while on her dock.
+#define EVE_ENABLE_DOCKED_WEBUI 1
+#define EVE_WEBUI_AP_SSID "EVE-Desk"
+#define EVE_WEBUI_AP_PASS "evefriend"
+#define EVE_WEBUI_AP_CHANNEL 6
+#define EVE_WEBUI_AP_MAX_CLIENTS 2
+// Small grace avoids AP flapping on brief UART jitter; it still shuts down after undock/link loss.
+#define EVE_DOCKED_WEBUI_OFF_GRACE_MS 3000u
+// Bench-only dock mimic. Keep off for real use. Serial Monitor also supports:
+//   docktest on
+//   docktest off
+#define EVE_ENABLE_SERIAL_CONSOLE 1
+// Keep normal Serial Monitor output quiet. Set to 1 only when debugging UART frames.
+#define EVE_SERIAL_VERBOSE_LOGS 0
+#define EVE_ENABLE_DOCK_MIMIC_TEST 1
+#define EVE_DOCK_MIMIC_ON_BOOT 0
+#define EVE_DOCK_MIMIC_FAKE_CHARGING 1
 
 // -----------------------------------------------------------------------------
 // Protocol timing

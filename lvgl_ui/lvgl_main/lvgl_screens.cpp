@@ -37,6 +37,9 @@ static uint32_t s_logStamp = 0;
 static lv_obj_t* s_eveHead = nullptr;
 static lv_obj_t* s_eveArm = nullptr;
 static lv_obj_t* s_eveStatus = nullptr;
+static lv_obj_t* s_dockStatus = nullptr;
+static lv_obj_t* s_dockAckStatus = nullptr;
+static lv_obj_t* s_eveDockStatus = nullptr;
 static const LvglRuntimeData* s_eventData = nullptr;
 
 /* AUDIO soundboard */
@@ -257,6 +260,24 @@ static lv_obj_t* make_dir_btn(lv_obj_t* parent, const char* txt, uintptr_t code,
 static void cb_stop(lv_event_t* e) {
   LV_UNUSED(e);
   lvglUiActionStopAll();
+}
+
+static void cb_dock_go(lv_event_t* e) {
+  LV_UNUSED(e);
+  if (!s_eventData || !s_eventData->linkOk) {
+    lvglUiShowToast("No base link", 1000);
+    return;
+  }
+  lvglUiActionDockGo();
+}
+
+static void cb_dock_cancel(lv_event_t* e) {
+  LV_UNUSED(e);
+  if (!s_eventData || !s_eventData->linkOk) {
+    lvglUiShowToast("No base link", 1000);
+    return;
+  }
+  lvglUiActionDockCancel();
 }
 
 static void cb_anim(lv_event_t* e) {
@@ -495,6 +516,46 @@ static void cb_eve_send(lv_event_t* e) {
   lvglUiShowToast("Pose sent to Base", 1000);
 }
 
+static void cb_eve_preset(lv_event_t* e) {
+  uintptr_t preset = (uintptr_t)lv_event_get_user_data(e);
+  if (!s_eventData || !s_eventData->eveUartOk) {
+    lvglUiShowToast("EVE not connected", 1200);
+    return;
+  }
+
+  int head = 90;
+  int arm = 90;
+  const char* msg = "EVE pose sent";
+  switch (preset) {
+    case 0:
+      head = 90;
+      arm = 90;
+      msg = "EVE neutral";
+      break;
+    case 1:
+      head = 60;
+      arm = 125;
+      msg = "EVE look left";
+      break;
+    case 2:
+      head = 120;
+      arm = 55;
+      msg = "EVE look right";
+      break;
+    case 3:
+      head = 90;
+      arm = 165;
+      msg = "EVE arm up";
+      break;
+    default:
+      break;
+  }
+  if (s_eveHead) lv_slider_set_value(s_eveHead, head, LV_ANIM_OFF);
+  if (s_eveArm) lv_slider_set_value(s_eveArm, arm, LV_ANIM_OFF);
+  lvglUiActionEveSendServo((int16_t)head, (int16_t)arm);
+  lvglUiShowToast(msg, 900);
+}
+
 static void cb_profile_editor(lv_event_t* e) {
   LV_UNUSED(e);
   lvglUiProfileEditorOpen();
@@ -522,8 +583,8 @@ static lv_obj_t* build_home(lv_obj_t* tab) {
   lv_obj_set_style_pad_gap(row, 8, 0);
 
   lv_obj_t* b1 = make_btn(row, "DRIVE", cb_nav, (void*)LVGL_NAV_DRIVE, true, false);
-  lv_obj_t* b2 = make_btn(row, "BEHAV", cb_nav, (void*)LVGL_NAV_BEHAVIOR, false, false);
-  lv_obj_t* b3 = make_btn(row, "SETTINGS", cb_nav, (void*)LVGL_NAV_SETTINGS, false, false);
+  lv_obj_t* b2 = make_btn(row, "DOCK", cb_nav, (void*)LVGL_NAV_DOCK, true, false);
+  lv_obj_t* b3 = make_btn(row, "BEHAV", cb_nav, (void*)LVGL_NAV_BEHAVIOR, false, false);
   lv_obj_t* b4 = make_btn(row, "SYSTEM", cb_nav, (void*)LVGL_NAV_SYSTEM, false, false);
   lv_obj_set_size(b1, 145, 44);
   lv_obj_set_size(b2, 145, 44);
@@ -667,11 +728,11 @@ static lv_obj_t* build_drive(lv_obj_t* tab) {
   lv_obj_set_flex_flow(bot, LV_FLEX_FLOW_ROW);
   lv_obj_set_style_pad_gap(bot, 4, 0);
 
-  lv_obj_t* dock = make_btn(bot, "Dock", cb_anim, (void*)(uintptr_t)9, true, false);
+  lv_obj_t* dock = make_btn(bot, "Dock", cb_dock_go, nullptr, true, false);
   lv_obj_set_flex_grow(dock, 0);
   lv_obj_set_width(dock, 52);
   lv_obj_set_height(dock, 34);
-  lv_obj_t* cancel = make_btn(bot, "Cancel", cb_drive_release, nullptr, false, false);
+  lv_obj_t* cancel = make_btn(bot, "Cancel", cb_dock_cancel, nullptr, false, false);
   lv_obj_set_width(cancel, 52);
   lv_obj_set_height(cancel, 34);
   lv_obj_t* stop = make_btn(bot, "E-STOP", cb_stop, nullptr, false, true);
@@ -872,45 +933,120 @@ static lv_obj_t* build_sd(lv_obj_t* tab) {
 }
 
 static lv_obj_t* build_eve(lv_obj_t* tab) {
+  lv_obj_set_scrollbar_mode(tab, LV_SCROLLBAR_MODE_AUTO);
   lv_obj_set_flex_flow(tab, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_style_pad_all(tab, 8, 0);
   lv_obj_set_style_pad_row(tab, 6, 0);
 
   lv_obj_t* title = lv_label_create(tab);
-  lv_label_set_text(title, "EVE remote");
+  lv_label_set_text(title, "Docking + EVE");
   lv_obj_set_style_text_color(title, LVGL_WALLE_TEXT, 0);
 
-  s_eveStatus = lv_label_create(tab);
+  lv_obj_t* wallDock = lv_obj_create(tab);
+  lv_obj_add_style(wallDock, &s_style.card, 0);
+  lv_obj_set_width(wallDock, lv_pct(100));
+  lv_obj_set_height(wallDock, LV_SIZE_CONTENT);
+  lv_obj_set_flex_flow(wallDock, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_style_pad_all(wallDock, 8, 0);
+  lv_obj_set_style_pad_row(wallDock, 6, 0);
+
+  lv_obj_t* wallTitle = lv_label_create(wallDock);
+  lv_label_set_text(wallTitle, "WALL-E dock");
+  lv_obj_add_style(wallTitle, &s_style.text_dim, 0);
+
+  s_dockStatus = lv_label_create(wallDock);
+  lv_label_set_text(s_dockStatus, "Base link: --");
+  lv_obj_set_style_text_color(s_dockStatus, lv_color_white(), 0);
+
+  s_dockAckStatus = lv_label_create(wallDock);
+  lv_label_set_text(s_dockAckStatus, "Dock action: ready");
+  lv_obj_set_style_text_color(s_dockAckStatus, LVGL_WALLE_TEXT_DIM, 0);
+
+  lv_obj_t* dockRow = lv_obj_create(wallDock);
+  lv_obj_remove_style_all(dockRow);
+  lv_obj_set_width(dockRow, lv_pct(100));
+  lv_obj_set_height(dockRow, 34);
+  lv_obj_set_flex_flow(dockRow, LV_FLEX_FLOW_ROW);
+  lv_obj_set_style_pad_gap(dockRow, 8, 0);
+  lv_obj_t* bDockGo = make_btn(dockRow, "Go dock", cb_dock_go, nullptr, true, false);
+  lv_obj_t* bDockCancel = make_btn(dockRow, "Cancel", cb_dock_cancel, nullptr, false, false);
+  lv_obj_t* bStop = make_btn(dockRow, "STOP", cb_stop, nullptr, false, true);
+  lv_obj_set_flex_grow(bDockGo, 1);
+  lv_obj_set_flex_grow(bDockCancel, 1);
+  lv_obj_set_flex_grow(bStop, 1);
+  lv_obj_set_height(bDockGo, 32);
+  lv_obj_set_height(bDockCancel, 32);
+  lv_obj_set_height(bStop, 32);
+
+  lv_obj_t* eveCard = lv_obj_create(tab);
+  lv_obj_add_style(eveCard, &s_style.card, 0);
+  lv_obj_set_width(eveCard, lv_pct(100));
+  lv_obj_set_height(eveCard, LV_SIZE_CONTENT);
+  lv_obj_set_flex_flow(eveCard, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_style_pad_all(eveCard, 8, 0);
+  lv_obj_set_style_pad_row(eveCard, 6, 0);
+
+  lv_obj_t* eveTitle = lv_label_create(eveCard);
+  lv_label_set_text(eveTitle, "EVE link + dock");
+  lv_obj_add_style(eveTitle, &s_style.text_dim, 0);
+
+  s_eveStatus = lv_label_create(eveCard);
   lv_label_set_text(s_eveStatus, "UART: --");
   lv_obj_set_style_text_color(s_eveStatus, lv_color_white(), 0);
 
-  lv_obj_t* lh = lv_label_create(tab);
+  s_eveDockStatus = lv_label_create(eveCard);
+  lv_label_set_text(s_eveDockStatus, "Remote control enabled after EVE UART handshake");
+  lv_label_set_long_mode(s_eveDockStatus, LV_LABEL_LONG_WRAP);
+  lv_obj_set_width(s_eveDockStatus, lv_pct(100));
+  lv_obj_set_style_text_color(s_eveDockStatus, LVGL_WALLE_TEXT_DIM, 0);
+
+  lv_obj_t* lh = lv_label_create(eveCard);
   lv_label_set_text(lh, "Head pan (deg)");
   lv_obj_set_style_text_color(lh, lv_color_white(), 0);
-  s_eveHead = lv_slider_create(tab);
+  s_eveHead = lv_slider_create(eveCard);
   lv_obj_set_size(s_eveHead, lv_pct(100), 18);
   lv_slider_set_range(s_eveHead, 45, 135);
   lv_slider_set_value(s_eveHead, 90, LV_ANIM_OFF);
   styleSlider(s_eveHead);
 
-  lv_obj_t* la = lv_label_create(tab);
+  lv_obj_t* la = lv_label_create(eveCard);
   lv_label_set_text(la, "Right arm (deg)");
   lv_obj_set_style_text_color(la, lv_color_white(), 0);
-  s_eveArm = lv_slider_create(tab);
+  s_eveArm = lv_slider_create(eveCard);
   lv_obj_set_size(s_eveArm, lv_pct(100), 18);
   lv_slider_set_range(s_eveArm, 0, 180);
   lv_slider_set_value(s_eveArm, 90, LV_ANIM_OFF);
   styleSlider(s_eveArm);
 
-  lv_obj_t* row = lv_obj_create(tab);
+  lv_obj_t* row = lv_obj_create(eveCard);
   lv_obj_remove_style_all(row);
-  lv_obj_set_size(row, lv_pct(100), 40);
+  lv_obj_set_size(row, lv_pct(100), 34);
   lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
-  lv_obj_set_style_pad_gap(row, 8, 0);
+  lv_obj_set_style_pad_gap(row, 6, 0);
   lv_obj_t* bSend = make_btn(row, "Send pose", cb_eve_send, nullptr, true, false);
-  lv_obj_t* bHome = make_btn(row, "Home", cb_nav, (void*)LVGL_NAV_HOME, false, false);
-  lv_obj_set_size(bSend, 168, 36);
-  lv_obj_set_size(bHome, 100, 36);
+  lv_obj_t* bNeutral = make_btn(row, "Neutral", cb_eve_preset, (void*)0, false, false);
+  lv_obj_t* bArm = make_btn(row, "Arm up", cb_eve_preset, (void*)3, false, false);
+  lv_obj_set_flex_grow(bSend, 1);
+  lv_obj_set_flex_grow(bNeutral, 1);
+  lv_obj_set_flex_grow(bArm, 1);
+  lv_obj_set_height(bSend, 32);
+  lv_obj_set_height(bNeutral, 32);
+  lv_obj_set_height(bArm, 32);
+
+  lv_obj_t* row2 = lv_obj_create(eveCard);
+  lv_obj_remove_style_all(row2);
+  lv_obj_set_size(row2, lv_pct(100), 34);
+  lv_obj_set_flex_flow(row2, LV_FLEX_FLOW_ROW);
+  lv_obj_set_style_pad_gap(row2, 6, 0);
+  lv_obj_t* bLeft = make_btn(row2, "Look L", cb_eve_preset, (void*)1, false, false);
+  lv_obj_t* bRight = make_btn(row2, "Look R", cb_eve_preset, (void*)2, false, false);
+  lv_obj_t* bHome = make_btn(row2, "Home", cb_nav, (void*)LVGL_NAV_HOME, false, false);
+  lv_obj_set_flex_grow(bLeft, 1);
+  lv_obj_set_flex_grow(bRight, 1);
+  lv_obj_set_flex_grow(bHome, 1);
+  lv_obj_set_height(bLeft, 32);
+  lv_obj_set_height(bRight, 32);
+  lv_obj_set_height(bHome, 32);
   return tab;
 }
 
@@ -971,7 +1107,7 @@ void lvglScreensInit(void) {
   build_settings(lv_tabview_add_tab(s_tabs, "SET"));
   build_sd(lv_tabview_add_tab(s_tabs, "SD"));
   build_system(lv_tabview_add_tab(s_tabs, "SYS"));
-  build_eve(lv_tabview_add_tab(s_tabs, "EVE"));
+  build_eve(lv_tabview_add_tab(s_tabs, "DOCK"));
 
   apply_scrollable_tab_bar(s_tabs);
 }
@@ -1057,8 +1193,27 @@ void lvglScreensTick(const LvglRuntimeData* data) {
     lv_label_set_text(s_lblSensors, s);
   }
 
+  if (s_dockStatus) {
+    char ds[80];
+    snprintf(ds, sizeof(ds), "Base link: %s | %.2fV %.2fA", data->linkOk ? "connected" : "offline",
+             data->batteryV, data->currentA);
+    lv_label_set_text(s_dockStatus, ds);
+    lv_obj_set_style_text_color(s_dockStatus, data->linkOk ? LVGL_WALLE_OK : LVGL_WALLE_ERR, 0);
+  }
+  if (s_dockAckStatus) {
+    lv_label_set_text(s_dockAckStatus,
+                      data->linkOk ? "Commands: Go dock / Cancel / Stop All" : "Waiting for WALL-E base telemetry");
+  }
+
   if (s_eveStatus) {
     lv_label_set_text(s_eveStatus, data->eveUartOk ? "UART: connected" : "UART: offline");
+    lv_obj_set_style_text_color(s_eveStatus, data->eveUartOk ? LVGL_WALLE_OK : LVGL_WALLE_ERR, 0);
+  }
+  if (s_eveDockStatus) {
+    lv_label_set_text(s_eveDockStatus,
+                      data->eveUartOk
+                          ? "EVE connected: CYD pose buttons forward through WALL-E base UART"
+                          : "EVE not on WALL-E UART. Her charging dock remains local until it reports upstream.");
   }
 
   if (s_taLogs) {

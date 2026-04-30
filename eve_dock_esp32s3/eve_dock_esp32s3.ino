@@ -52,7 +52,13 @@ void loop() {
   }
 #else
   dock_update(t);
-  dockDisplayUpdate(t, dock_get_state(), charging_is_enabled(), dock_last_eve_rx_ms());
+  dockDisplayUpdateEx(t,
+                      dock_get_state(),
+                      charging_is_enabled(),
+                      charging_voltage_ok_to_enable(),
+                      dock_last_eve_rx_ms(),
+                      charging_is_safety_locked_out(),
+                      charging_safety_reason());
 
   if ((uint32_t)(t - s_prn_ms) > 2000u) {
     s_prn_ms = t;
@@ -60,6 +66,10 @@ void loop() {
     Serial.print(dock_state_name(dock_get_state()));
     Serial.print(F(" chg="));
     Serial.print(charging_is_enabled() ? F("on") : F("off"));
+    if (charging_is_safety_locked_out()) {
+      Serial.print(F(" safety="));
+      Serial.print(charging_safety_reason());
+    }
     Serial.print(F(" lastEveMs="));
     uint32_t lr = dock_last_eve_rx_ms();
     if (lr == 0) Serial.print(F("never"));

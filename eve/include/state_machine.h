@@ -8,5 +8,9 @@ void stateMachineTick(void);
 void stateMachineOnUartRx(uint8_t type, const uint8_t* payload, size_t len, uint8_t seq);
 
 uint32_t stateMachineGetSessionId(void);
+bool stateMachineIsDocked(void);
+const char* stateMachineGetStateName(void);
+void stateMachineSetDockMimic(bool enabled, bool fakeCharging);
+bool stateMachineIsDockMimic(void);
 bool stateMachineAllowsCompanionUart(void);
 const char* stateMachineGetPeerLabel(void);

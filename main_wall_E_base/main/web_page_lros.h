@@ -4675,6 +4675,53 @@ body.lros-app-revealed #app {
             <div class="status-row"><span class="label">Assist data</span><span class="value" id="eve-as-stale">—</span></div>
           </div>
         </div>
+        <div class="card more-deck-card">
+          <div class="card-header">Dock panel</div>
+          <div class="card-body">
+            <div class="status-row"><span class="label">Dock FSM</span><span class="value mono" id="eve-dock-fsm">—</span></div>
+            <div class="status-row"><span class="label">Dock active</span><span class="value" id="eve-dock-active">—</span></div>
+            <div class="status-row"><span class="label">Dock node</span><span class="value" id="eve-dock-node">—</span></div>
+            <div class="status-row"><span class="label">Transport</span><span class="value mono" id="eve-transport">UART only</span></div>
+          </div>
+        </div>
+        <div class="card more-deck-card">
+          <div class="card-header">Personality tuner</div>
+          <div class="card-body">
+            <div class="status-row"><span class="label">Curiosity</span><span class="value"><input type="range" min="0" max="100" value="70" id="eve-tune-curiosity"></span></div>
+            <div class="status-row"><span class="label">Responsiveness</span><span class="value"><input type="range" min="0" max="100" value="65" id="eve-tune-response"></span></div>
+            <div class="status-row"><span class="label">Activity</span><span class="value"><input type="range" min="0" max="100" value="50" id="eve-tune-activity"></span></div>
+            <button class="btn" onclick="pushEvePersonality()">Push to EVE</button>
+            <p class="stat-sub" id="eve-tune-status">Sends over existing WALL-E ↔ EVE UART.</p>
+          </div>
+        </div>
+        <div class="card more-deck-card">
+          <div class="card-header">EVE mic sense</div>
+          <div class="card-body">
+            <div class="status-row"><span class="label">Last sound event</span><span class="value mono" id="eve-mic-event">—</span></div>
+            <div class="status-row"><span class="label">Level / ambient</span><span class="value mono" id="eve-mic-level">—</span></div>
+            <div class="status-row"><span class="label">Spike / clap / quiet</span><span class="value mono" id="eve-mic-flags">—</span></div>
+            <div class="status-row"><span class="label">Spike threshold</span><span class="value"><input type="range" min="50" max="8000" value="1800" id="eve-mic-spike"></span></div>
+            <div class="status-row"><span class="label">Clap threshold</span><span class="value"><input type="range" min="100" max="12000" value="4200" id="eve-mic-clap"></span></div>
+            <div class="status-row"><span class="label">Quiet threshold</span><span class="value"><input type="range" min="10" max="2000" value="180" id="eve-mic-quiet"></span></div>
+            <button class="btn" onclick="pushEveMicSettings()">Save mic settings</button>
+            <button class="btn ghost" onclick="testEveMicReaction()">Test reaction</button>
+            <p class="stat-sub" id="eve-mic-status">Mic data arrives through existing UART EVENT/status traffic.</p>
+          </div>
+        </div>
+        <div class="card more-deck-card">
+          <div class="card-header">Memory / learning viewer</div>
+          <div class="card-body">
+            <div class="status-row"><span class="label">Entries</span><span class="value mono" id="eve-learning-count">—</span></div>
+            <div class="log-item mono" style="word-break:break-all;max-height:8em;overflow:auto" id="eve-learning-list">—</div>
+          </div>
+        </div>
+        <div class="card more-deck-card">
+          <div class="card-header">Live UART monitor</div>
+          <div class="card-body">
+            <div class="status-row"><span class="label">Peer</span><span class="value mono" id="eve-uart-peer">—</span></div>
+            <div class="log-item mono" style="word-break:break-all;max-height:8em;overflow:auto" id="eve-uart-monitor">—</div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -7306,7 +7353,7 @@ function navSendRouteToRobot() {
 
   function syncFromState(s) {
     syncMetricsFromDom(s);
-    var lowBatt = s && s.battery && s.battery.voltage != null && s.battery.voltage < 11.0;
+    var lowBatt = s && s.battery && s.battery.voltage != null && s.battery.voltage < 6.5;
     var w = $('nav-mission-batt-warn');
     if (w) {
       w.hidden = !lowBatt;
@@ -7852,10 +7899,10 @@ function showToast(emoji, text) {
   setTimeout(() => el.remove(), TOAST_DURATION);
 }
 
-// 5V rail: low = below 4.3V. Only show each state-toast once per transition (no spam every poll).
+// EVE 2S pack (~7.4 V nominal): match firmware EVE_BAT_MIN_V 6.0 / EVE_BAT_MAX_V 8.4.
 function updateToastsFromState(s) {
   if (!s) return;
-  if (s.battery && s.battery.voltage < 4.3) {
+  if (s.battery && s.battery.voltage < 6.5) {
     if (!_lastToastState.lowBattery) { _lastToastState.lowBattery = true; showToast('\uD83D\uDD0B', "I'm getting tired"); }
   } else { _lastToastState.lowBattery = false; }
   if (s.auto && s.auto.rthActive) {
@@ -8161,7 +8208,7 @@ function pollNodeHealth() {
 }
 
 /** EVE pill + operator chip + EVE page — UART is not an ESP-NOW node; use living + /api/eve/status */
-function applyLivingEveUI(liv, uart) {
+function applyLivingEveUI(liv, uart, panel, learning, monitor) {
   var eveOn = liv && liv.eve_uart === true;
   var nodes = document.querySelectorAll('.node-pill[data-pill="eve"]');
   var prev = _pillState.eve;
@@ -8239,15 +8286,100 @@ function applyLivingEveUI(liv, uart) {
       setById('eve-as-stale', '—');
     }
   }
+  if (panel && panel.ok) {
+    setById('eve-transport', panel.transport || 'uart_only');
+    var d = panel.dock || {};
+    setById('eve-dock-fsm', d.fsm != null ? String(d.fsm) : '—');
+    setById('eve-dock-active', d.active != null ? (d.active ? 'yes' : 'no') : '—');
+    setById('eve-dock-node', d.dock_node_online != null ? (d.dock_node_online ? 'online' : 'offline') : '—');
+  }
+  var mic = null;
+  if (uart && uart.payload) {
+    try {
+      var up = typeof uart.payload === 'string' ? JSON.parse(uart.payload) : uart.payload;
+      if (up && (up.event || up.level != null || up.ambient != null)) mic = up;
+    } catch (e) {}
+  }
+  if (!mic && panel && panel.eve && panel.eve.mic) mic = panel.eve.mic;
+  if (mic) {
+    setById('eve-mic-event', mic.event || mic.last_event || '—');
+    var lev = mic.level != null ? String(mic.level) : '—';
+    var amb = mic.ambient != null ? String(mic.ambient) : '—';
+    setById('eve-mic-level', lev + ' / ' + amb);
+    var flags = [];
+    if (mic.spike != null) flags.push('S:' + (mic.spike ? 'Y' : 'N'));
+    if (mic.clap != null) flags.push('C:' + (mic.clap ? 'Y' : 'N'));
+    if (mic.quiet != null) flags.push('Q:' + (mic.quiet ? 'Y' : 'N'));
+    setById('eve-mic-flags', flags.length ? flags.join(' · ') : 'UART event');
+  }
+  if (learning && learning.ok) {
+    var entries = Array.isArray(learning.entries) ? learning.entries : [];
+    setById('eve-learning-count', String(entries.length));
+    var preview = entries.slice(-8).map(function (e) {
+      if (!e) return '';
+      return '[' + (e.ms || e.ts || '?') + '] ' + (e.d || e.trigger || JSON.stringify(e));
+    }).join('\n');
+    setById('eve-learning-list', preview || 'No memory events yet');
+  }
+  if (monitor && monitor.ok) {
+    setById('eve-uart-peer', monitor.peer || '—');
+    setById('eve-uart-monitor', JSON.stringify(monitor.bridge || monitor).slice(0, 900));
+  }
+}
+
+function pushEvePersonality() {
+  var c = document.getElementById('eve-tune-curiosity');
+  var r = document.getElementById('eve-tune-response');
+  var a = document.getElementById('eve-tune-activity');
+  var qs = '?curiosity=' + encodeURIComponent(c ? c.value : 70) +
+           '&responsiveness=' + encodeURIComponent(r ? r.value : 65) +
+           '&activity=' + encodeURIComponent(a ? a.value : 50);
+  fetch(api('/api/eve/personality' + qs), { cache: 'no-store', headers: apiAuthHeaders() })
+    .then(function (res) { return res.json(); })
+    .then(function (j) {
+      setById('eve-tune-status', j && j.ok ? 'Personality pushed over UART' : 'EVE personality push failed');
+    }).catch(function () {
+      setById('eve-tune-status', 'EVE personality push failed');
+    });
+}
+
+function pushEveMicSettings() {
+  var s = document.getElementById('eve-mic-spike');
+  var c = document.getElementById('eve-mic-clap');
+  var q = document.getElementById('eve-mic-quiet');
+  var qs = '?enabled=1&spike=' + encodeURIComponent(s ? s.value : 1800) +
+           '&clap=' + encodeURIComponent(c ? c.value : 4200) +
+           '&quiet=' + encodeURIComponent(q ? q.value : 180) +
+           '&cooldown=2500';
+  fetch(api('/api/eve/mic' + qs), { cache: 'no-store', headers: apiAuthHeaders() })
+    .then(function (res) { return res.json(); })
+    .then(function (j) {
+      setById('eve-mic-status', j && j.ok ? 'Mic settings pushed over UART' : 'EVE mic settings push failed');
+    }).catch(function () {
+      setById('eve-mic-status', 'EVE mic settings push failed');
+    });
+}
+
+function testEveMicReaction() {
+  fetch(api('/api/eve/mic?test=1'), { cache: 'no-store', headers: apiAuthHeaders() })
+    .then(function (res) { return res.json(); })
+    .then(function (j) {
+      setById('eve-mic-status', j && j.ok ? 'Mic test sent over UART' : 'EVE mic test failed');
+    }).catch(function () {
+      setById('eve-mic-status', 'EVE mic test failed');
+    });
 }
 
 function pollLivingTelemetry() {
   var h = apiAuthHeaders();
   Promise.all([
     fetch(api('/api/living/telemetry'), { cache: 'no-store', headers: h }).then(function (r) { return r.json(); }).catch(function () { return null; }),
-    fetch(api('/api/eve/status'), { cache: 'no-store', headers: h }).then(function (r) { return r.json(); }).catch(function () { return null; })
+    fetch(api('/api/eve/status'), { cache: 'no-store', headers: h }).then(function (r) { return r.json(); }).catch(function () { return null; }),
+    fetch(api('/api/companion/panel'), { cache: 'no-store', headers: h }).then(function (r) { return r.json(); }).catch(function () { return null; }),
+    fetch(api('/api/learning/shared'), { cache: 'no-store', headers: h }).then(function (r) { return r.json(); }).catch(function () { return null; }),
+    fetch(api('/api/uart/log'), { cache: 'no-store', headers: h }).then(function (r) { return r.json(); }).catch(function () { return null; })
   ]).then(function (arr) {
-    applyLivingEveUI(arr[0], arr[1]);
+    applyLivingEveUI(arr[0], arr[1], arr[2], arr[3], arr[4]);
   });
 }
 
@@ -8907,7 +9039,7 @@ function refreshDockPanel(force) {
     battery.percent != null
       ? battery.percent
       : battery.voltage != null
-        ? Math.min(100, Math.max(0, ((battery.voltage - 10.5) / 2.1) * 100))
+        ? Math.min(100, Math.max(0, ((battery.voltage - 6.0) / 2.4) * 100))
         : null;
 
   function applyBatteryToDock() {
@@ -9349,12 +9481,12 @@ async function fetchStatus() {
     setById('home-battery', battery.voltage != null ? battery.voltage + ' V' : '-');
     setById('home-state', auto.state || '-');
     setById('home-emotion', auto.emotion || '-');
-    const pct = battery.percent != null ? battery.percent : (battery.voltage != null ? Math.min(100, Math.max(0, (battery.voltage - 10.5) / 2.1 * 100)) : 80);
+    const pct = battery.percent != null ? battery.percent : (battery.voltage != null ? Math.min(100, Math.max(0, (battery.voltage - 6.0) / 2.4 * 100)) : 80);
     const pctDock =
       battery.percent != null
         ? battery.percent
         : battery.voltage != null
-          ? Math.min(100, Math.max(0, (battery.voltage - 10.5) / 2.1 * 100))
+          ? Math.min(100, Math.max(0, (battery.voltage - 6.0) / 2.4 * 100))
           : null;
     const bar = document.getElementById('home-battery-bar');
     if (bar) { bar.style.width = pct + '%'; bar.className = 'progress-fill' + (pct < 20 ? ' critical' : pct < 40 ? ' low' : ''); }

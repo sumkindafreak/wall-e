@@ -14,6 +14,7 @@ String eveStatusManagerGetJSON(void) {
   String j = "{\"ok\":true";
   j += ",\"uptime_ms\":"; j += String(systemStatusUptimeMs());
   j += ",\"heap\":"; j += String(ESP.getFreeHeap());
+  j += ",\"state\":\""; j += stateMachineGetStateName(); j += "\"";
   j += ",\"uart_peer\":\""; j += stateMachineGetPeerLabel(); j += "\"";
   j += ",\"attached\":"; j += eveAttachmentIsAttached() ? "true" : "false";
   j += ",\"bat_hw\":"; j += eveBatteryHardwareEnabled() ? "true" : "false";

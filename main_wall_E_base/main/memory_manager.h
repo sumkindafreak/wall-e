@@ -13,3 +13,6 @@ void memoryManagerLog(uint16_t type, const char* detail);
 bool memoryManagerFsReady(void);
 
 void memoryManagerPersistVoiceboxMode(const char* modeName);
+
+/** Append recent memory events as a JSON array for the WebUI learning viewer. */
+String memoryManagerEventsJson(size_t maxBytes = 3072);

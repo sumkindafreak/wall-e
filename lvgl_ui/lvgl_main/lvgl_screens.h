@@ -23,7 +23,8 @@ typedef enum {
   LVGL_NAV_SETTINGS,
   LVGL_NAV_SD,
   LVGL_NAV_SYSTEM,
-  LVGL_NAV_EVE
+  LVGL_NAV_DOCK,
+  LVGL_NAV_EVE = LVGL_NAV_DOCK
 } LvglNavPage;
 
 void lvglScreensInit(void);
@@ -41,6 +42,8 @@ void lvglUiActionSetServoSpeedPct(int16_t pct);
 void lvglUiActionSavePosition(void);
 void lvglUiActionLoadPosition(void);
 void lvglUiActionSetVolumePct(int16_t pct);
+void lvglUiActionDockGo(void);
+void lvglUiActionDockCancel(void);
 void lvglUiActionProfileSet(uint8_t id);
 void lvglUiActionBrightnessSet(uint8_t level255);
 void lvglUiActionToggleJoystick(bool enabled);

@@ -26,8 +26,11 @@ enum EveMsgType : uint8_t {
   MSG_EVE_SLEEP = 0x06,
   MSG_EVE_ERROR = 0x07,
   MSG_EVE_TARGET_AWARENESS = 0x08,
+  MSG_MOVE_SERVO = 0x32,
   MSG_PLAY_SOUND = 0x33,
-  MSG_CYD_EVE_SERVO = 0x35,
+  MSG_BUS_STATUS = 0x42,
+  MSG_BUS_COMMAND = 0x44,
+  MSG_BUS_EVENT = 0x45,
 };
 
 enum ParseState : uint8_t {
@@ -233,6 +236,9 @@ static const char* typeName(uint8_t t) {
     case MSG_EVE_SLEEP: return "EVE_SLEEP";
     case MSG_EVE_ERROR: return "EVE_ERROR";
     case MSG_EVE_TARGET_AWARENESS: return "EVE_TARGET_AWARENESS";
+    case MSG_BUS_STATUS: return "BUS_STATUS";
+    case MSG_BUS_COMMAND: return "BUS_COMMAND";
+    case MSG_BUS_EVENT: return "BUS_EVENT";
     default: return "unknown";
   }
 }
@@ -291,9 +297,31 @@ bool eveUartBridgeSendCydServo(uint8_t headPanDeg, uint8_t rightArmDeg) {
   return false;
 #else
   char buf[64];
-  snprintf(buf, sizeof(buf), "{\"h\":%u,\"a\":%u}", (unsigned)headPanDeg, (unsigned)rightArmDeg);
-  return eveSendFrame(MSG_CYD_EVE_SERVO, buf);
+  snprintf(buf, sizeof(buf), "{\"l\":%u,\"r\":%u}", (unsigned)headPanDeg, (unsigned)rightArmDeg);
+  Serial.printf("[EVE] -> MOVE_SERVO head=%u arm=%u\n", (unsigned)headPanDeg, (unsigned)rightArmDeg);
+  return eveSendFrame(MSG_MOVE_SERVO, buf);
 #endif
+}
+
+bool eveUartBridgeSendBusCommand(const char* jsonUtf8) {
+#if !EVE_BRIDGE_ENABLE
+  (void)jsonUtf8;
+  return false;
+#else
+  if (!jsonUtf8) return false;
+  Serial.print(F("[EVE] -> BUS_COMMAND "));
+  Serial.println(jsonUtf8);
+  return eveSendFrame(MSG_BUS_COMMAND, jsonUtf8);
+#endif
+}
+
+String eveUartBridgeGetMonitorJSON(void) {
+  String j = "{\"ok\":true,\"bus\":\"uart_only\",\"peer\":";
+  j += eveUartBridgeIsLinkUp() ? "\"EVE\"" : "null";
+  j += ",\"bridge\":";
+  j += eveUartBridgeGetJSON();
+  j += "}";
+  return j;
 }
 
 bool eveUartBridgeSendWallEAck(uint32_t session) {

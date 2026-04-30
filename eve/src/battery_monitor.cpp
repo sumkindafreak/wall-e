@@ -2,9 +2,10 @@
 #include "config.h"
 
 #include <Arduino.h>
-
-static const float ADC_REF_V = 3.3f;
-static const int ADC_RES = 4095;
+#if EVE_ENABLE_BATTERY_MONITOR && EVE_BATTERY_INA219
+#include <Wire.h>
+#include <Adafruit_INA219.h>
+#endif
 
 static float s_v = 0.f;
 static float s_a = 0.f;
@@ -15,8 +16,20 @@ static bool s_hw = false;
 static uint32_t s_lastMs = 0;
 static bool s_verbose = true;
 
-static const float DIV_RATIO = (float)EVE_BAT_R2 / (float)(EVE_BAT_R1 + EVE_BAT_R2);
 static const float BAT_HARD_INVALID_V = 0.20f;
+
+#if EVE_ENABLE_BATTERY_MONITOR && EVE_BATTERY_INA219
+static Adafruit_INA219 s_ina219(EVE_INA219_I2C_ADDR);
+
+static float readVoltageIna219(void) { return s_ina219.getBusVoltage_V(); }
+
+static float readCurrentIna219(void) { return s_ina219.getCurrent_mA() / 1000.0f; }
+
+#elif EVE_ENABLE_BATTERY_MONITOR
+
+static const float ADC_REF_V = 3.3f;
+static const int ADC_RES = 4095;
+static const float DIV_RATIO = (float)EVE_BAT_R2 / (float)(EVE_BAT_R1 + EVE_BAT_R2);
 
 static float readVoltageAdc(void) {
   uint32_t sum = 0;
@@ -26,7 +39,6 @@ static float readVoltageAdc(void) {
   }
   float adcAvg = (float)sum / (float)EVE_BAT_SAMPLES;
   float adcV = (adcAvg / (float)ADC_RES) * ADC_REF_V;
-  /* Divider node voltage → pack voltage (R1 upper, R2 lower to GND). */
   float vpack = (adcV / DIV_RATIO) * EVE_BAT_CALIB;
   return vpack;
 }
@@ -45,6 +57,8 @@ static float readCurrentAdc(void) {
 #endif
 }
 
+#endif /* legacy ADC */
+
 static void apply(float v, float a) {
   if (v <= BAT_HARD_INVALID_V) {
     s_v = v;
@@ -53,7 +67,7 @@ static void apply(float v, float a) {
     s_valid = false;
     s_st = EVE_BAT_UNKNOWN;
     if (s_verbose) {
-      Serial.printf("[EVE][BAT] %.2fV invalid reading — monitor wiring/divider\n", (double)v);
+      Serial.printf("[EVE][BAT] %.2fV invalid reading — check sensor / wiring\n", (double)v);
     }
     return;
   }
@@ -100,11 +114,31 @@ void eveBatteryInit(void) {
   return;
 #endif
 
-#if EVE_BAT_ADC_PIN < 0
-  Serial.println(F("[EVE][BAT] no voltage pin — monitor off"));
-  return;
+#if EVE_BATTERY_INA219
+#if EVE_INA219_SDA >= 0 && EVE_INA219_SCL >= 0
+  Wire.begin((int)EVE_INA219_SDA, (int)EVE_INA219_SCL);
+#else
+  Wire.begin();
 #endif
-
+  if (!s_ina219.begin(&Wire)) {
+    Serial.println(F("[EVE][BAT] INA219 not found on I2C — check SDA/SCL, addr 0x40, power"));
+    return;
+  }
+  s_ina219.setCalibration_32V_2A();
+  s_hw = true;
+  s_verbose = true;
+  float v = readVoltageIna219();
+  float a = readCurrentIna219();
+  apply(v, a);
+  s_verbose = false;
+  s_lastMs = millis();
+  Serial.printf("[EVE][BAT] INA219 OK addr=0x%02x SDA=%d SCL=%d\n",
+                (unsigned)EVE_INA219_I2C_ADDR, (int)EVE_INA219_SDA, (int)EVE_INA219_SCL);
+  return;
+#elif EVE_BAT_ADC_PIN < 0
+  Serial.println(F("[EVE][BAT] ADC disabled (set EVE_BAT_ADC_PIN or enable INA219)"));
+  return;
+#else
   analogReadResolution(12);
   analogSetPinAttenuation(EVE_BAT_ADC_PIN, ADC_11db);
 #if EVE_CUR_ADC_PIN >= 0
@@ -119,22 +153,32 @@ void eveBatteryInit(void) {
   apply(v, a);
   s_verbose = false;
   s_lastMs = millis();
-  Serial.printf("[EVE][BAT] init V on GPIO%d", EVE_BAT_ADC_PIN);
+  Serial.printf("[EVE][BAT] init ADC V on GPIO%d", EVE_BAT_ADC_PIN);
 #if EVE_CUR_ADC_PIN >= 0
   Serial.printf(" | I on GPIO%d", EVE_CUR_ADC_PIN);
 #endif
   Serial.println();
+#endif
 }
 
 void eveBatteryTick(void) {
-#if !EVE_ENABLE_BATTERY_MONITOR || !s_hw || EVE_BAT_ADC_PIN < 0
+#if !EVE_ENABLE_BATTERY_MONITOR || !s_hw
+  return;
+#endif
+#if EVE_BATTERY_INA219
+#elif EVE_BAT_ADC_PIN < 0
   return;
 #endif
   uint32_t now = millis();
   if (now - s_lastMs < EVE_BAT_POLL_MS) return;
   s_lastMs = now;
+#if EVE_BATTERY_INA219
+  float v = readVoltageIna219();
+  float a = readCurrentIna219();
+#else
   float v = readVoltageAdc();
   float a = readCurrentAdc();
+#endif
   apply(v, a);
 }
 

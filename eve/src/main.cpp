@@ -17,6 +17,10 @@
 #include "eve_attachment_manager.h"
 #include "eve_status_manager.h"
 #include "eve_spatial_awareness.h"
+#include "eve_desktop_companion.h"
+#include "eve_web_server.h"
+#include "mic_input.h"
+#include "eve_serial_console.h"
 
 static void onUartRx(uint8_t type, const uint8_t* payload, size_t len, uint8_t seq) {
   stateMachineOnUartRx(type, payload, len, seq);
@@ -43,6 +47,7 @@ void setup() {
   servoInit();
   neopixelInit();
   audioInit();
+  initMic();
 
 #if EVE_PRESENT_PIN >= 0
   pinMode(EVE_PRESENT_PIN, INPUT_PULLUP);
@@ -53,13 +58,17 @@ void setup() {
   eveBehaviorManagerInit();
   eveAttachmentManagerInit();
   eveStatusManagerInit();
+  eveWebServerInit();
+  eveSerialConsoleInit();
 
   Serial.print(F("[EVE] Free heap: "));
   Serial.println(ESP.getFreeHeap());
 }
 
 void loop() {
+  eveSerialConsoleTick();
   uartLinkPoll();
+  updateMic();
   eveBatteryTick();
   stateMachineTick();
   eveBehaviorManagerTick();
@@ -71,4 +80,5 @@ void loop() {
   servoTick();
   neopixelTick();
   audioTick();
+  eveWebServerTick(stateMachineIsDocked());
 }

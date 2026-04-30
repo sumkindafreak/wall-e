@@ -4,6 +4,7 @@
  * Hand link: Serial1 @ GPIO17 TX / GPIO18 RX to WALL-E (see config.h).
  *
  * Libraries (Library Manager): ArduinoJson 6.x; lvgl 9.x; GFX Library for Arduino (moononournation).
+ * Battery/current: Adafruit INA219 + Adafruit BusIO (when EVE_BATTERY_INA219 in config.h).
  * Optional ToF: Pololu VL53L1X. Place lv_conf.h in this sketch folder when using LVGL 9 face.
  *
  * Board: ESP32S3 Dev Module (match your N16R8 module: 16 MB flash, OPI PSRAM in Tools menu).
@@ -23,6 +24,10 @@
 #include "eve_attachment_manager.h"
 #include "eve_status_manager.h"
 #include "eve_spatial_awareness.h"
+#include "eve_desktop_companion.h"
+#include "eve_web_server.h"
+#include "mic_input.h"
+#include "eve_serial_console.h"
 
 static void onUartRx(uint8_t type, const uint8_t* payload, size_t len, uint8_t seq) {
   stateMachineOnUartRx(type, payload, len, seq);
@@ -49,6 +54,7 @@ void setup() {
   servoInit();
   neopixelInit();
   audioInit();
+  initMic();
 
 #if EVE_PRESENT_PIN >= 0
   pinMode(EVE_PRESENT_PIN, INPUT_PULLUP);
@@ -59,13 +65,17 @@ void setup() {
   eveBehaviorManagerInit();
   eveAttachmentManagerInit();
   eveStatusManagerInit();
+  eveWebServerInit();
+  eveSerialConsoleInit();
 
   Serial.print(F("[EVE] Free heap: "));
   Serial.println(ESP.getFreeHeap());
 }
 
 void loop() {
+  eveSerialConsoleTick();
   uartLinkPoll();
+  updateMic();
   eveBatteryTick();
   stateMachineTick();
   eveBehaviorManagerTick();
@@ -77,4 +87,5 @@ void loop() {
   servoTick();
   neopixelTick();
   audioTick();
+  eveWebServerTick(stateMachineIsDocked());
 }

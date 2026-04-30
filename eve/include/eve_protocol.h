@@ -36,4 +36,14 @@ enum EveMsgType : uint8_t {
   MSG_PLAY_SOUND = 0x33,
   MSG_STOP = 0x34,
   MSG_RESET_STATE = 0x35,
+
+  // Shared UART intelligence bus extension range.
+  MSG_BUS_HELLO = 0x40,
+  MSG_BUS_IDENTIFY = 0x41,
+  MSG_BUS_STATUS = 0x42,
+  MSG_BUS_MEMORY_SYNC = 0x43,
+  MSG_BUS_COMMAND = 0x44,
+  MSG_BUS_EVENT = 0x45,
+  MSG_BUS_ACK = 0x46,
+  MSG_BUS_NACK = 0x47,
 };

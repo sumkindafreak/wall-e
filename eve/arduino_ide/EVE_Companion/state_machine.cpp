@@ -44,6 +44,8 @@ static uint32_t s_lastRxMs = 0;
 static uint32_t s_lastLowBatMs = 0;
 static uint32_t s_lastUnauthorizedLogMs = 0;
 static char s_peerLabel[24] = "none";
+static bool s_dockMimic = false;
+static bool s_dockMimicCharging = false;
 
 static bool stateAllowsRemoteControl(void) {
   return (s_state == EveState::IDLE || s_state == EveState::ATTACHED || s_state == EveState::ESCORT ||
@@ -59,7 +61,9 @@ static void sendEveHello(void) {
   String out;
   serializeJson(doc, out);
   uartLinkSendJson(MSG_EVE_HELLO, out.c_str());
+#if EVE_SERIAL_VERBOSE_LOGS
   Serial.println(F("[EVE][SM] -> EVE_HELLO"));
+#endif
 }
 
 static void sendEveReady(void) {
@@ -132,6 +136,8 @@ static void sendEveError(const char* msg, int code) {
 void stateMachineInit(void) {
   s_state = EveState::WAIT_ATTACH;
   s_sessionId = 0;
+  s_dockMimic = false;
+  s_dockMimicCharging = false;
   strncpy(s_peerLabel, "none", sizeof(s_peerLabel) - 1);
   s_peerLabel[sizeof(s_peerLabel) - 1] = '\0';
   s_lastHelloMs = 0;
@@ -139,6 +145,9 @@ void stateMachineInit(void) {
   s_lastRxMs = millis();
   eveDesktopCompanionInit();
   Serial.println(F("[EVE][SM] WAIT_ATTACH"));
+#if EVE_ENABLE_DOCK_MIMIC_TEST && EVE_DOCK_MIMIC_ON_BOOT
+  stateMachineSetDockMimic(true, EVE_DOCK_MIMIC_FAKE_CHARGING != 0);
+#endif
 }
 
 void stateMachineTick(void) {
@@ -165,7 +174,7 @@ void stateMachineTick(void) {
         s_lastEveHbMs = now;
         sendEveHeartbeat();
       }
-      if (s_state == EveState::ESCORT || s_state == EveState::INTERACT) {
+      if ((s_state == EveState::ESCORT || s_state == EveState::INTERACT || s_state == EveState::DOCKED) && !s_dockMimic) {
         if (now - s_lastRxMs > EVE_LINK_LOST_MS) {
           Serial.println(F("[EVE][SM] link lost -> WAIT_ATTACH"));
           sendEveError("link_timeout", 1);
@@ -213,7 +222,7 @@ void stateMachineTick(void) {
   }
 
   const bool dockDesktopActive = (s_state == EveState::DOCKED);
-  const bool dockCharging = eveBatteryDataValid() && eveBatteryCurrentA() > 0.03f;
+  const bool dockCharging = s_dockMimic ? s_dockMimicCharging : (eveBatteryDataValid() && eveBatteryCurrentA() > 0.03f);
   eveDesktopCompanionSetActive(dockDesktopActive, dockCharging);
   if (dockDesktopActive) {
     eveDesktopCompanionTick(now);
@@ -233,10 +242,12 @@ void stateMachineOnUartRx(uint8_t type, const uint8_t* payload, size_t len, uint
   }
   jsonBuf[len] = '\0';
 
+#if EVE_SERIAL_VERBOSE_LOGS
   Serial.print(F("[EVE][SM] RX type=0x"));
   Serial.print(type, HEX);
   Serial.print(F(" seq="));
   Serial.println(seq);
+#endif
 
   switch (type) {
     case MSG_WALL_E_ACK: {
@@ -343,6 +354,19 @@ void stateMachineOnUartRx(uint8_t type, const uint8_t* payload, size_t len, uint
     case MSG_RESET_STATE:
       stateMachineInit();
       break;
+    case MSG_BUS_COMMAND:
+      if (s_sessionId == 0 || !stateAllowsRemoteControl()) {
+        uint32_t now = millis();
+        if ((uint32_t)(now - s_lastUnauthorizedLogMs) > 1000u) {
+          s_lastUnauthorizedLogMs = now;
+          Serial.println(F("[EVE][SM] Ignored BUS_COMMAND before handshake/state ready"));
+        }
+        break;
+      }
+      if (eveDesktopCompanionApplyConfigJson(jsonBuf)) {
+        Serial.println(F("[EVE][SM] BUS_COMMAND applied"));
+      }
+      break;
     default:
       break;
   }
@@ -350,6 +374,62 @@ void stateMachineOnUartRx(uint8_t type, const uint8_t* payload, size_t len, uint
 
 uint32_t stateMachineGetSessionId(void) {
   return s_sessionId;
+}
+
+bool stateMachineIsDocked(void) {
+  return s_state == EveState::DOCKED;
+}
+
+void stateMachineSetDockMimic(bool enabled, bool fakeCharging) {
+#if EVE_ENABLE_DOCK_MIMIC_TEST
+  s_dockMimic = enabled;
+  s_dockMimicCharging = enabled && fakeCharging;
+  if (enabled) {
+    s_sessionId = 0xE0E0E0E0u;
+    s_lastRxMs = millis();
+    s_lastEveHbMs = 0;
+    strncpy(s_peerLabel, "dock_test", sizeof(s_peerLabel) - 1);
+    s_peerLabel[sizeof(s_peerLabel) - 1] = '\0';
+    s_state = EveState::DOCKED;
+    eyesNotifyDockingState(true, s_dockMimicCharging);
+    Serial.println(F("[EVE][SM] DOCK MIMIC ON"));
+  } else if (s_dockMimic || s_state == EveState::DOCKED) {
+    s_dockMimic = false;
+    s_dockMimicCharging = false;
+    s_sessionId = 0;
+    strncpy(s_peerLabel, "none", sizeof(s_peerLabel) - 1);
+    s_peerLabel[sizeof(s_peerLabel) - 1] = '\0';
+    s_state = EveState::WAIT_ATTACH;
+    s_lastHelloMs = 0;
+    eyesNotifyDockingState(false, false);
+    Serial.println(F("[EVE][SM] DOCK MIMIC OFF"));
+  }
+#else
+  (void)enabled;
+  (void)fakeCharging;
+  Serial.println(F("[EVE][SM] dock mimic disabled in config"));
+#endif
+}
+
+bool stateMachineIsDockMimic(void) {
+  return s_dockMimic;
+}
+
+const char* stateMachineGetStateName(void) {
+  switch (s_state) {
+    case EveState::BOOT: return "BOOT";
+    case EveState::WAIT_ATTACH: return "WAIT_ATTACH";
+    case EveState::HANDSHAKE: return "HANDSHAKE";
+    case EveState::IDLE: return "IDLE";
+    case EveState::ATTACHED: return "ATTACHED";
+    case EveState::ESCORT: return "ESCORT";
+    case EveState::INTERACT: return "INTERACT";
+    case EveState::LOW_POWER: return "LOW_POWER";
+    case EveState::DOCKED: return "DOCKED";
+    case EveState::ERROR: return "ERROR";
+    case EveState::SLEEP: return "SLEEP";
+    default: return "UNKNOWN";
+  }
 }
 
 bool stateMachineAllowsCompanionUart(void) {

@@ -30,5 +30,11 @@ bool eveUartBridgeSendPlaySound(uint8_t track);
 /** CYD UI: head pan + right arm targets (JSON), when EVE firmware supports it. */
 bool eveUartBridgeSendCydServo(uint8_t headPanDeg, uint8_t rightArmDeg);
 
+/** Shared UART intelligence bus: send COMMAND JSON to EVE over the existing UART only. */
+bool eveUartBridgeSendBusCommand(const char* jsonUtf8);
+
+/** Debug/live monitor alias for WebUI. */
+String eveUartBridgeGetMonitorJSON(void);
+
 /** Handshake: optional session echo for EVE state machine. */
 bool eveUartBridgeSendWallEAck(uint32_t session);

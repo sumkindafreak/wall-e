@@ -21,7 +21,7 @@ The current defaults target the small ESP32-C3 board with an onboard OLED like t
 | Dock UART RX             | GPIO3               |
 | Dock UART TX             | GPIO4               |
 | Charge MOSFET gate       | GPIO10              |
-| NeoPixel/status LED data | GPIO7               |
+| NeoPixel chain data      | GPIO7               |
 | Optional dock button     | disabled by default |
 
 
@@ -52,18 +52,25 @@ The local `eve_protocol.h` mirrors EVE's protocol constants so this sketch can s
 | Dock RX / GPIO3 <- EVE TX  |                                                                                   |
 | GND                        | Common                                                                            |
 | MOSFET gate                | `DOCK_PIN_CHG_GATE` (default GPIO 10) — verify N/P-channel vs your charger wiring |
-| NeoPixel                   | `DOCK_PIN_NEOPIXEL` (default GPIO 7), 5 V as needed                               |
+| NeoPixel chain             | `DOCK_PIN_NEOPIXEL` (default GPIO 7), two pixels daisy-chained                    |
 | Button                     | Optional; `DOCK_PIN_BUTTON` is disabled by default                                |
 
 
 Optional pack sense: set `DOCK_PIN_VBAT_SENSE` in `pin_config.h` and calibrate `DOCK_VBAT_SENSE_OK_`*.
+
+Startup charge prime: `DOCK_STARTUP_CHARGE_PRIME_MS` defaults to `30000`, so the MOSFET turns on after dock boot. If EVE is so flat that there is no UART/status activity after that window, `DOCK_KEEP_CHARGE_ON_NO_EVE_ACTIVITY` keeps charging on and red-flashes the dock while waiting for EVE to init. Once EVE starts talking, normal UART-controlled dock logic takes over.
+
+NeoPixel chain order:
+
+1. Pixel 0 = status indicator.
+2. Pixel 1 = dock aura / charging glow.
 
 ## Bench validation
 
 1. Flash EVE and confirm it is waiting for a UART peer.
 2. Flash the dock with the board set to your actual chip family.
 3. Connect only GND, crossed UART TX/RX, and USB power first.
-4. Confirm the OLED shows `EVE DOCK`, `MODE SCAN`, and `CHG OFF`.
+4. Confirm the OLED shows `EVE DOCK` and `CHARGING` / `MOSFET ON` while a flat/no-UART EVE is being primed; the dock should red-flash while waiting for EVE init.
 5. Confirm dock serial logs `RX MSG_EVE_HELLO`, `WALL_E_ACK`, `RX MSG_EVE_READY`, then `MSG_MODE_DOCK`.
 6. Confirm EVE logs `peer=eve_dock_c3` and `DOCK`.
 7. Confirm the OLED changes to `CHARGING` and `MOSFET ON` when charging is enabled.
