@@ -22,11 +22,9 @@ typedef struct {
   int8_t batteryPercent; /* 0–100, or -1 if unknown */
   uint8_t batteryHealth; /* EveAwarenessBatteryHealth */
 
-  /* Dock (separate publisher — not battery chemistry) */
+  /* Connection (O-4: state_machine — exactly these three facts) */
   bool docked;
-
-  /* Connectivity */
-  bool wallELinked;
+  bool wallELinked; /* derived: session + linked peer */
   bool remoteConnected;
 
   /* Audio */

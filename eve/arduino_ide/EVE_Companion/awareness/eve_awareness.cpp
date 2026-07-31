@@ -5,6 +5,7 @@
 #include "eve_awareness.h"
 #include "eve_awareness_zones.h"
 #include "eve_awareness_battery.h"
+#include "eve_awareness_connection.h"
 #include "battery_monitor.h"
 #include "state_machine.h"
 #include "system_status.h"
@@ -22,11 +23,6 @@
 
 static EveAwarenessSnapshot s_snap;
 static uint32_t s_lastSerialMs = 0;
-
-static bool peerLinked(void) {
-  const char* peer = stateMachineGetPeerLabel();
-  return peer && peer[0] != '\0' && strcmp(peer, "none") != 0;
-}
 
 #if EVE_ENABLE_TOF
 static int32_t tofClosestDistanceMm(const EveTofRawFrame* raw) {
@@ -88,7 +84,7 @@ static void publishBatteryFacts(void) {
     s_snap.batteryVoltage = eveBatteryVoltage();
     s_snap.batteryPercent = (int8_t)eveBatteryPercent();
     s_snap.batteryHealth =
-        eveAwarenessBatteryHealthFromStatus(eveBatteryStatus(), true);
+        eveAwarenessBatteryHealthFromStatus((int)eveBatteryStatus(), true);
   } else {
     s_snap.batteryVoltage = 0.f;
     s_snap.batteryPercent = -1;
@@ -108,12 +104,13 @@ static void publishBatteryFacts(void) {
 #endif
 }
 
-static void publishDockFacts(void) {
-  s_snap.docked = stateMachineIsDocked();
-}
+static void publishConnectionFacts(void) {
+  const uint32_t sessionId = stateMachineGetSessionId();
+  const bool peerLinked =
+      eveAwarenessPeerLabelIsLinked(stateMachineGetPeerLabel());
 
-static void publishLinkFacts(void) {
-  s_snap.wallELinked = stateMachineGetSessionId() != 0 && peerLinked();
+  s_snap.docked = stateMachineIsDocked();
+  s_snap.wallELinked = eveAwarenessWallELinkedFromSession(sessionId, peerLinked);
   s_snap.remoteConnected = stateMachineAllowsCompanionUart();
 }
 
@@ -130,7 +127,7 @@ static void publishAudioFacts(void) {
 static void publishHealthFacts(void) {
   s_snap.sdMounted = eveAssetIsMounted();
 #if EVE_ENABLE_EYES
-  s_snap.displayReady = false; /* O-1: face ready flag comes with eye bench API later */
+  s_snap.displayReady = false; /* O-5: face ready flag when eye bench API exists */
 #else
   s_snap.displayReady = true;
 #endif
@@ -145,8 +142,7 @@ void eveAwarenessInit(void) {
 void eveAwarenessTick(void) {
   publishPersonFacts();
   publishBatteryFacts();
-  publishDockFacts();
-  publishLinkFacts();
+  publishConnectionFacts();
   publishAudioFacts();
   publishHealthFacts();
   s_snap.uptimeMs = systemStatusUptimeMs();
