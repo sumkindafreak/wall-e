@@ -1,14 +1,24 @@
-# EVE software architecture (V1 baseline → V2 brain)
+# EVE software architecture
 
-Version 1 established the **output stack**: independent eyes, native I2S audio, SD assets, and a clean render path. Version 2 adds the **brain stack**: awareness of the world, behavioural intent, and affect that drives expressive outputs.
-
-**Architecture status:** V2 is **locked** after PR #7. New features slot into a layer; they do not redesign layers. Phase N (Eye Controller) is **mature** — no rendering ownership changes, only Phase R polish inside the Eye Controller.
+**Architecture status:** **Locked** after PR #7. The layer stack does not change; the robot evolves **inside** it. Phase N (Eye Controller) is **mature** — Phase R polish only.
 
 Nothing in this document replaces existing phase notes (J–N). It defines how future work **slots into layers** without blurring responsibilities.
 
 ---
 
-## EVE V2 — five layers
+## Three milestones
+
+| Milestone | Question | Status |
+|-----------|----------|--------|
+| **V1 — Body** | *How is EVE constructed?* | **Complete** — ESP32-S3, dual eyes, SD assets, native I2S, Eye Controller, emotion/gaze stack, CI, build matrix. The robot **functions**. |
+| **V2 — Brain** | *How does EVE think?* | **Specified** — Awareness → Behaviour → Emotion → Outputs. Phases O–R implement the brain. Every piece of logic has a **home**. |
+| **V3 — Character** | *Who is EVE?* | **Phase S** — Character System (personality, mood, preferences). Same firmware, different SD profile → different **companion**. **Presence**, not just behaviour. |
+
+Up to V1: building a **robot**. After Phase O: building **behaviour**. After Phase S: building **presence**.
+
+---
+
+## EVE V2 — five layers (locked)
 
 Sensing → thinking → feeling → expressing.
 
@@ -108,12 +118,13 @@ Each layer exposes **one primary surface** to the layer above. Callers do not re
 | Layer | Public API (target) | Consumes |
 |-------|---------------------|----------|
 | **Awareness** | `const EveAwarenessSnapshot& eveAwarenessGetSnapshot()` | Hardware drivers only |
-| **Behaviour** | `const EveBehaviourState& eveBehaviourGetState()` | Awareness snapshot |
+| **Character** | `const EveCharacterState& eveCharacterGetState()` | Awareness snapshot (Phase S / V3) |
+| **Behaviour** | `const EveBehaviourState& eveBehaviourGetState()` | Awareness + Character biases |
 | **Emotion** | `const EveEmotionState& eveEmotionGetState()` (affect + output hints) | Behaviour state |
 | **Eye Controller** | `eveEyesTick()` | Emotion output hints |
 | **Audio Engine** | `eveAudioTick()` | Emotion output hints |
 
-Tick wrappers may subsume init and internal sub-steps; the rule is **no cross-layer struct poking**. Legacy names (`eveEyeControllerTick`, `eveAwarenessGetSnapshot` struct copy-out) may persist during migration; converge on the table above.
+Character is not a stack layer above Behaviour in the dependency diagram — it is a **read-only modifier** Behaviour consults. It must not call Emotion or Outputs.
 
 ---
 
@@ -157,6 +168,8 @@ exit()
 ```
 
 Only **one** behaviour is active. The Behaviour Manager owns registration, switching, and tick order.
+
+**Character System (Phase S / V3)** sits **above Behaviour logic, below Emotion**: Personality (long-term) + Mood (short-term) **bias** thresholds and timings — they do not replace behaviours or bypass Awareness. See `PHASE_S_CHARACTER_SYSTEM.md`.
 
 Planned behaviours:
 
@@ -227,45 +240,46 @@ Head tilt, body motion, arm gestures, lighting — same sibling pattern under Em
 ```text
 1. Hardware read / drivers
 2. Awareness tick        → publish EveAwarenessSnapshot
-3. Behaviour Manager     → active behaviour update → intent
-4. Emotion               → affect request from intent
-5. Eye Controller tick   → render from affect + hints
-6. Audio Engine tick     → queue from affect + hints
+3. Character tick        → update mood from snapshot; personality from SD (Phase S)
+4. Behaviour Manager     → active behaviour update (character-biased thresholds) → intent
+5. Emotion               → affect request from intent
+6. Eye Controller tick   → render from affect + hints
+7. Audio Engine tick     → queue from affect + hints
 ```
 
-Eye Controller may still run internal sub-ticks (gaze ease, blink) as **output refinement**, not as world decisions.
+Steps 3–4: Character **biases** Behaviour; it does not choose expressions or play audio. Eye Controller may still run internal sub-ticks (gaze ease, blink) as **output refinement**, not as world decisions.
 
 ---
 
-## Phase roadmap (post V1)
+## Phase roadmap
 
-| Phase | Focus |
-|-------|--------|
-| **O** | Awareness layer — sensor fusion, unified snapshot, confidence, no decisions |
-| **P** | Behaviour intelligence — Idle, Curious, Follow, Greeting, Sleep (+ Conversation) |
-| **Q** | Emotion refactor — remove world logic; affect + eye/audio hints only |
-| **R** | Expression polish — micro-saccades, async blinks, gaze easing, dwell, idle refinement |
-| **S** | Personality — tunable behavioural traits (see below) |
+| Phase | Milestone | Focus |
+|-------|-----------|--------|
+| **O** | V2 | Awareness — sensor fusion, unified snapshot, confidence, no decisions |
+| **P** | V2 | Behaviour intelligence — Idle, Curious, Follow, Greeting, Sleep (+ Conversation) |
+| **Q** | V2 | Emotion refactor — remove world logic; affect + eye/audio hints only |
+| **R** | V2 | Expression polish — micro-saccades, async blinks, gaze easing, dwell |
+| **S** | **V3** | **Character System** — personality (bias, not fork), mood, preferences |
 
 Display architecture is **frozen** after Phase N except for Phase R polish inside Eye Controller.
 
-### Phase S — Personality (after O–R)
+### Phase S — Character System (V3)
 
-Architecture stable; EVE gains **preferences**, not just reactions. Two identical robots with different personality parameters can feel like different companions.
+Not a new layer in the stack — a **modifier** consumed by Behaviour only.
 
-Examples (Behaviour + parameter layer, not hardware):
+| Component | Horizon | Role |
+|-----------|---------|------|
+| **Personality** | Long-term (SD profile) | Biases interest scores, delays, intervals — same behaviour classes |
+| **Mood** | Short-term (from Awareness) | Tired, alert, social — tempers how personality expresses |
+| **Preferences** | Future | Likes/dislikes; still feeds Behaviour biasing |
 
-- How long she maintains eye contact
-- Whether she investigates immediately or hesitates
-- How quickly she becomes sleepy after inactivity
-- Whether she greets immediately or waits a moment
-- How often she glances around while idle
+Example: high **curiosity** raises effective interest before Investigate threshold; high **shyness** multiplies greet delay. **Mood: tired** (low battery) slows investigation without erasing a curious personality.
 
-Personality adjusts Behaviour thresholds and timings; it does not bypass Awareness → Behaviour → Emotion → Outputs. See `PHASE_S_PERSONALITY.md`.
+See `PHASE_S_CHARACTER_SYSTEM.md`.
 
 ---
 
-## V1 completed (reference)
+## V1 — Body (complete)
 
 Platform (pioarduino 3.3.9, CI, artifacts, versioning), SD asset manager, native I2S audio (DFPlayer removed), emotion/gaze/idle engines (Phase L), dual Eye Controller (Phase N). See `PHASE_J` through `PHASE_N` docs.
 
@@ -279,8 +293,9 @@ New features should land in **exactly one** layer:
 - “She noticed me” → Behaviour
 - “She looks happy” → Emotion
 - “Eyelids move” / “Sound plays” → Outputs
-- “She’s shy vs bold” → Personality (Phase S, via Behaviour parameters)
+- “She’s shy vs bold” → Character / Personality (Phase S, biases Behaviour)
+- “She’s tired right now” → Character / Mood (Phase S, from Awareness)
 
 If a change touches two layers, split the PR or document the boundary explicitly.
 
-**From V2 onward:** enrich behaviour and personality; do not rework the layer stack.
+**Foundation is stable.** From here: behaviour, expression, character — not structural redesign.
