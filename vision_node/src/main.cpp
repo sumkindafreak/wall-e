@@ -5,6 +5,7 @@
  */
 
 #include <Arduino.h>
+#include "showduino_version.h"
 #include "esp_camera.h"
 #include "vision_protocol.h"
 #include "motion_detect.h"
@@ -114,6 +115,7 @@ static void wifiInit() {
 void setup() {
   Serial.begin(115200);
   delay(500);
+  SHOWDUINO_LOG_BOOT_VERSION("vision_node");
   Serial.println("\n[Vision] WALL-E Vision Node");
 
   if (!camInit()) {

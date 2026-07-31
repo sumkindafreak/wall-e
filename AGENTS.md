@@ -14,8 +14,17 @@ Multi-node **ESP32/ESP32-S3 PlatformIO** monorepo + static **`webui/` (LROS)**. 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
 ./scripts/build_all_firmware.sh
+./scripts/collect_firmware_artifacts.sh   # -> dist/firmware/*.bin
 ```
 Or per module: `cd <module> && pio run` (uses each folder's `default_envs`).
+
+### CI
+GitHub Actions workflow **`.github/workflows/firmware-build.yml`**: builds all seven targets, caches `~/.platformio`, uploads `dist/firmware/*.bin` artifacts (`wall_e_base.bin`, `eve.bin`, …).
+
+### Firmware version
+- Manual semver: `firmware_common/include/showduino_version.h` (`SHOWDUINO_VERSION_*`).
+- Generated per build: `showduino_version_build.h` via `scripts/gen_showduino_version.sh` (`SHOWDUINO_BUILD`, `SHOWDUINO_GIT_HASH`; CI sets build from `GITHUB_RUN_NUMBER`).
+- Boot log: `SHOWDUINO_LOG_BOOT_VERSION("module_tag")` in each PlatformIO sketch.
 
 Verified targets (Core 3.x): **main_wall_E_base**, **eve**, **audio_esp**, **dock_station**, **wall_e_master_controller**, **vision_node**, **ghostbusters_slime_blower**.
 

@@ -1,0 +1,4 @@
+#pragma once
+/* Copy to showduino_version_build.h or run scripts/gen_showduino_version.sh */
+#define SHOWDUINO_BUILD 0
+#define SHOWDUINO_GIT_HASH "dev"

@@ -2,6 +2,12 @@
 Import("env")
 import os
 
+_common_include = os.path.abspath(
+    os.path.join(env["PROJECT_DIR"], "..", "firmware_common", "include")
+)
+if os.path.isdir(_common_include):
+    env.Append(CPPPATH=[_common_include])
+
 framework_dir = env.PioPlatform().get_package_dir("framework-arduinoespressif32")
 if framework_dir:
     for lib in ("WiFi", "Network", "WebServer", "FS", "NetworkClientSecure"):

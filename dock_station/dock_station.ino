@@ -10,6 +10,7 @@
  ******************************************************************************/
 
 #include <Arduino.h>
+#include "showduino_version.h"
 #if ENABLE_WIFI
 #include <ArduinoOTA.h>
 #include <WiFi.h>
@@ -45,6 +46,7 @@ static bool g_espnow_ok = false;
 void setup() {
   Serial.begin(115200);
   delay(500);
+  SHOWDUINO_LOG_BOOT_VERSION("dock");
   Serial.println(F("\n[DOCK] Smart Charging Crate v1.1"));
   Serial.println(F("[DOCK] Booting..."));
 

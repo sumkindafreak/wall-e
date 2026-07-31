@@ -11,6 +11,7 @@
  * RULE: This board NEVER controls drive motors. It only senses, plays, and reports.
  */
 #include "config.h"
+#include "showduino_version.h"
 #include "pins.h"
 #include "debug_log.h"
 #include "system_state.h"
@@ -37,6 +38,7 @@ static uint16_t s_uiSeq = 0;
 void setup() {
   Serial.begin(115200);
   delay(500);
+  SHOWDUINO_LOG_BOOT_VERSION("audio_esp");
   Serial.println(F("\n[AUDIO_ESP] WALL-E Audio/Voice/Dock Brain starting..."));
 
   setSystemMode(MODE_BOOT);

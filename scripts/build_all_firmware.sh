@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 export PATH="${HOME}/.local/bin:${PATH}"
 "$ROOT/scripts/verify_protocol_headers.sh"
+"$ROOT/scripts/gen_showduino_version.sh"
 
 builds=(
   "main_wall_E_base:wall_e_brain_s3:Wall-E Base"

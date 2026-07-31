@@ -12,6 +12,7 @@
 
 #include <Arduino.h>
 #include <esp_system.h>
+#include "showduino_version.h"
 #include "motor_control.h"
 #include "ota_manager.h"
 #include "wifi_manager.h"
@@ -73,6 +74,7 @@ unsigned long lastCommandMillis = 0;
 void setup() {
   Serial.begin(115200);
   delay(200);
+  SHOWDUINO_LOG_BOOT_VERSION("wall_e_base");
   Serial.println("\n[WALL-E] Starting...");
   Serial.printf("[Boot] esp_reset_reason=%d\n", (int)esp_reset_reason());
 

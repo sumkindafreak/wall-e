@@ -12,6 +12,7 @@
  */
 
 #include <Arduino.h>
+#include "showduino_version.h"
 #include <FastLED.h>
 #include <DFRobotDFPlayerMini.h>
 
@@ -158,6 +159,7 @@ static void updateLights(int tankPct, bool blowing, bool criticalLow) {
 void setup() {
   Serial.begin(115200);
   delay(80);
+  SHOWDUINO_LOG_BOOT_VERSION("ghostbusters");
   Serial.println(F("\nSlime Blower v2.0"));
 
   pinMode(PIN_TRIGGER, INPUT_PULLUP);
