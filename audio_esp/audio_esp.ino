@@ -2,7 +2,7 @@
  * audio_esp.ino — WALL-E Audio / Voice / Dock Sensor Brain
  *
  * This ESP32-S3 module handles:
- * - DFPlayer audio playback
+ * - SD-card WAV playback over I2S
  * - Left/right mic direction (LEFT, RIGHT, CENTER, UNKNOWN)
  * - Voice commands (from dedicated voice module if present)
  * - IR dock receivers (NONE, LEFT, RIGHT, BOTH, UNSTABLE)
@@ -159,7 +159,7 @@ void loop() {
         s_lastAlive = now;
         Serial.print(F("[AUDIO_ESP] "));
         Serial.print(modeToString(getSystemMode()));
-        Serial.print(F(" | DFPlayer:"));
+        Serial.print(F(" | Audio:"));
         Serial.print(hasAudio ? F("OK") : F("--"));
         Serial.print(F(" Base:"));
         Serial.print(hasBase ? F("OK") : F("--"));

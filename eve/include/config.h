@@ -19,12 +19,21 @@ static const unsigned long EVE_UART_BAUD = 115200;
 #define EVE_PRESENT_PIN (-1)
 
 // -----------------------------------------------------------------------------
-// DFPlayer Mini (second UART — MUST NOT share pins with hand UART)
-// Set pins when wired; leave RX/TX at -1 until then.
+// SD card (SPI) — primary asset storage for audio, config, graphics
 // -----------------------------------------------------------------------------
-#define EVE_DFPLAYER_UART_RX (-1)
-#define EVE_DFPLAYER_UART_TX (-1)
-#define EVE_DFPLAYER_BAUD 9600
+#define EVE_SD_SPI_CS (-1)
+#define EVE_SD_SPI_MOSI (-1)
+#define EVE_SD_SPI_MISO (-1)
+#define EVE_SD_SPI_SCK (-1)
+
+// -----------------------------------------------------------------------------
+// I2S audio output (speaker amplifier). Use port 1 if I2S mic uses port 0.
+// Signal path: SD → WAV decoder → I2S → amplifier → speaker
+// -----------------------------------------------------------------------------
+#define EVE_I2S_BCLK_PIN (-1)
+#define EVE_I2S_LRCK_PIN (-1)
+#define EVE_I2S_DOUT_PIN (-1)
+#define EVE_I2S_PORT_INDEX 1
 
 // -----------------------------------------------------------------------------
 // Shared SPI for dual eye TFTs (set when displays are chosen)

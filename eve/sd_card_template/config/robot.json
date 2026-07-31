@@ -1,0 +1,8 @@
+{
+  "name": "EVE",
+  "personality": {
+    "curiosity": 0.7,
+    "playfulness": 0.6,
+    "gentleness": 0.8
+  }
+}

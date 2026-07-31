@@ -77,7 +77,7 @@ static IdleAction pickAction(void) {
 
 static void scheduleNext(uint32_t nowMs) {
   uint32_t gap = randSpan(2800, 9200);
-  if (s_emotion == EVE_EMOTION_ENGAGED || s_emotion == EVE_EMOTION_HAPPY) {
+  if (s_emotion == EVE_EMOTION_FOLLOW || s_emotion == EVE_EMOTION_HAPPY || s_emotion == EVE_EMOTION_INTERACT) {
     gap = randSpan(4200, 11000);
   }
   s_nextActionMs = nowMs + gap;

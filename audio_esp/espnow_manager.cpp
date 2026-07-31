@@ -88,7 +88,7 @@ static void onRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len
       break;
     }
     case WALLE_AU_CMD_VOLUME:
-      audioSetVolume(p->param > 30 ? 30 : p->param);
+      audioSetVolume(p->param <= 30 ? (uint8_t)(p->param * 100 / 30) : p->param);
       break;
     case WALLE_AU_CMD_STOP:
       audioStop();
@@ -183,7 +183,7 @@ void espnowManagerSendNodeHealth(void) {
   h.free_heap = ESP.getFreeHeap();
   h.loop_p95_ms = 0;
   h.wifi_rssi = (int8_t)WiFi.RSSI();
-  h.sd_ok = 1; /* DFPlayer SD */
+  h.sd_ok = audioIsReady() ? 1 : 0;
   h.last_peer_rx_age_ms = 0xFFFFFFFFu;
   esp_now_send(s_bcast, (uint8_t*)&h, sizeof(h));
 }

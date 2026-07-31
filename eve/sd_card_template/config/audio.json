@@ -1,0 +1,11 @@
+{
+  "volume": 80,
+  "tracks": {
+    "1": "hello.wav",
+    "2": "curious.wav",
+    "3": "ack.wav",
+    "4": "soft.wav",
+    "5": "alert.wav",
+    "6": "error.wav"
+  }
+}

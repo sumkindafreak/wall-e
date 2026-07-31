@@ -1,69 +1,52 @@
 /**
- * Ghostbusters Slime Blower — firmware v2.0
+ * Ghostbusters Slime Blower — firmware v2.1
  *
- * ESP32-S3 DevKitC-1 + FastLED + DFPlayer Mini.
- * Drive hardware: 4× N-channel MOSFETs (low-side or per your board) — no L298,
- * no relay modules. Blower motor = PWM on one gate; three digital outputs for
- * former relay loads (fans, valves, etc. — wire as needed).
+ * ESP32-S3 DevKitC-1 + FastLED + SD-card WAV over I2S.
+ * Drive hardware: 4× N-channel MOSFETs (low-side or per your board).
  *
- * DFPlayer: UART (RX/TX) + power only — BUSY pin not used.
- *
- * SD: 001.mp3 startup, 002.mp3 slime blow (loop while trigger held).
+ * SD: /audio/001.wav startup, /audio/002.wav slime blow (loop while trigger held).
  */
 
 #include <Arduino.h>
 #include <FastLED.h>
-#include <DFRobotDFPlayerMini.h>
+#include <SD.h>
+#include <SPI.h>
+#include "walle_i2s_wav_player.h"
 
-// ---------------------------------------------------------------------------
-// MOSFET outputs (replaces L298 motor speed + relay coils)
-// ---------------------------------------------------------------------------
-static const int PIN_MOSFET_BLOWER = 11;  // PWM — blower motor (was L298 / enable)
-static const int PIN_MOSFET_1      = 12;  // digital — ex relay channel 1
-static const int PIN_MOSFET_2      = 13;  // digital — ex relay channel 2
-static const int PIN_MOSFET_3      = 14;  // digital — ex relay channel 3
+static const int PIN_MOSFET_BLOWER = 11;
+static const int PIN_MOSFET_1 = 12;
+static const int PIN_MOSFET_2 = 13;
+static const int PIN_MOSFET_3 = 14;
 
-#define BLOWER_PWM_FREQ   20000
-#define BLOWER_PWM_BITS   8
-/** PWM duty 0–255 when blowing (full speed). Lower for a weaker blow if desired. */
+#define BLOWER_PWM_FREQ 20000
+#define BLOWER_PWM_BITS 8
 static const uint8_t BLOWER_SPEED_ON = 255;
 
-// ---------------------------------------------------------------------------
-// Pins — LEDs, trigger, DFPlayer, analog
-// ---------------------------------------------------------------------------
-static const int PIN_LED_DATA = 8;   // WS2812 data
-static const int PIN_TRIGGER  = 9;   // active LOW, blower trigger
-static const int PIN_DF_TX    = 17;  // ESP TX -> DFPlayer RX
-static const int PIN_DF_RX    = 18;  // ESP RX <- DFPlayer TX
-static const int PIN_VOL_ADC  = 7;   // analog master volume (ADC1)
-static const int PIN_TANK_ADC = 6;   // analog tank / charge level
+static const int PIN_LED_DATA = 8;
+static const int PIN_TRIGGER = 9;
+static const int PIN_SD_CS = 1;
+static const int PIN_SD_MOSI = 2;
+static const int PIN_SD_MISO = 3;
+static const int PIN_SD_SCK = 4;
+static const int PIN_I2S_BCLK = 15;
+static const int PIN_I2S_LRCK = 16;
+static const int PIN_I2S_DOUT = 21;
+static const int PIN_VOL_ADC = 7;
+static const int PIN_TANK_ADC = 6;
 
-// ---------------------------------------------------------------------------
-// LEDs
-// ---------------------------------------------------------------------------
 static const int NUM_LEDS = 24;
 static const uint8_t LED_BRIGHTNESS = 200;
 
 CRGB leds[NUM_LEDS];
 
-// ---------------------------------------------------------------------------
-// DFPlayer
-// ---------------------------------------------------------------------------
-#define DFPLAYER_BAUD 9600
+static bool g_audioOk = false;
+static bool g_sdOk = false;
 
-HardwareSerial DFSerial(1);
-DFRobotDFPlayerMini df;
-
-static const uint8_t TRACK_STARTUP = 1;
-static const uint8_t TRACK_BLOW   = 2;
-
-bool g_dfOk = false;
-
-void stopTrack() {
-  /* no-op: df.stop() caused lockups on some modules */
+static void stopTrack(void) {
+  walleI2sAudioStop();
 }
 
-static void mosfetsInit() {
+static void mosfetsInit(void) {
   ledcAttach(PIN_MOSFET_BLOWER, BLOWER_PWM_FREQ, BLOWER_PWM_BITS);
   pinMode(PIN_MOSFET_1, OUTPUT);
   pinMode(PIN_MOSFET_2, OUTPUT);
@@ -74,7 +57,6 @@ static void mosfetsInit() {
   digitalWrite(PIN_MOSFET_3, LOW);
 }
 
-/** BLOWER = PWM; three aux MOSFETs = on/off with blow (ex-relay timing). */
 static void setMosfetOutputs(bool blowing) {
   if (blowing) {
     ledcWrite(PIN_MOSFET_BLOWER, BLOWER_SPEED_ON);
@@ -89,32 +71,33 @@ static void setMosfetOutputs(bool blowing) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// State
-// ---------------------------------------------------------------------------
 static unsigned long s_lastVolMs = 0;
 static uint8_t s_lastVolCmd = 255;
 static bool s_wasBlowing = false;
 
-static int readTankPercent() {
+static int readTankPercent(void) {
   int raw = analogRead(PIN_TANK_ADC);
   return constrain(map(raw, 0, 4095, 0, 100), 0, 100);
 }
 
-static void applyVolumeFromKnob() {
-  if (!g_dfOk) return;
-  if (millis() - s_lastVolMs < 40) return;
+static void applyVolumeFromKnob(void) {
+  if (!g_audioOk) {
+    return;
+  }
+  if (millis() - s_lastVolMs < 40) {
+    return;
+  }
   s_lastVolMs = millis();
 
   int raw = analogRead(PIN_VOL_ADC);
-  uint8_t v = (uint8_t)map(raw, 0, 4095, 0, 30);
+  uint8_t v = (uint8_t)map(raw, 0, 4095, 0, 100);
   if (v != s_lastVolCmd) {
     s_lastVolCmd = v;
-    df.volume(v);
+    walleI2sAudioSetVolume(v);
   }
 }
 
-static bool triggerDown() {
+static bool triggerDown(void) {
   return digitalRead(PIN_TRIGGER) == LOW;
 }
 
@@ -158,7 +141,7 @@ static void updateLights(int tankPct, bool blowing, bool criticalLow) {
 void setup() {
   Serial.begin(115200);
   delay(80);
-  Serial.println(F("\nSlime Blower v2.0"));
+  Serial.println(F("\nSlime Blower v2.1 (SD + I2S)"));
 
   pinMode(PIN_TRIGGER, INPUT_PULLUP);
   mosfetsInit();
@@ -171,23 +154,24 @@ void setup() {
   fill_solid(leds, NUM_LEDS, CRGB::Black);
   FastLED.show();
 
-  DFSerial.begin(DFPLAYER_BAUD, SERIAL_8N1, PIN_DF_RX, PIN_DF_TX);
-  delay(500);
+  SPI.begin(PIN_SD_SCK, PIN_SD_MISO, PIN_SD_MOSI, PIN_SD_CS);
+  g_sdOk = SD.begin(PIN_SD_CS, SPI, 20000000);
 
-  if (df.begin(DFSerial, true, true)) {
-    g_dfOk = true;
-    df.EQ(DFPLAYER_EQ_NORMAL);
-    df.volume(20);
-    s_lastVolCmd = 20;
-    df.play(TRACK_STARTUP);
-    Serial.println(F("DFPlayer OK"));
+  WalleI2sPinConfig pins = {PIN_I2S_BCLK, PIN_I2S_LRCK, PIN_I2S_DOUT, 1};
+  g_audioOk = walleI2sAudioInit(&pins) && g_sdOk;
+  if (g_audioOk) {
+    walleI2sAudioSetVolume(80);
+    s_lastVolCmd = 80;
+    walleI2sAudioPlayFile("/audio/001.wav");
+    Serial.println(F("SD + I2S audio OK"));
   } else {
-    Serial.println(F("DFPlayer init failed — LEDs + MOSFETs only"));
+    Serial.println(F("Audio init failed — LEDs + MOSFETs only"));
   }
 }
 
 void loop() {
   applyVolumeFromKnob();
+  walleI2sAudioTick();
 
   int tank = readTankPercent();
   const bool critical = (tank < 10);
@@ -197,9 +181,9 @@ void loop() {
   setMosfetOutputs(blowing);
   updateLights(tank, blowing, critical);
 
-  if (g_dfOk) {
+  if (g_audioOk) {
     if (blowing && !s_wasBlowing) {
-      df.loop(TRACK_BLOW);
+      walleI2sAudioPlayFile("/audio/002.wav");
     }
     if (!blowing && s_wasBlowing) {
       stopTrack();

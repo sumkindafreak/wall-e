@@ -6,11 +6,15 @@
 #define AUDIO_ESP_PINS_H
 
 /*=============================================================================
- * DFPlayer Mini (UART1)
- * DFPlayer RX <- ESP TX,  DFPlayer TX -> ESP RX
+ * SD card (SPI) + I2S speaker amplifier
  *===========================================================================*/
-#define PIN_DFPLAYER_TX   17   /* ESP TX -> DFPlayer RX */
-#define PIN_DFPLAYER_RX   18   /* ESP RX <- DFPlayer TX */
+#define PIN_SD_CS     13
+#define PIN_SD_MOSI   11
+#define PIN_SD_MISO   12
+#define PIN_SD_SCK    10
+#define PIN_I2S_BCLK  17
+#define PIN_I2S_LRCK  18
+#define PIN_I2S_DOUT  16
 
 /* Base link: ESP-NOW (no UART pins) */
 
@@ -42,7 +46,7 @@
 
 /*=============================================================================
  * Character control buttons (INPUT_PULLUP, contact to GND when pressed)
- * ESP32-S3: chosen to avoid DFPlayer UART (17/18), mics (4/5), IR (6/7), LED (8).
+ * ESP32-S3: chosen to avoid I2S audio (16–18), mics (4/5), IR (6/7), LED (8), SD (10–13).
  *===========================================================================*/
 #define PIN_BTN_1         9
 #define PIN_BTN_2         10

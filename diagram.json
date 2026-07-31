@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "author": "Showduino Studio",
+  "author": "WALL-E / EVE",
   "editor": "wokwi",
   "parts": [
     { "type": "wokwi-esp32-devkit-v1", "id": "esp", "top": -2, "left": -4, "attrs": {} },

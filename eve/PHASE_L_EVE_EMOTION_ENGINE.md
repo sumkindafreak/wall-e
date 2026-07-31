@@ -6,7 +6,7 @@ Eyes-only behaviour: **no mouth, lip sync, or jaw animation**. Voice and social 
 
 | File | Role |
 |------|------|
-| `eve_emotion_engine` | State machine: BOOT → IDLE → CURIOUS → ENGAGED → HAPPY → THINKING → SLEEP |
+| `eve_emotion_engine` | State machine: BOOT → IDLE → CURIOUS → FOLLOW → INTERACT → HAPPY → THINKING → SLEEP |
 | `eve_gaze_engine` | Eased gaze (left/right/up/down, track, return centre); yields to head pan tracking |
 | `eve_idle_engine` | Non-repetitive idle: blinks, double/slow blink, wink, glances, look-around, thinking/sleepy beats |
 | `eve_expression_state` | Extended expressions + orchestrator + voice overlay |

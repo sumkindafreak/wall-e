@@ -16,6 +16,8 @@ void eveEyeAnimationsTick(uint32_t nowMs, float dtSec);
 void eveEyeAnimationsTriggerBlink(void);
 void eveEyeAnimationsTriggerDoubleBlink(void);
 void eveEyeAnimationsTriggerSlowBlink(void);
+/** Alias for slow blink (long lid hold). */
+#define eveEyeAnimationsTriggerLongBlink eveEyeAnimationsTriggerSlowBlink
 /** Optional playful wink; leftEye=true closes left lid only. */
 void eveEyeAnimationsTriggerWink(bool leftEye);
 void eveEyeAnimationsTriggerSquint(float amount);

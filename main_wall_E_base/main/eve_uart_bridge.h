@@ -24,7 +24,7 @@ String eveUartBridgeGetJSON(void);
 /** True if a valid frame was received within timeout (same window as JSON link_ok). */
 bool eveUartBridgeIsLinkUp(void);
 
-/** Send MSG_PLAY_SOUND with DFPlayer track index on EVE (non-blocking UART write). */
+/** Send MSG_PLAY_SOUND with legacy track index on EVE (resolved to SD WAV path). */
 bool eveUartBridgeSendPlaySound(uint8_t track);
 
 /** CYD UI: head pan + right arm targets (JSON), when EVE firmware supports it. */

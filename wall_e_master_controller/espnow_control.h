@@ -16,7 +16,7 @@
 void espnowInit(void);
 /** Broadcast E-stop sound to audio ESP (edge-triggered). */
 void espnowBroadcastAudioEstopEdge(bool estop_pressed);
-/** Broadcast play-track to audio ESP (DFPlayer index 1–255). */
+/** Broadcast play-track to audio ESP (WAV track index 1–255 on SD). */
 void espnowBroadcastAudioPlayTrack(uint8_t track);
 void espnowSend(const ControlPacket* pkt);
 void espnowUpdate(void);

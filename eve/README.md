@@ -1,6 +1,6 @@
 # EVE companion firmware (ESP32-S3)
 
-UART-framed link to WALL-E (hand pogo), state machine, and hooks for eyes / ToF / servos / NeoPixel / DFPlayer.
+UART-framed link to WALL-E (hand pogo), state machine, and hooks for eyes / ToF / servos / NeoPixel / **SD-card WAV audio over I2S**.
 
 ## Requirements
 
@@ -30,8 +30,9 @@ pio device monitor
 Edit `include/config.h`:
 
 - `EVE_UART_TX_PIN` / `EVE_UART_RX_PIN` — hand link (default 17/18; **must match your PCB**).
-- Feature flags: `EVE_ENABLE_NEOPIXEL`, `EVE_ENABLE_SERVOS`, etc. (keep off until wired).
-- DFPlayer UART pins must **not** overlap the hand UART.
+- Feature flags: `EVE_ENABLE_NEOPIXEL`, `EVE_ENABLE_SERVOS`, `EVE_ENABLE_AUDIO`, etc. (keep off until wired).
+- SD card SPI pins (`EVE_SD_SPI_*`) and I2S speaker pins (`EVE_I2S_*`) — see `PHASE_M_EVE_SD_I2S_AUDIO.md`.
+- Copy `sd_card_template/` to the microSD root for `/config` and `/audio` layout.
 
 ## WALL-E side
 

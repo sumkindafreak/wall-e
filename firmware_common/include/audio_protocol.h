@@ -25,8 +25,8 @@ typedef enum {
 typedef enum {
   WALLE_AU_CMD_PLAY_EVENT = 0, /**< param = walle_audio_event_t (2–4) */
   WALLE_AU_CMD_PLAY_TRACK = 1, /**< param = track 1–255 */
-  WALLE_AU_CMD_VOLUME = 2,     /**< param = DFPlayer volume 0–30 */
-  WALLE_AU_CMD_STOP = 3,       /**< pause DFPlayer */
+  WALLE_AU_CMD_VOLUME = 2,     /**< param = volume 0–100 (legacy senders may use 0–30) */
+  WALLE_AU_CMD_STOP = 3,       /**< stop I2S playback */
 } walle_au_cmd_t;
 
 #define WALLE_AUDIO_PRIORITY_NORMAL 0u
@@ -94,8 +94,9 @@ typedef enum {
 } walle_au_mode_t;
 
 typedef enum {
-  WALLE_AU_FAULT_NONE    = 0,
-  WALLE_AU_FAULT_DFPLAYER= 1,
+  WALLE_AU_FAULT_NONE = 0,
+  WALLE_AU_FAULT_AUDIO = 1,
+  WALLE_AU_FAULT_DFPLAYER = WALLE_AU_FAULT_AUDIO, /* legacy identifier */
 } walle_au_fault_t;
 
 typedef struct __attribute__((packed)) {

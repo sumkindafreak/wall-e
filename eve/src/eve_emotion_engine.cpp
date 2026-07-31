@@ -30,8 +30,10 @@ static EveExpressionId exprForState(EveEmotionState st) {
       return EVE_EXPR_NEUTRAL_IDLE;
     case EVE_EMOTION_CURIOUS:
       return EVE_EXPR_CURIOUS;
-    case EVE_EMOTION_ENGAGED:
+    case EVE_EMOTION_FOLLOW:
       return EVE_EXPR_TRACK_TARGET;
+    case EVE_EMOTION_INTERACT:
+      return EVE_EXPR_SOFT_IDLE;
     case EVE_EMOTION_HAPPY:
       return EVE_EXPR_HAPPY;
     case EVE_EMOTION_THINKING:
@@ -74,8 +76,10 @@ const char* eveEmotionStateName(EveEmotionState st) {
       return "IDLE";
     case EVE_EMOTION_CURIOUS:
       return "CURIOUS";
-    case EVE_EMOTION_ENGAGED:
-      return "ENGAGED";
+    case EVE_EMOTION_FOLLOW:
+      return "FOLLOW";
+    case EVE_EMOTION_INTERACT:
+      return "INTERACT";
     case EVE_EMOTION_HAPPY:
       return "HAPPY";
     case EVE_EMOTION_THINKING:
@@ -127,9 +131,10 @@ void eveEmotionNotifyVoice(bool playing, uint8_t track) {
   if (playing) {
     s_voiceUntil = millis() + 8000u;
     eveEyeAnimationsTriggerWiden(0.22f);
-    if (s_state == EVE_EMOTION_IDLE || s_state == EVE_EMOTION_ENGAGED) {
-      eveExpressionRequest(EVE_EXPR_SOFT_IDLE, 1800);
+    if (s_state == EVE_EMOTION_IDLE || s_state == EVE_EMOTION_FOLLOW || s_state == EVE_EMOTION_CURIOUS) {
+      setState(EVE_EMOTION_INTERACT, millis());
     }
+    eveExpressionRequest(EVE_EXPR_SOFT_IDLE, 1800);
     if ((rand() % 4) == 0) {
       eveEyeAnimationsTriggerBlink();
     }
@@ -187,12 +192,15 @@ void eveEmotionOnTofSnapshot(const EveTargetSnapshot* snap, uint32_t nowMs) {
     } else {
       uint32_t dwell = nowMs - s_personSince;
       eveGazeTrackZone(snap->zone);
-      if (personClose(snap) && s_state != EVE_EMOTION_CURIOUS) {
+      if (personClose(snap) && (s_state == EVE_EMOTION_FOLLOW || s_state == EVE_EMOTION_IDLE)) {
         setState(EVE_EMOTION_CURIOUS, nowMs);
-      } else if (dwell > 3200u && s_state != EVE_EMOTION_HAPPY && s_state != EVE_EMOTION_THINKING) {
+      } else if (s_voice && s_personActive) {
+        setState(EVE_EMOTION_INTERACT, nowMs);
+      } else if (dwell > 3200u && s_state != EVE_EMOTION_HAPPY && s_state != EVE_EMOTION_THINKING &&
+                 s_state != EVE_EMOTION_INTERACT) {
         setState(EVE_EMOTION_HAPPY, nowMs);
       } else if (dwell > 900u && s_state == EVE_EMOTION_CURIOUS) {
-        setState(EVE_EMOTION_ENGAGED, nowMs);
+        setState(EVE_EMOTION_FOLLOW, nowMs);
       }
     }
   } else {
@@ -224,7 +232,7 @@ void eveEmotionTick(uint32_t nowMs) {
   if (s_thinkingUntil != 0 && nowMs >= s_thinkingUntil) {
     s_thinkingUntil = 0;
     if (s_state == EVE_EMOTION_THINKING) {
-      setState(s_personActive ? EVE_EMOTION_ENGAGED : EVE_EMOTION_IDLE, nowMs);
+      setState(s_personActive ? (s_voice ? EVE_EMOTION_INTERACT : EVE_EMOTION_FOLLOW) : EVE_EMOTION_IDLE, nowMs);
     }
   }
 
