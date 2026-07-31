@@ -235,12 +235,16 @@ Character and Memory are **read-only modifiers** on the path to Behaviour. They 
 
 Publishes one **immutable snapshot** per update (see Phase O). Example fields:
 
-- `personPresent`, `personDistance`, `personZone`, `motionDetected`
-- `batteryLevel`, `batteryLow`, `charging`, `docked`
-- `wallELinked`, `voiceDetected`, `ambientNoise`
+- **Person (O-2):** `personPresent` (derived), `personDistanceMm`, `personZone`, `personConfidence`
+- **Power (O-3):** `batteryVoltage`, `batteryPercent`, `batteryLow`, `charging`, `batteryHealth`
+- **Link / dock / audio / health:** `docked`, `wallELinked`, `voiceDetected`, subsystem ready flags
 - Timestamps and confidence where applicable
 
-No emotion. No behaviour selection. No drawing.
+**Append-only rule:** once a snapshot field exists, do not rename, move, or overload it — add new fields instead. See `PHASE_O_AWARENESS_LAYER.md`.
+
+**Sub-milestones:** O-1 (self), O-2 (someone there), O-3 (power) — one subsystem publisher per step; nothing above Awareness changes when a publisher lands.
+
+No emotion. No behaviour selection. No drawing. No `goSleep()`, `playWarning()`, or `showBatteryFace()` — those live in Behaviour / Emotion / outputs.
 
 **Current code (migration):** `eve_target_tracker`, `eve_spatial_awareness`, battery/dock flags, UART link state — these feed Awareness; they must not drive expression directly in V2.
 
@@ -345,7 +349,7 @@ Steps 3–4: Character **biases** Behaviour; it does not choose expressions or p
 
 | Phase | Milestone | Focus |
 |-------|-----------|--------|
-| **O** | V2 | Awareness — sensor fusion, unified snapshot, confidence, no decisions |
+| **O** | V2 | Awareness — incremental publishers (O-1 self, O-2 person/ToF, O-3 battery, …); append-only snapshot |
 | **P** | V2 | Behaviour intelligence — Idle, Curious, Follow, Greeting, Sleep (+ Conversation) |
 | **Q** | V2 | Emotion refactor — remove world logic; affect + eye/audio hints only |
 | **R** | V2 | Expression polish — micro-saccades, async blinks, gaze easing, dwell |
