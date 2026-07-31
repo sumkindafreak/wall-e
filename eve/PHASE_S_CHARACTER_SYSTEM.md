@@ -2,21 +2,22 @@
 
 **Goal:** After Phases O–R, EVE gains **character** — who she is, not just what she does. Two identical robots on the same firmware can feel like completely different companions because of SD-loaded character profiles.
 
-This is **V3 — Character**: *"Who is EVE?"*
+This is **V3 — Character**: *"Who is EVE?"* (Memory, V4, feeds context **into** Character — see `PHASE_T_MEMORY.md`.)
 
 Depends on **Phase P** (behaviours) and **Phase Q** (emotion as affect only). Does not change layer boundaries or Eye Controller ownership.
 
 ---
 
-## Three project milestones
+## Four milestones
 
-| Milestone | Question | Delivers |
-|-----------|----------|----------|
-| **V1 — Body** | *How is EVE constructed?* | ESP32-S3, dual eyes, SD assets, I2S audio, emotion engine, Eye Controller, CI, build matrix — the robot **functions** |
-| **V2 — Brain** | *How does EVE think?* | Awareness → Behaviour → Emotion → Outputs — every piece of logic has a **home** |
-| **V3 — Character** | *Who is EVE?* | Character System — personality, mood, preferences — the robot has **presence** |
+| Milestone | Tagline | Question |
+|-----------|---------|----------|
+| **V1 — Body** | Can move and express | *How is EVE constructed?* |
+| **V2 — Mind** | Can understand and decide | *How does EVE think?* |
+| **V3 — Character** | Can feel unique | *Who is EVE?* |
+| **V4 — Memory** | Can remember | *What do I remember?* |
 
-Up to V1: building a **robot**. After Phase O: building **behaviour**. After Phase S: building **presence**.
+Through V1: **robot**. Phases O–P: **behaviour**. Phase S: **presence**. Phase T: **continuity**.
 
 ---
 
@@ -25,7 +26,10 @@ Up to V1: building a **robot**. After Phase O: building **behaviour**. After Pha
 Phase S is the umbrella **Character System**. It does not replace Emotion; it **feeds Behaviour** before Emotion maps intent to affect.
 
 ```text
-Awareness (facts)
+Awareness (facts now)
+        │
+        ▼
+   Memory (Phase T)     ← context: last greet, recency, session stats
         │
         ▼
 ┌───────────────────┐
@@ -34,7 +38,7 @@ Awareness (facts)
 │  · Mood           │  short-term state (battery, activity, …)
 │  · Preferences    │  optional: likes/dislikes (future)
 └───────────────────┘
-        │  biases thresholds & timings
+        │  biases thresholds & timings (informed by memory)
         ▼
    Behaviour
         ▼
