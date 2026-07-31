@@ -2,11 +2,37 @@
 
 **Goal:** One place for **facts** about the world and EVE’s own state. No intent, no emotion, no rendering, no audio policy.
 
+Awareness publishes **representations of facts**, not devices. Behaviour thinks in Person, Energy, Connection — not ToF, INA219, or UART.
+
 ---
 
-## Why “Awareness”
+## Three truths (sub-milestones)
 
-“Perception” often implies SLAM, vision pipelines, or mapping. EVE’s near-term inputs are ToF, battery, dock/link UART, and (future) microphone level. **Awareness** describes sensor fusion into a snapshot without overstating capability.
+| Step | Question | Domain | Status |
+|------|----------|--------|--------|
+| **O-1** | Who am I? | Internal state (health, uptime stubs) | **Frozen** |
+| **O-2** | Who is near me? | External awareness (person / ToF) | **Frozen** |
+| **O-3** | How am I feeling **physically**? | Physiology (battery — not emotion) | **Frozen** |
+| **O-4** | Am I connected? | Dock + link facts | Planned |
+| **O-5** | What else is true? | Voice, audio, subsystem health — **completes Awareness** | Planned |
+
+After O-5, Awareness is **complete** for V2 Mind. Phase **P-1** (Observe) may begin.
+
+See `PHASE_O2_AWARENESS_TOF.md`, `PHASE_O3_AWARENESS_BATTERY.md`, `PHASE_O4_AWARENESS_LINK.md`, `PHASE_O5_AWARENESS_COMPLETE.md`.
+
+---
+
+## Engineering rule: Awareness is append-only
+
+Once a fact exists in `EveAwarenessSnapshot`:
+
+- **Do not rename it**
+- **Do not move it**
+- **Do not overload it**
+
+Need a new concept? **Add a new field** (and a dedicated publisher step if needed).
+
+Old Behaviour code must still compile unchanged when Awareness grows.
 
 ---
 
@@ -16,112 +42,65 @@
 Hardware (ToF, INA219, UART, mic*, GPIO)
         │
         ▼
-   Awareness tick
+   Awareness tick  (one publisher per subsystem step)
         │
         ▼
 EveAwarenessSnapshot  (immutable per frame)
         │
         ▼
-   Behaviour Manager only (primary consumer)
+   Behaviour Manager only (primary consumer — Phase P)
 ```
 
-\* Microphone / ambient noise when hardware exists.
+\* Microphone when hardware exists (O-5).
 
 ---
 
-## Snapshot (target API)
+## Contract testing
 
-Single struct published each update. Behaviour always reads a **complete** snapshot — easier to test, log, and replay.
+Each O-step ships an **acceptance script** on the issue — watch serial, verify facts, robot does nothing. The script **is** the spec.
 
-```cpp
-typedef struct {
-  uint32_t timestampMs;
+---
 
-  /* Person / motion (from ToF + tracker) */
-  bool personPresent;
-  float personDistanceMm;      /* or -1 if unknown */
-  uint8_t personZone;          /* maps from EveTargetModel */
-  uint8_t personConfidencePct;
-  bool motionDetected;
+## Rules
 
-  /* Power / dock */
-  float batteryPercent;
-  bool batteryLow;
-  bool charging;
-  bool docked;
-
-  /* Link / social */
-  bool wallELinked;
-  bool voiceDetected;          /* local or remote cue */
-  float ambientNoiseDb;        /* optional, 0 if unavailable */
-
-  /* System (optional flags) */
-  bool alertRequested;         /* e.g. low battery latch from hardware */
-} EveAwarenessSnapshot;
-```
-
-Rules:
-
-- **No opinions** — do not set “curious” or “should greet” here.
-- **Confidence** on derived fields where fusion is noisy (ToF zones, person presence).
-- **Copy-out** — consumers get a const snapshot; Awareness does not expose mutable globals.
-
-Suggested accessors:
+- **No opinions** — no “curious”, “should greet”, or “go sleep” in Awareness.
+- **Derived booleans** where fusion may grow (`personPresent`, `batteryLow`, …).
+- **Copy-out** — `eveAwarenessGetSnapshot()` returns const; no mutable globals.
 
 ```cpp
 void eveAwarenessInit(void);
-void eveAwarenessTick(uint32_t nowMs);
-void eveAwarenessGetSnapshot(EveAwarenessSnapshot* out);
+void eveAwarenessTick(void);
+const EveAwarenessSnapshot& eveAwarenessGetSnapshot(void);
 ```
 
 ---
 
-## Sensor fusion (incremental)
+## Tick order (target)
 
-| Source | Feeds |
-|--------|--------|
-| `eve_tof_manager` / raw frames | distance, motion |
-| `eve_target_tracker` | zone, confidence, stableStrong |
-| Battery / INA219 | percent, low, charging |
-| Dock / UART / shared behaviour | docked, wallELinked |
-| Future mic | voiceDetected, ambientNoise |
-
-Phase O **wraps** existing modules; it does not replace ToF drivers. It replaces ad-hoc reads and emotion-side ToF rules with one publish point.
-
----
-
-## Migration from V1
-
-| Today | Phase O |
-|-------|---------|
-| `eveTargetTrackerGetSnapshot()` | Input to Awareness fusion |
-| `eve_spatial_awareness` flags | Fold into snapshot or Awareness internals |
-| `eveEmotionOnTofSnapshot()` | **Remove** from Emotion; Behaviour reads snapshot |
-| Scattered `config` / dock flags | Normalized in snapshot |
-
----
-
-## Testing
-
-- **Replay:** Feed recorded snapshots into Behaviour unit tests (Phase P) without hardware.
-- **Bench:** Serial command to dump snapshot JSON (optional, behind `EVE_ENABLE_SERIAL_CONSOLE`).
-- **CI:** Build-only with `EVE_ENABLE_TOF=0`; stub snapshot with safe defaults.
-
----
-
-## Success criteria
-
-- [ ] `EveAwarenessSnapshot` defined in `eve/include/`
-- [ ] `eveAwarenessTick()` fuses ToF + battery + link when enabled
-- [ ] No new decision logic in Awareness
-- [ ] Emotion engine **unchanged** in Phase O (Behaviour migration is Phase P)
-- [ ] All firmware targets still compile
+```text
+eveBatteryTick()
+… state / drivers …
+tofTick()
+eveAwarenessTick()   ← reads fresh battery + ToF frames
+```
 
 ---
 
 ## Out of scope (Phase O)
 
-- Behaviour FSM (Phase P)
+- Behaviour FSM (Phase P — starts with **P-1 Observe**)
 - Emotion refactor (Phase Q)
-- Eye/audio changes (Phase R)
+- Eye/audio policy (Phase R)
 - SLAM, camera, ML
+
+---
+
+## Success criteria (Phase O complete = O-5 merged)
+
+- [x] O-1 snapshot + serial bench
+- [x] O-2 person facts (ToF only)
+- [x] O-3 battery facts (five fields, derived low/charging)
+- [ ] O-4 link/dock facts (connection, not hardware names)
+- [ ] O-5 voice + subsystem health — Awareness layer **closed**
+- [ ] No decision logic in Awareness at any step
+- [ ] All firmware targets compile
