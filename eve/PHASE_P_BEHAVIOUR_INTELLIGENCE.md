@@ -2,7 +2,56 @@
 
 **Goal:** EVE’s **personality and intent** live here. One active **behaviour** at a time; each implements `enter` / `update` / `exit`. Behaviour consumes `EveAwarenessSnapshot` and produces **intent**, not graphics or WAV paths.
 
-Depends on **Phase O** (Awareness snapshot).
+Depends on **Phase O complete** (O-5 merged).
+
+---
+
+## P-1 — Observe (first behaviour)
+
+**Not** Follow. **Not** Greeting. **Not** Conversation.
+
+The first behaviour is **Observe** — EVE is aware of something interesting and **chooses** to do nothing visible yet.
+
+```text
+Awareness
+↓
+personPresent?
+↓
+Behaviour → Observe
+↓
+(no visible output)
+```
+
+That is agency: capable of reacting, deciding not to. Different from firmware that simply cannot respond.
+
+| Design name | Code name (keep simple) |
+|-------------|-------------------------|
+| **Observe** | `IdleBehaviour` / `EVE_BEHAVIOUR_IDLE` |
+
+Document intent as *observing*; implementation stays a minimal default behaviour.
+
+### P-1 behaviour tree (fits on a napkin)
+
+```text
+personPresent == false  →  remain Observe
+personPresent == true   →  remain Observe   (Curious does not exist yet)
+```
+
+Both paths are successful — **Behaviour** makes the decision, not Emotion or Eyes.
+
+### Acceptance test (P-1)
+
+Person walks into ToF range. Eyes unchanged. No greeting. No audio. Serial may log behaviour = Observe. **Decision** happened; output did not.
+
+---
+
+## Cognitive arc (after P-1)
+
+Observe is the root of a process, not a dead state:
+
+```text
+Observe → Curious → Follow → Greeting → …
+```
 
 ---
 
@@ -18,8 +67,8 @@ EveAwarenessSnapshot
         │
    ┌────┴────┬─────────┬──────────┐
    ▼         ▼         ▼          ▼
- Idle    Curious    Follow    Greeting …
-   │         │         │          │
+ Observe  Curious    Follow    Greeting …
+ (Idle)       │         │          │
    └─────────┴─────────┴──────────┘
                     │
                     ▼
@@ -48,7 +97,7 @@ Planned set (initial):
 
 | Behaviour | Typical entry | Intent |
 |-----------|---------------|--------|
-| **Idle** | Default, timeout from others | Rest, ambient scan |
+| **Observe** (`IdleBehaviour`) | Default; P-1 first behaviour | Aware, no visible action yet |
 | **Curious** | Motion, new presence | Investigate stimulus |
 | **Follow** | Sustained target in zone | Maintain interest, track |
 | **Greeting** | Close + stable presence | Social opening |
@@ -123,7 +172,7 @@ Audio:      (none or soft idle loop — Phase Q hint)
 | Today | Phase P |
 |-------|---------|
 | `eve_emotion_engine` ToF transitions | Move rules to Behaviour |
-| `eve_idle_engine` emotion coupling | Idle behaviour owns idle timing policy |
+| `eve_idle_engine` emotion coupling | Observe (`IdleBehaviour`) owns idle timing policy |
 | `eveBehaviorOnRemoteSound()` | Conversation or Greeting behaviour entry |
 | `eve_shared_behaviour` | Awareness + Behaviour (link facts vs intent) |
 
@@ -134,7 +183,8 @@ Emotion FSM may still run in parallel during migration; goal is Behaviour as **s
 ## Success criteria
 
 - [ ] Behaviour Manager with one active behaviour
-- [ ] Idle + Curious implemented and switching on snapshot
+- [ ] **P-1 Observe** (`IdleBehaviour`) — reads snapshot, decides, no output
+- [ ] Curious implemented and switching on snapshot (P-2+)
 - [ ] Follow + Greeting + Sleep stubbed or partial
 - [ ] No new rendering code in behaviours
 - [ ] Documented transition table

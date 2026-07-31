@@ -1,6 +1,6 @@
 # Phase O-3 — Battery → Awareness (power facts)
 
-**Status: frozen when merged.** Exactly five battery facts — no sixth field, no reactions.
+**Status: frozen.** Passed — exactly five battery facts, nothing else changed.
 
 **Goal:** EVE knows **"this is my current energy state."** Not when to sleep. Not warnings. Not faces.
 
@@ -78,7 +78,7 @@ cd eve && g++ -std=c++11 -Wall -Wextra -I include -I awareness \
 
 - Sleep behaviour, LED/audio/expression changes
 - Person fields (O-2, frozen)
-- Behaviour (Phase P-1 Idle comes after O-4/O-5 per roadmap pact)
+- Behaviour (Phase **P-1 Observe** comes after O-4/O-5 per roadmap pact)
 
 ---
 
