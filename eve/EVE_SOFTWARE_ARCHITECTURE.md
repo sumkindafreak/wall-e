@@ -98,6 +98,9 @@ Display → ToF
 Behaviour → SPI
 Behaviour → LVGL
 Awareness → Expression
+Character → Emotion
+Character → Outputs
+Mood → Eye Controller
 ```
 
 Examples of violations to reject in review:
