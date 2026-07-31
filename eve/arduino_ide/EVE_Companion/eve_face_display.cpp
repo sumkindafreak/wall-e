@@ -13,6 +13,9 @@
 #include "eve_expression_state.h"
 #include "eve_eye_animations.h"
 #include "eve_eye_renderer.h"
+#include "eve_emotion_engine.h"
+#include "eve_gaze_engine.h"
+#include "eve_idle_engine.h"
 
 #if EVE_FACE_GFX_READY
 #include <Arduino_GFX_Library.h>
@@ -93,6 +96,9 @@ void eveFaceDisplayInit(void) {
   eveEyeRendererInit(scr, &s_ui);
   eveEyeAnimationsInit(&s_ui);
   eveExpressionInit();
+  eveEmotionInit();
+  eveGazeInit();
+  eveIdleInit();
 
   s_lastMs = millis();
   Serial.println(F("[EVE_FACE] LVGL face initialized"));
@@ -115,20 +121,34 @@ void eveFaceDisplayTick(uint32_t nowMs) {
   eveExpressionDebugSerialPoll();
 #endif
 
+  eveEmotionTick(nowMs);
+  eveGazeTick(nowMs, dts);
   eveExpressionTick(nowMs);
+  eveIdleTick(nowMs);
   eveEyeAnimationsTick(nowMs, dts);
 
   EveEyeTarget tgt;
   eveExpressionGetTarget(&tgt);
   if (!s_smoothInit) {
     s_smooth = tgt;
+    s_smooth.lidLeft = s_smooth.lidRight = 0.f;
     s_smoothInit = true;
   }
   lerpTarget(&s_smooth, &tgt, 0.16f);
 
-  float blink = eveEyeAnimationsBlinkLid();
-  float lidGoal = fminf(1.f, fmaxf(tgt.lid, blink));
+  float animLidL = 0.f;
+  float animLidR = 0.f;
+  eveEyeAnimationsGetLids(&animLidL, &animLidR);
+  s_smooth.lidLeft = animLidL;
+  s_smooth.lidRight = animLidR;
+  float lidGoal = fminf(1.f, fmaxf(tgt.lid, fmaxf(animLidL, animLidR)));
   s_smooth.lid += (lidGoal - s_smooth.lid) * 0.42f;
+
+  float sq = eveEyeAnimationsSquintOverlay();
+  float wd = eveEyeAnimationsWidenOverlay();
+  s_smooth.squint = fminf(1.f, s_smooth.squint + sq * 0.35f);
+  s_smooth.eyeScaleY = fminf(1.25f, s_smooth.eyeScaleY * (1.f + wd * 0.08f));
+  s_smooth.eyeScaleX = fminf(1.2f, s_smooth.eyeScaleX * (1.f + wd * 0.04f));
 
   float mgx = 0.f;
   float mgy = 0.f;

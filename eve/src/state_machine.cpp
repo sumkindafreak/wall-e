@@ -19,6 +19,7 @@
 #include "eve_attachment_manager.h"
 #if EVE_ENABLE_EYES
 #include "eve_expression_state.h"
+#include "eve_emotion_engine.h"
 #endif
 #include <ArduinoJson.h>
 
@@ -201,6 +202,14 @@ void stateMachineTick(void) {
 
   {
     uint8_t sf = 0;
+    static bool s_prevSleepEmotion = false;
+    const bool sleepNow = (s_state == EveState::SLEEP);
+#if EVE_ENABLE_EYES
+    if (sleepNow != s_prevSleepEmotion) {
+      eveEmotionNotifySleep(sleepNow);
+      s_prevSleepEmotion = sleepNow;
+    }
+#endif
     if (s_state == EveState::SLEEP) {
       sf |= EVE_SPATIAL_FLAG_SLEEP;
     }

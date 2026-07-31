@@ -26,6 +26,9 @@ static uint32_t s_recordFailUntil = 0;
 static float s_tgtGazeNx = 0.5f;
 static float s_tgtGazeNy = 0.5f;
 static uint8_t s_legacy = 0;
+static EveExpressionId s_orchestrator = EVE_EXPR_NEUTRAL_IDLE;
+static bool s_orchestratorActive = false;
+static bool s_voiceActive = false;
 
 static EveExpressionId pickAuto(uint32_t now) {
   if (s_recordFailUntil != 0 && now < s_recordFailUntil) {
@@ -53,6 +56,9 @@ static EveExpressionId pickAuto(uint32_t now) {
   }
   if (!s_walleConn) {
     return EVE_EXPR_CONCERNED;
+  }
+  if (s_orchestratorActive) {
+    return s_orchestrator;
   }
   if (eveAttachmentIsAttached()) {
     return EVE_EXPR_SOFT_IDLE;
@@ -137,6 +143,46 @@ static void fillTargetFor(EveExpressionId e, EveEyeTarget* t) {
       t->glowOpa = 170.f;
       t->scanOpa = 40.f;
       break;
+    case EVE_EXPR_SAD:
+      t->eyeScaleY = 0.82f;
+      t->eyeScaleX = 0.96f;
+      t->tiltDeg = 4.f;
+      t->squint = 0.18f;
+      t->glowOpa = 75.f;
+      t->gazeY = 0.18f;
+      t->scanOpa = 14.f;
+      break;
+    case EVE_EXPR_ANGRY:
+      t->eyeScaleX = 1.05f;
+      t->eyeScaleY = 0.86f;
+      t->squint = 0.55f;
+      t->tiltDeg = -4.f;
+      t->glowOpa = 200.f;
+      t->scanOpa = 38.f;
+      break;
+    case EVE_EXPR_SLEEPY:
+      t->lid = 0.35f;
+      t->eyeScaleY = 0.84f;
+      t->squint = 0.3f;
+      t->glowOpa = 70.f;
+      t->gazeY = 0.1f;
+      t->scanOpa = 12.f;
+      break;
+    case EVE_EXPR_THINKING:
+      t->gazeY = -0.35f;
+      t->gazeX = 0.12f * sinf((float)millis() * 0.0015f);
+      t->eyeScaleY = 0.94f;
+      t->squint = 0.15f;
+      t->glowOpa = 145.f;
+      t->scanOpa = 32.f;
+      break;
+    case EVE_EXPR_SURPRISED:
+      t->eyeScaleX = 1.14f;
+      t->eyeScaleY = 1.18f;
+      t->squint = 0.f;
+      t->glowOpa = 210.f;
+      t->scanOpa = 45.f;
+      break;
     case EVE_EXPR_CONCERNED:
       t->tiltDeg = 5.f;
       t->squint = 0.25f;
@@ -186,6 +232,13 @@ static void fillTargetFor(EveExpressionId e, EveEyeTarget* t) {
     t->glowOpa = fminf(255.f, t->glowOpa + 25.f);
     t->scanOpa = fminf(255.f, t->scanOpa + 8.f);
   }
+  if (s_voiceActive) {
+    t->eyeScaleY = fminf(1.22f, t->eyeScaleY * 1.06f);
+    t->eyeScaleX = fminf(1.15f, t->eyeScaleX * 1.03f);
+    t->squint *= 0.55f;
+    t->lid *= 0.75f;
+    t->glowOpa = fminf(255.f, t->glowOpa + 18.f);
+  }
 }
 
 void eveExpressionInit(void) {
@@ -203,6 +256,9 @@ void eveExpressionInit(void) {
   s_reconnectAffectMs = 0;
   s_recordFailUntil = 0;
   s_legacy = 0;
+  s_orchestrator = EVE_EXPR_NEUTRAL_IDLE;
+  s_orchestratorActive = false;
+  s_voiceActive = false;
 }
 
 void eveExpressionTick(uint32_t now) {
@@ -302,6 +358,15 @@ void eveExpressionSetLegacyMode(uint8_t mode) {
   s_legacy = mode;
 }
 
+void eveExpressionSetOrchestrator(EveExpressionId id) {
+  s_orchestrator = id;
+  s_orchestratorActive = true;
+}
+
+void eveExpressionSetVoiceActive(bool on) {
+  s_voiceActive = on;
+}
+
 #if EVE_FACE_DEBUG_BENCH
 const char* eveExpressionName(EveExpressionId id) {
   switch (id) {
@@ -327,6 +392,16 @@ const char* eveExpressionName(EveExpressionId id) {
       return "HAPPY";
     case EVE_EXPR_CURIOUS:
       return "CURIOUS";
+    case EVE_EXPR_SAD:
+      return "SAD";
+    case EVE_EXPR_ANGRY:
+      return "ANGRY";
+    case EVE_EXPR_SLEEPY:
+      return "SLEEPY";
+    case EVE_EXPR_THINKING:
+      return "THINKING";
+    case EVE_EXPR_SURPRISED:
+      return "SURPRISED";
     case EVE_EXPR_CONCERNED:
       return "CONCERNED";
     case EVE_EXPR_CONFUSED:
@@ -444,6 +519,8 @@ void eveExpressionSetSearchingWallE(bool) {}
 void eveExpressionSetDockedCharging(bool, bool) {}
 void eveExpressionSetTracking(bool) {}
 void eveExpressionSetLegacyMode(uint8_t) {}
+void eveExpressionSetOrchestrator(EveExpressionId) {}
+void eveExpressionSetVoiceActive(bool) {}
 #if EVE_FACE_DEBUG_BENCH
 void eveExpressionDebugSerialPoll(void) {}
 const char* eveExpressionName(EveExpressionId) {

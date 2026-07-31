@@ -15,13 +15,22 @@ void eveEyeAnimationsTick(uint32_t nowMs, float dtSec);
 
 void eveEyeAnimationsTriggerBlink(void);
 void eveEyeAnimationsTriggerDoubleBlink(void);
+void eveEyeAnimationsTriggerSlowBlink(void);
+/** Optional playful wink; leftEye=true closes left lid only. */
+void eveEyeAnimationsTriggerWink(bool leftEye);
+void eveEyeAnimationsTriggerSquint(float amount);
+void eveEyeAnimationsTriggerWiden(float amount);
 void eveEyeAnimationsNudgeGaze(float dx, float dy);
 void eveEyeAnimationsSetSleepClosed(bool closed);
 void eveEyeAnimationsWakeOpen(void);
 
-/** Extra lid closure 0..1 (blink) merged in display tick */
-float eveEyeAnimationsBlinkLid(void);
+/** Per-eye lid closure 0..1 (blink / wink) merged in display tick */
+void eveEyeAnimationsGetLids(float* left, float* right);
 
 void eveEyeAnimationsGetMicroGaze(float* dx, float* dy);
+
+/** Transient squint/widen overlay 0..1 decaying each tick */
+float eveEyeAnimationsSquintOverlay(void);
+float eveEyeAnimationsWidenOverlay(void);
 
 #endif /* EVE_ENABLE_EYES */

@@ -7,7 +7,8 @@
 #include <stdlib.h>
 
 static EveEyeUi* s_ui;
-static float s_blinkLid = 0.f;
+static float s_lidL = 0.f;
+static float s_lidR = 0.f;
 static uint8_t s_blinkState = 0;
 static uint32_t s_blinkPhaseEnd = 0;
 static uint32_t s_nextBlinkMs = 0;
@@ -15,24 +16,47 @@ static uint32_t s_nextSaccadeMs = 0;
 static float s_sacDx = 0.f;
 static float s_sacDy = 0.f;
 static uint32_t s_dblBlinkAt = 0;
+static bool s_slowBlink = false;
+static bool s_winkLeft = false;
+static bool s_winkRight = false;
+static float s_squintOverlay = 0.f;
+static float s_widenOverlay = 0.f;
 
 void eveEyeAnimationsInit(EveEyeUi* ui) {
   s_ui = ui;
-  s_blinkLid = 0.f;
+  s_lidL = s_lidR = 0.f;
   s_blinkState = 0;
   uint32_t n = millis();
   s_nextBlinkMs = n + 2000 + (uint32_t)(rand() % 3500);
   s_nextSaccadeMs = n + 800 + (uint32_t)(rand() % 1200);
+  s_slowBlink = false;
+  s_winkLeft = s_winkRight = false;
+  s_squintOverlay = s_widenOverlay = 0.f;
 }
 
-float eveEyeAnimationsBlinkLid(void) {
-  return s_blinkLid;
+void eveEyeAnimationsGetLids(float* left, float* right) {
+  if (left) {
+    *left = s_lidL;
+  }
+  if (right) {
+    *right = s_lidR;
+  }
+}
+
+float eveEyeAnimationsSquintOverlay(void) {
+  return s_squintOverlay;
+}
+
+float eveEyeAnimationsWidenOverlay(void) {
+  return s_widenOverlay;
 }
 
 void eveEyeAnimationsTriggerBlink(void) {
   if (s_blinkState == 0) {
     s_blinkState = 1;
     s_blinkPhaseEnd = millis() + 70;
+    s_slowBlink = false;
+    s_winkLeft = s_winkRight = false;
     Serial.println(F("[EVE_FACE] Blink triggered"));
   }
 }
@@ -43,42 +67,102 @@ void eveEyeAnimationsTriggerDoubleBlink(void) {
   Serial.println(F("[EVE_FACE] Double blink"));
 }
 
+void eveEyeAnimationsTriggerSlowBlink(void) {
+  if (s_blinkState == 0) {
+    s_slowBlink = true;
+    s_blinkState = 1;
+    s_blinkPhaseEnd = millis() + 180;
+    s_winkLeft = s_winkRight = false;
+    Serial.println(F("[EVE_FACE] Slow blink"));
+  }
+}
+
+void eveEyeAnimationsTriggerWink(bool leftEye) {
+  if (s_blinkState != 0) {
+    return;
+  }
+  s_winkLeft = leftEye;
+  s_winkRight = !leftEye;
+  s_blinkState = 1;
+  s_blinkPhaseEnd = millis() + 90;
+  s_slowBlink = false;
+  Serial.println(F("[EVE_FACE] Wink"));
+}
+
+void eveEyeAnimationsTriggerSquint(float amount) {
+  if (amount < 0.f) {
+    amount = 0.f;
+  }
+  if (amount > 1.f) {
+    amount = 1.f;
+  }
+  s_squintOverlay = fmaxf(s_squintOverlay, amount);
+}
+
+void eveEyeAnimationsTriggerWiden(float amount) {
+  if (amount < 0.f) {
+    amount = 0.f;
+  }
+  if (amount > 1.f) {
+    amount = 1.f;
+  }
+  s_widenOverlay = fmaxf(s_widenOverlay, amount);
+}
+
 void eveEyeAnimationsNudgeGaze(float dx, float dy) {
   s_sacDx += dx;
   s_sacDy += dy;
 }
 
 void eveEyeAnimationsSetSleepClosed(bool closed) {
-  s_blinkLid = closed ? 1.f : 0.f;
+  s_lidL = s_lidR = closed ? 1.f : 0.f;
   s_blinkState = 0;
+  s_winkLeft = s_winkRight = false;
 }
 
 void eveEyeAnimationsWakeOpen(void) {
   s_blinkState = 3;
   s_blinkPhaseEnd = millis() + 900;
+  s_winkLeft = s_winkRight = false;
 }
 
 static void mergedMicroGazeDecay(float dtSec) {
   float k = 1.f - 0.35f * fminf(dtSec * 30.f, 1.f);
   s_sacDx *= k;
   s_sacDy *= k;
+  s_squintOverlay *= (1.f - 0.12f * fminf(dtSec * 60.f, 1.f));
+  s_widenOverlay *= (1.f - 0.1f * fminf(dtSec * 60.f, 1.f));
+}
+
+static void setBothLids(float v) {
+  s_lidL = s_lidR = v;
 }
 
 static void updateBlink(uint32_t now) {
+  uint32_t closeMs = s_slowBlink ? 180u : 70u;
+  uint32_t openMs = s_slowBlink ? 320u : 140u;
+
   switch (s_blinkState) {
     case 0:
       break;
     case 1:
-      s_blinkLid = 1.f;
+      if (s_winkLeft || s_winkRight) {
+        s_lidL = s_winkLeft ? 1.f : 0.f;
+        s_lidR = s_winkRight ? 1.f : 0.f;
+      } else {
+        setBothLids(1.f);
+      }
       if (now >= s_blinkPhaseEnd) {
         s_blinkState = 2;
-        s_blinkPhaseEnd = now + 140;
+        s_blinkPhaseEnd = now + openMs;
       }
       break;
     case 2:
-      s_blinkLid = 0.f;
+      setBothLids(0.f);
+      s_winkLeft = s_winkRight = false;
       if (now >= s_blinkPhaseEnd) {
         s_blinkState = 0;
+        s_slowBlink = false;
         s_nextBlinkMs = now + 1800 + (uint32_t)(rand() % 4000);
       }
       break;
@@ -91,9 +175,9 @@ static void updateBlink(uint32_t now) {
       if (prog > 1.f) {
         prog = 1.f;
       }
-      s_blinkLid = 1.f - prog;
+      setBothLids(1.f - prog);
       if (now >= s_blinkPhaseEnd) {
-        s_blinkLid = 0.f;
+        setBothLids(0.f);
         s_blinkState = 0;
       }
       break;
@@ -107,14 +191,9 @@ static void updateBlink(uint32_t now) {
     s_dblBlinkAt = 0;
     eveEyeAnimationsTriggerBlink();
   }
-
-  if (s_blinkState == 0 && now >= s_nextBlinkMs) {
-    eveEyeAnimationsTriggerBlink();
-  }
 }
 
 void eveEyeAnimationsTick(uint32_t nowMs, float dtSec) {
-  (void)dtSec;
   updateBlink(nowMs);
 
   if (nowMs >= s_nextSaccadeMs) {

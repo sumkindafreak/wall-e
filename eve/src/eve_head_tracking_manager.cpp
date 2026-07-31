@@ -6,6 +6,7 @@
 
 #if EVE_ENABLE_EYES
 #include "eve_expression_state.h"
+#include "eve_gaze_engine.h"
 #endif
 
 #ifndef EVE_HEAD_PAN_CENTER
@@ -55,6 +56,14 @@ static int16_t panForZone(EveTargetModel z) {
 
 static void syncEyesFromPan(void) {
 #if EVE_ENABLE_EYES
+  if (eveGazeScriptOwnsTarget()) {
+    return;
+  }
+  bool tr = (s_st == TRACK_FOLLOW_LEFT || s_st == TRACK_FOLLOW_RIGHT || s_st == TRACK_FOLLOW_CENTER ||
+             s_st == TRACK_ACK_LEFT || s_st == TRACK_ACK_RIGHT || s_st == TRACK_ACK_CENTER);
+  if (tr) {
+    eveGazeYield();
+  }
   float nx = 0.5f + (float)(s_pan - EVE_HEAD_PAN_CENTER) / 70.f;
   float ny = 0.48f;
   if (nx < 0.f) {
@@ -64,8 +73,6 @@ static void syncEyesFromPan(void) {
     nx = 1.f;
   }
   eveExpressionSetTargetGaze(nx, ny);
-  bool tr = (s_st == TRACK_FOLLOW_LEFT || s_st == TRACK_FOLLOW_RIGHT || s_st == TRACK_FOLLOW_CENTER ||
-             s_st == TRACK_ACK_LEFT || s_st == TRACK_ACK_RIGHT || s_st == TRACK_ACK_CENTER);
   eveExpressionSetTracking(tr);
 #endif
 }

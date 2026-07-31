@@ -167,12 +167,16 @@ void eveEyeRendererApply(EveEyeUi* ui, const EveEyeTarget* m) {
   lv_opa_t scan = (lv_opa_t)constrain((int)m->scanOpa, 0, 255);
   lv_obj_set_style_bg_opa(ui->scan_bar, scan, LV_PART_MAIN);
 
-  int32_t lidPx = (int32_t)(bh * m->lid);
-  if (lidPx > bh) {
-    lidPx = bh;
+  int32_t lidPxL = (int32_t)(bh * fminf(1.f, fmaxf(m->lid, m->lidLeft)));
+  int32_t lidPxR = (int32_t)(bh * fminf(1.f, fmaxf(m->lid, m->lidRight)));
+  if (lidPxL > bh) {
+    lidPxL = bh;
   }
-  lv_obj_set_height(ui->lid_l, lidPx);
-  lv_obj_set_height(ui->lid_r, lidPx);
+  if (lidPxR > bh) {
+    lidPxR = bh;
+  }
+  lv_obj_set_height(ui->lid_l, lidPxL);
+  lv_obj_set_height(ui->lid_r, lidPxR);
 
   int32_t tilt = (int32_t)(m->tiltDeg * 10);
   lv_obj_set_style_transform_rotation(ui->visor, tilt, LV_PART_MAIN);
