@@ -40,3 +40,7 @@ Optional requests: `eveEyeControllerApplyRequest()` (expression, look direction,
 ## Blink policy
 
 Idle and blink engine prefer **one eye at a time** for normal blinks; right eye schedule is phase-offset from the left.
+
+## V2 roadmap
+
+Eye subsystem is considered **mature** after this phase. Further eye work belongs in **Phase R** (expression polish) only. Brain stack: see `EVE_SOFTWARE_ARCHITECTURE.md` and Phases O–Q.
