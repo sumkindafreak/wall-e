@@ -146,6 +146,12 @@ static const unsigned long EVE_UART_BAUD = 115200;
 #define EVE_ENABLE_NEOPIXEL 0
 #define EVE_ENABLE_AUDIO 0
 
+// Phase O — Awareness (facts only; no behaviour/emotion side effects)
+#define EVE_ENABLE_AWARENESS 1
+/** Periodic AWARENESS block on Serial (bench) */
+#define EVE_AWARENESS_SERIAL_DEBUG 1
+#define EVE_AWARENESS_SERIAL_INTERVAL_MS 3000u
+
 // Docked WebUI: EVE hosts a local AP only while on her dock.
 #define EVE_ENABLE_DOCKED_WEBUI 1
 #define EVE_WEBUI_AP_SSID "EVE-Desk"

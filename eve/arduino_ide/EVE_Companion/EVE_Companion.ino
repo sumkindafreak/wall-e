@@ -28,6 +28,7 @@
 #include "eve_web_server.h"
 #include "mic_input.h"
 #include "eve_serial_console.h"
+#include "awareness/eve_awareness.h"
 
 static void onUartRx(uint8_t type, const uint8_t* payload, size_t len, uint8_t seq) {
   stateMachineOnUartRx(type, payload, len, seq);
@@ -45,6 +46,7 @@ void setup() {
 
   systemStatusInit();
   eveBatteryInit();
+  eveAwarenessInit();
   uartLinkInit();
   uartLinkSetRxCallback(onUartRx);
 
@@ -77,6 +79,7 @@ void loop() {
   uartLinkPoll();
   updateMic();
   eveBatteryTick();
+  eveAwarenessTick();
   stateMachineTick();
   eveBehaviorManagerTick();
   eveAttachmentManagerTick();
