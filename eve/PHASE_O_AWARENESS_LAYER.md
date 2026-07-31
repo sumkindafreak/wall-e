@@ -4,6 +4,35 @@
 
 ---
 
+## Sub-milestones
+
+| Step | Name | Meaning | Status |
+|------|------|---------|--------|
+| **O-1** | Robot knows itself | Internal state snapshot (power stub, link, health) | **Frozen** |
+| **O-2** | Robot knows someone is there | ToF → person facts (`personPresent`, zone, confidence) | **Frozen** |
+| **O-3** | Robot knows her power | Battery subsystem → voltage, percent, low, charging, health | Planned |
+| **O-4+** | Link, mic, … | One subsystem per step; same discipline | Planned |
+
+Before O-2: EVE had **sensors**. After O-2: EVE has **knowledge** — structured facts, not raw readings.
+
+See `PHASE_O2_AWARENESS_TOF.md`, `PHASE_O3_AWARENESS_BATTERY.md`.
+
+---
+
+## Engineering rule: Awareness is append-only
+
+Once a fact exists in `EveAwarenessSnapshot`:
+
+- **Do not rename it**
+- **Do not move it**
+- **Do not overload it** with a second meaning
+
+Need a new concept? **Add a new field** (and a new publisher step if needed).
+
+Stable snapshot APIs are one of the biggest gifts you can give future maintainers. Behaviour, Character, and replay tests depend on field names staying honest.
+
+---
+
 ## Why “Awareness”
 
 “Perception” often implies SLAM, vision pipelines, or mapping. EVE’s near-term inputs are ToF, battery, dock/link UART, and (future) microphone level. **Awareness** describes sensor fusion into a snapshot without overstating capability.
