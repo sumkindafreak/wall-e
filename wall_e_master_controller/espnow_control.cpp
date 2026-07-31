@@ -7,6 +7,7 @@
 #include "node_health_protocol.h"
 #include "sd_manager.h"
 #include <WiFi.h>
+#include <Network.h>
 #include <esp_now.h>
 #include <esp_wifi.h>
 #include <Arduino.h>
@@ -34,8 +35,8 @@ static uint16_t s_sendFailCount = 0;
 static unsigned long s_lastDiagnosticMs = 0;
 static unsigned long s_lastNodeHealthMs = 0;
 
-static void onSent(const uint8_t* mac, esp_now_send_status_t status) {
-  (void)mac;
+static void onSent(const esp_now_send_info_t *tx_info, esp_now_send_status_t status) {
+  (void)tx_info;
   s_sendOk = (status == ESP_NOW_SEND_SUCCESS);
   if (!s_sendOk) {
     s_sendFailCount++;

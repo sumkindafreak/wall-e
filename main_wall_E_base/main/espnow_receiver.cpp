@@ -124,7 +124,8 @@ static bool isControlSourceAllowed(const esp_now_recv_info_t* info) {
   return false;
 }
 
-static void onBaseTelemetrySent(const uint8_t* /*mac*/, esp_now_send_status_t status) {
+static void onBaseTelemetrySent(const esp_now_send_info_t *tx_info, esp_now_send_status_t status) {
+  (void)tx_info;
   if (status != ESP_NOW_SEND_SUCCESS) {
     s_lastTelemTxFailMs = millis();
     if (s_telemSendFailStreak < 255) {
