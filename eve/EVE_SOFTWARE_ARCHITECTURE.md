@@ -2,31 +2,38 @@
 
 Version 1 established the **output stack**: independent eyes, native I2S audio, SD assets, and a clean render path. Version 2 adds the **brain stack**: awareness of the world, behavioural intent, and affect that drives expressive outputs.
 
+**Architecture status:** V2 is **locked** after PR #7. New features slot into a layer; they do not redesign layers. Phase N (Eye Controller) is **mature** — no rendering ownership changes, only Phase R polish inside the Eye Controller.
+
 Nothing in this document replaces existing phase notes (J–N). It defines how future work **slots into layers** without blurring responsibilities.
 
 ---
 
-## Five layers
+## EVE V2 — five layers
+
+Sensing → thinking → feeling → expressing.
 
 ```text
-           Hardware
-               │
-               ▼
-        Awareness Layer          ← facts only (no opinions)
-               │
-               ▼
-      Behaviour Intelligence     ← intent (one active behaviour)
-               │
-               ▼
-        Emotion Engine           ← affect mapping (not world logic)
-               │
-        ┌──────┴──────┐
-        ▼             ▼
- Eye Controller   Audio Engine    ← outputs (parallel siblings)
-        │             │
-        ▼             ▼
-   Left / Right     I2S + WAV
-   eye panels
+                    HARDWARE
+        (ToF, Battery, Wi-Fi, Dock, Audio, LCDs)
+                         │
+                         ▼
+                  AWARENESS LAYER
+          (Facts only — no decisions, no emotion)
+                         │
+                         ▼
+             BEHAVIOUR INTELLIGENCE
+          (Intent, priorities, active behaviour)
+                         │
+                         ▼
+                 EMOTION ENGINE
+       (Maps behaviour → affect and output hints)
+                         │
+          ┌──────────────┴──────────────┐
+          ▼                             ▼
+   EYE CONTROLLER                 AUDIO ENGINE
+          │                             │
+          ▼                             ▼
+     Dual Eye LCDs                 Speaker / I2S
 ```
 
 **Emotion tells both output systems what to express.** Neither eyes nor audio know *why* they are happy.
@@ -42,6 +49,71 @@ Outputs:
 ```
 
 Later outputs (head tilt, body, arms, lighting) attach at the same level as eyes and audio.
+
+**Future inputs plug into Awareness without redesign:**
+
+- Vision module → Awareness
+- Speech recognition → Awareness
+- Local language model → Behaviour (intent), not Emotion or Outputs directly
+
+---
+
+## Dependency direction (hard rule)
+
+> **A layer may depend only on the layer immediately below it, never above it.**
+
+Data and control flow **down** the stack. No layer reaches up.
+
+### Allowed
+
+```text
+Hardware
+    ↓
+Awareness
+    ↓
+Behaviour
+    ↓
+Emotion
+    ↓
+Outputs (Eye Controller, Audio Engine, …)
+```
+
+### Forbidden
+
+```text
+Emotion → Awareness
+Eye Controller → Behaviour
+Audio → Behaviour
+Display → ToF
+Behaviour → SPI
+Behaviour → LVGL
+Awareness → Expression
+```
+
+Examples of violations to reject in review:
+
+- Emotion reading ToF directly instead of consuming Behaviour intent
+- Eye Controller choosing Curious vs Idle
+- Audio engine triggering a behaviour transition
+- Behaviour calling SPI flush or `lv_obj_*`
+
+This rule prevents architectural drift as the project grows.
+
+---
+
+## One public API per layer
+
+Each layer exposes **one primary surface** to the layer above. Callers do not reach inside subsystems — everything stays replaceable.
+
+| Layer | Public API (target) | Consumes |
+|-------|---------------------|----------|
+| **Awareness** | `const EveAwarenessSnapshot& eveAwarenessGetSnapshot()` | Hardware drivers only |
+| **Behaviour** | `const EveBehaviourState& eveBehaviourGetState()` | Awareness snapshot |
+| **Emotion** | `const EveEmotionState& eveEmotionGetState()` (affect + output hints) | Behaviour state |
+| **Eye Controller** | `eveEyesTick()` | Emotion output hints |
+| **Audio Engine** | `eveAudioTick()` | Emotion output hints |
+
+Tick wrappers may subsume init and internal sub-steps; the rule is **no cross-layer struct poking**. Legacy names (`eveEyeControllerTick`, `eveAwarenessGetSnapshot` struct copy-out) may persist during migration; converge on the table above.
 
 ---
 
@@ -173,8 +245,23 @@ Eye Controller may still run internal sub-ticks (gaze ease, blink) as **output r
 | **P** | Behaviour intelligence — Idle, Curious, Follow, Greeting, Sleep (+ Conversation) |
 | **Q** | Emotion refactor — remove world logic; affect + eye/audio hints only |
 | **R** | Expression polish — micro-saccades, async blinks, gaze easing, dwell, idle refinement |
+| **S** | Personality — tunable behavioural traits (see below) |
 
 Display architecture is **frozen** after Phase N except for Phase R polish inside Eye Controller.
+
+### Phase S — Personality (after O–R)
+
+Architecture stable; EVE gains **preferences**, not just reactions. Two identical robots with different personality parameters can feel like different companions.
+
+Examples (Behaviour + parameter layer, not hardware):
+
+- How long she maintains eye contact
+- Whether she investigates immediately or hesitates
+- How quickly she becomes sleepy after inactivity
+- Whether she greets immediately or waits a moment
+- How often she glances around while idle
+
+Personality adjusts Behaviour thresholds and timings; it does not bypass Awareness → Behaviour → Emotion → Outputs. See `PHASE_S_PERSONALITY.md`.
 
 ---
 
@@ -192,5 +279,8 @@ New features should land in **exactly one** layer:
 - “She noticed me” → Behaviour
 - “She looks happy” → Emotion
 - “Eyelids move” / “Sound plays” → Outputs
+- “She’s shy vs bold” → Personality (Phase S, via Behaviour parameters)
 
 If a change touches two layers, split the PR or document the boundary explicitly.
+
+**From V2 onward:** enrich behaviour and personality; do not rework the layer stack.
