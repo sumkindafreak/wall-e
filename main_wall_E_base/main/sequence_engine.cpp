@@ -60,7 +60,7 @@ static void sortStepsArray(JsonArray steps) {
     if (e) continue;
     JsonObjectConst src = one.as<JsonObjectConst>();
     if (src.isNull()) continue;
-    JsonObject dest = steps.add<JsonObject>();
+    JsonObject dest = steps.createNestedObject();
     for (JsonPairConst kv : src) {
       dest[kv.key()] = kv.value();
     }

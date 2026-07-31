@@ -9,7 +9,7 @@
 static uint8_t s_broadcastMac[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 static bool s_init = false;
 
-static void onSendCb(const uint8_t* mac, esp_now_send_status_t status) { (void)mac; (void)status; }
+static void onSendCb(const esp_now_send_info_t *tx_info, esp_now_send_status_t status) { (void)tx_info; (void)status; }
 
 bool visionEspNowInit(void) {
   if (s_init) return true;

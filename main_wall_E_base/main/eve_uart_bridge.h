@@ -33,6 +33,9 @@ bool eveUartBridgeSendCydServo(uint8_t headPanDeg, uint8_t rightArmDeg);
 /** Shared UART intelligence bus: send COMMAND JSON to EVE over the existing UART only. */
 bool eveUartBridgeSendBusCommand(const char* jsonUtf8);
 
+/** Companion behaviour token JSON (e.g. {"m":"EVE_LOOK_LEFT"}) to EVE UART bus. */
+bool eveUartBridgeSendCompanionToEve(const char* jsonUtf8);
+
 /** Debug/live monitor alias for WebUI. */
 String eveUartBridgeGetMonitorJSON(void);
 

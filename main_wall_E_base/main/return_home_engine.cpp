@@ -12,19 +12,22 @@
 // ============================================================
 
 static ReturnHomeContext s_rth = {
-  RTH_IDLE,              // state
-  0,                     // startTimeMs
-  false,                 // hasHome
-  0.0,                   // homeLat
-  0.0,                   // homeLon
-  0.0,                   // currentLat
-  0.0,                   // currentLon
-  0.0,                   // distanceToHome
-  0.0,                   // bearingToHome
-  0,                     // lastProgressTimeMs
-  999999.0f,             // lastDistanceToHome
-  0,                     // avoidStartTimeMs
-  0.0f                   // urgencyMultiplier
+  RTH_IDLE,       // state
+  0,              // stateStartTime
+  0.0,            // homeLatitude
+  0.0,            // homeLongitude
+  0.0f,           // distanceToHome
+  0.0f,           // headingToHome
+  0.0f,           // currentHeading
+  999999.0f,      // obstacleDistance
+  false,          // obstacleDetected
+  0,              // avoidanceStartTime
+  0.0f,           // initialDistance
+  0,              // navigationStartTime
+  0.0f,           // batteryAtStart
+  0,              // lastProgressTime
+  999999.0f,      // lastDistance
+  0               // stuckCount
 };
 
 static const char* RTH_STATE_NAMES[] = {

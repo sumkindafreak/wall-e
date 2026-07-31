@@ -5,7 +5,7 @@
 #include "dev_console.h"
 #include "sd_manager.h"
 #include "macro_system.h"
-#include <ESP.h>
+#include <Arduino.h>
 #include <string.h>
 
 // CYD 2432S028R: TFT rotation 1 → 320×240 landscape

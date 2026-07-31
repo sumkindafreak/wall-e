@@ -10,6 +10,8 @@ static EveAssistState s_state = ASSIST_NONE;
 static uint32_t s_suppressMask = 0;
 static bool s_tracking = false;
 static char s_lastZone[16] = "NONE";
+static float s_nudgeBias = 0.f;
+static uint32_t s_nudgeUntilMs = 0;
 
 static const uint32_t kStaleMs = 1600u;
 static const int16_t kMaxDelta = 22;
@@ -20,6 +22,8 @@ void eveTargetAssistInit(void) {
   s_state = ASSIST_NONE;
   s_suppressMask = 0;
   s_tracking = false;
+  s_nudgeBias = 0.f;
+  s_nudgeUntilMs = 0;
   strcpy(s_lastZone, "NONE");
 }
 
@@ -87,7 +91,34 @@ void eveTargetAssistIngestJson(const char* jsonUtf8, uint32_t rxMillis) {
   }
 }
 
+void eveTargetAssistCompanionNudge(float turnBias, uint32_t durationMs) {
+  if (turnBias > 0.5f) {
+    turnBias = 0.5f;
+  } else if (turnBias < -0.5f) {
+    turnBias = -0.5f;
+  }
+  s_nudgeBias = turnBias;
+  s_nudgeUntilMs = millis() + durationMs;
+  s_bias = turnBias;
+  s_lastRxMs = millis();
+  if (turnBias < -0.02f) {
+    s_state = ASSIST_BIAS_LEFT;
+  } else if (turnBias > 0.02f) {
+    s_state = ASSIST_BIAS_RIGHT;
+  } else {
+    s_state = ASSIST_ALIGN_CENTER;
+  }
+}
+
 void eveTargetAssistTick(uint32_t nowMs) {
+  if (s_nudgeUntilMs != 0 && nowMs < s_nudgeUntilMs) {
+    s_bias = s_nudgeBias;
+    return;
+  }
+  if (s_nudgeUntilMs != 0 && nowMs >= s_nudgeUntilMs) {
+    s_nudgeUntilMs = 0;
+    s_nudgeBias = 0.f;
+  }
   if (s_suppressMask & EVE_ASSIST_MASK_SAFETY) {
     static uint32_t slog;
     if (nowMs - slog > 3000u) {

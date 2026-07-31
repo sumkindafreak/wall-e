@@ -7,6 +7,7 @@
 #define MOTION_DETECT_H
 
 #include <stdint.h>
+#include <stddef.h>
 #include <stdbool.h>
 #include "vision_protocol.h"
 

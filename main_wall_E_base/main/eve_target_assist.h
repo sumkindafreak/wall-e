@@ -29,3 +29,6 @@ void eveTargetAssistGetMotorDelta(int16_t* dLeft, int16_t* dRight);
 
 /** Compact JSON for WebUI / living telemetry (zone, bias, stale). */
 String eveTargetAssistGetStatusJSON(void);
+
+/** Short-lived turn bias from shared companion tokens (EVE_LOOK_*). */
+void eveTargetAssistCompanionNudge(float turnBias, uint32_t durationMs);

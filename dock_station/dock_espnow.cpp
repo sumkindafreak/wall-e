@@ -36,8 +36,8 @@ static void onRecv(const esp_now_recv_info_t *info, const uint8_t *data, int len
 static void onRecv(const uint8_t *mac, const uint8_t *data, int len);
 #endif
 
-static void onSendDone(const uint8_t *mac, esp_now_send_status_t status) {
-  (void)mac;
+static void onSendDone(const esp_now_send_info_t *tx_info, esp_now_send_status_t status) {
+  (void)tx_info;
   g_last_ok = (status == ESP_NOW_SEND_SUCCESS);
   if (g_last_ok) g_send_ok++; else g_send_fail++;
 }

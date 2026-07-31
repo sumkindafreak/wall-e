@@ -315,6 +315,10 @@ bool eveUartBridgeSendBusCommand(const char* jsonUtf8) {
 #endif
 }
 
+bool eveUartBridgeSendCompanionToEve(const char* jsonUtf8) {
+  return eveUartBridgeSendBusCommand(jsonUtf8);
+}
+
 String eveUartBridgeGetMonitorJSON(void) {
   String j = "{\"ok\":true,\"bus\":\"uart_only\",\"peer\":";
   j += eveUartBridgeIsLinkUp() ? "\"EVE\"" : "null";
