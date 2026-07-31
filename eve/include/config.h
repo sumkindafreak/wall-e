@@ -151,6 +151,12 @@ static const unsigned long EVE_UART_BAUD = 115200;
 /** Periodic AWARENESS block on Serial (bench) */
 #define EVE_AWARENESS_SERIAL_DEBUG 1
 #define EVE_AWARENESS_SERIAL_INTERVAL_MS 3000u
+/** O-2: personPresent = (personConfidence >= threshold). Behaviour never reads raw mm. */
+#define EVE_AWARENESS_PERSON_PRESENT_THRESHOLD 50u
+/** O-2 zone bands (mm) — tune here; EveAwarenessPersonZone enum stays frozen */
+#define EVE_AWARENESS_ZONE_PERSONAL_MAX_MM 550
+#define EVE_AWARENESS_ZONE_NEAR_MAX_MM 900
+#define EVE_AWARENESS_ZONE_MID_MAX_MM 1500
 
 // Docked WebUI: EVE hosts a local AP only while on her dock.
 #define EVE_ENABLE_DOCKED_WEBUI 1

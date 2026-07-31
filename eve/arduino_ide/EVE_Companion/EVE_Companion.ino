@@ -79,7 +79,6 @@ void loop() {
   uartLinkPoll();
   updateMic();
   eveBatteryTick();
-  eveAwarenessTick();
   stateMachineTick();
   eveBehaviorManagerTick();
   eveAttachmentManagerTick();
@@ -87,6 +86,7 @@ void loop() {
   systemStatusTick();
   eyesTick();
   tofTick();
+  eveAwarenessTick();
   servoTick();
   neopixelTick();
   audioTick();

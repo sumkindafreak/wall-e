@@ -3,6 +3,7 @@
 #if EVE_ENABLE_AWARENESS
 
 #include "eve_awareness.h"
+#include "eve_awareness_zones.h"
 #include "battery_monitor.h"
 #include "state_machine.h"
 #include "system_status.h"
@@ -10,7 +11,12 @@
 #include "eve_asset_manager.h"
 #include "mic_input.h"
 
+#if EVE_ENABLE_TOF
+#include "eve_tof_manager.h"
+#endif
+
 #include <Arduino.h>
+#include <limits.h>
 #include <string.h>
 
 static EveAwarenessSnapshot s_snap;
@@ -21,12 +27,57 @@ static bool peerLinked(void) {
   return peer && peer[0] != '\0' && strcmp(peer, "none") != 0;
 }
 
+#if EVE_ENABLE_TOF
+static int32_t tofClosestDistanceMm(const EveTofRawFrame* raw) {
+  int32_t best = INT32_MAX;
+  bool any = false;
+
+  if ((raw->valid_mask & 1u) != 0u && raw->left_mm > 0) {
+    best = raw->left_mm;
+    any = true;
+  }
+  if ((raw->valid_mask & 2u) != 0u && raw->right_mm > 0) {
+    if (!any || raw->right_mm < best) {
+      best = raw->right_mm;
+    }
+    any = true;
+  }
+  if ((raw->valid_mask & 4u) != 0u && raw->center_mm > 0) {
+    if (!any || raw->center_mm < best) {
+      best = raw->center_mm;
+    }
+    any = true;
+  }
+
+  return any ? best : -1;
+}
+#endif
+
 static void publishPersonFacts(void) {
-  /* O-2: ToF publisher updates these fields. O-1 leaves neutral defaults. */
+#if EVE_ENABLE_TOF
+  EveTofRawFrame raw;
+  eveTofManagerGetLastFrame(&raw);
+  const int32_t distMm = tofClosestDistanceMm(&raw);
+
+  if (distMm > 0 && distMm < EVE_TOF_FAR_IGNORE_MM) {
+    s_snap.personDistanceMm = (float)distMm;
+    s_snap.personZone =
+        eveAwarenessZoneFromDistanceMm(distMm, EVE_TOF_FAR_IGNORE_MM);
+    s_snap.personConfidence = 100;
+  } else {
+    s_snap.personDistanceMm = -1.f;
+    s_snap.personZone = EVE_AWARENESS_ZONE_UNKNOWN;
+    s_snap.personConfidence = 0;
+  }
+
+  s_snap.personPresent =
+      s_snap.personConfidence >= EVE_AWARENESS_PERSON_PRESENT_THRESHOLD;
+#else
   s_snap.personPresent = false;
   s_snap.personDistanceMm = -1.f;
-  s_snap.personZone = 0;
+  s_snap.personZone = EVE_AWARENESS_ZONE_UNKNOWN;
   s_snap.personConfidence = 0;
+#endif
 }
 
 static void publishBatteryFacts(void) {
@@ -110,7 +161,7 @@ void eveAwarenessPrintSerial(void) {
     Serial.println(F("—"));
   }
   Serial.print(F("Zone.........."));
-  Serial.println(s_snap.personZone);
+  Serial.println(eveAwarenessZoneName(s_snap.personZone));
   Serial.print(F("Confidence...."));
   Serial.println(s_snap.personConfidence);
   Serial.print(F("Battery......."));
