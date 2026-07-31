@@ -146,6 +146,22 @@ static const unsigned long EVE_UART_BAUD = 115200;
 #define EVE_ENABLE_NEOPIXEL 0
 #define EVE_ENABLE_AUDIO 0
 
+// Phase O — Awareness (facts only; no behaviour/emotion side effects)
+#define EVE_ENABLE_AWARENESS 1
+/** Periodic AWARENESS block on Serial (bench) */
+#define EVE_AWARENESS_SERIAL_DEBUG 1
+#define EVE_AWARENESS_SERIAL_INTERVAL_MS 3000u
+/** O-2: personPresent = (personConfidence >= threshold). Behaviour never reads raw mm. */
+#define EVE_AWARENESS_PERSON_PRESENT_THRESHOLD 50u
+/** O-2 zone bands (mm) — tune here; EveAwarenessPersonZone enum stays frozen */
+#define EVE_AWARENESS_ZONE_PERSONAL_MAX_MM 550
+#define EVE_AWARENESS_ZONE_NEAR_MAX_MM 900
+#define EVE_AWARENESS_ZONE_MID_MAX_MM 1500
+/** O-3: positive pack current (A) counts as charging */
+#define EVE_AWARENESS_CHARGING_MIN_A 0.04f
+/** O-3: batteryLow derived when percent <= this (defaults to pack warn threshold) */
+#define EVE_AWARENESS_BATTERY_LOW_PCT EVE_BAT_WARN_PCT
+
 // Docked WebUI: EVE hosts a local AP only while on her dock.
 #define EVE_ENABLE_DOCKED_WEBUI 1
 #define EVE_WEBUI_AP_SSID "EVE-Desk"
