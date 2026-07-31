@@ -1,0 +1,66 @@
+name: Firmware Build
+
+on:
+  push:
+    branches:
+      - main
+      - "feature/**"
+      - "cursor/**"
+  pull_request:
+    branches:
+      - main
+      - "feature/**"
+
+concurrency:
+  group: firmware-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-matrix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3.12-venv
+
+      - name: Install PlatformIO
+        run: |
+          pip install --user platformio
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+          key: pio-${{ runner.os }}-${{ hashFiles('**/platformio.ini', 'firmware_common/platformio_pioarduino.ini') }}
+          restore-keys: |
+            pio-${{ runner.os }}-
+
+      - name: Generate version header
+        env:
+          SHOWDUINO_BUILD: ${{ github.run_number }}
+        run: ./scripts/gen_showduino_version.sh
+
+      - name: Build all firmware targets
+        run: ./scripts/build_all_firmware.sh
+
+      - name: Collect release binaries
+        run: ./scripts/collect_firmware_artifacts.sh dist/firmware
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-binaries
+          path: dist/firmware/*.bin
+          if-no-files-found: error
+          retention-days: 30

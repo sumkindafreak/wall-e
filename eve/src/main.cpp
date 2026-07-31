@@ -3,6 +3,7 @@
  * Primary link: UART1 (Serial1) to WALL-E hand pogo (see include/config.h).
  */
 #include <Arduino.h>
+#include "showduino_version.h"
 #include "config.h"
 #include "uart_link.h"
 #include "state_machine.h"
@@ -30,6 +31,7 @@ void setup() {
   Serial.begin(115200);
   randomSeed((uint32_t)micros());
   delay(300);
+  SHOWDUINO_LOG_BOOT_VERSION("eve");
   Serial.println();
   Serial.println(F("========================================"));
   Serial.println(F(" EVE companion node (ESP32-S3)"));

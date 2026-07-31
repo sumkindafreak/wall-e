@@ -45,3 +45,9 @@ Thumbs.db
 main_wall_E_base/main/ota_secrets.h
 vision_node_arduino/secrets.h
 vision_node/secrets.h
+
+# Generated firmware version (scripts/gen_showduino_version.sh)
+firmware_common/include/showduino_version_build.h
+
+# CI / local release bundle output
+dist/

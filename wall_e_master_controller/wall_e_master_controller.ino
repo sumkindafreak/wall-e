@@ -11,6 +11,7 @@
 // ============================================================
 
 #include <Arduino.h>
+#include "showduino_version.h"
 #include <TFT_eSPI.h>
 #include <esp_err.h>
 #include <esp_task_wdt.h>
@@ -127,6 +128,7 @@ static void triggerButtonMappedAnimation(uint8_t slot, const char* buttonName) {
 void setup() {
   Serial.begin(115200);
   delay(300);
+  SHOWDUINO_LOG_BOOT_VERSION("master_controller");
   Serial.println("\n[WALL-E Master] CYD Command Console");
 
   walleTaskWdtInit();
