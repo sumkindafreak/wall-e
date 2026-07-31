@@ -142,7 +142,7 @@ void menuStateOnButton(uint8_t menuBtn, unsigned long now) {
       audioPlayTrack(TRACK_ACK, PRIO_MENU);
       break;
     case WALLE_MENU_PAGE_SYSTEM_INFO:
-      Serial.printf("[MENU] SYSTEM uptime_ms=%lu dfplayer_ok=%d\n", (unsigned long)now, audioIsReady() ? 1 : 0);
+      Serial.printf("[MENU] SYSTEM uptime_ms=%lu audio_ok=%d\n", (unsigned long)now, audioIsReady() ? 1 : 0);
       break;
     case WALLE_MENU_PAGE_SAFE_REBOOT:
       if (s_rebootArmMs == 0) {
@@ -152,7 +152,7 @@ void menuStateOnButton(uint8_t menuBtn, unsigned long now) {
       } else if ((uint32_t)now - s_rebootArmMs < 8000u) {
         Serial.println(F("[BOOT] SAFE REBOOT confirmed"));
         audioPlayTrack(TRACK_MENU_EXIT_OK, PRIO_MENU);
-        delay(300); /* allow DFPlayer to start */
+        delay(300); /* allow WAV decode to start */
         ESP.restart();
       } else {
         s_rebootArmMs = 0;

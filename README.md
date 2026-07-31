@@ -104,7 +104,7 @@ flowchart TB
 |------|--------|------------------|
 | **Master controller** | `wall_e_master_controller/` | Touch UI, `ControlPacket` TX, `TelemetryPacket` RX; optional **SD card** (SPI) for macros, logs, profiles — see [wall_e_master_controller/README.md](wall_e_master_controller/README.md). |
 | **Base (locomotion)** | `main_wall_E_base/` | Motors, servos, Wi-Fi AP, HTTP (LROS, motion policy, sequences, optional EVE UART bridge), ESP-NOW RX/TX, docking FSM, node health registry. |
-| **Audio** | `audio_esp/` | Audio / DFPlayer path; ESP-NOW side channel to base. |
+| **Audio** | `audio_esp/` | SD-card WAV + I2S; ESP-NOW side channel to base. |
 | **Vision** | `vision_node/` or `vision_node_arduino/` | Camera + motion; `VisionPacket_t` to base. |
 | **Dock** | `dock_station/` | Charging, sensors, IR alignment receivers, dock beacon + `ir_align_hint`. |
 | **Web UI** | `webui/` | Static LROS assets; talks to **base** over HTTP (not ESP-NOW). |
@@ -134,7 +134,7 @@ Per-folder details: [wall_e_master_controller/README.md](wall_e_master_controlle
 |------|----------------|-------|
 | Master | ESP32 (e.g. CYD 2432S028) | TFT + touch; no motors. |
 | Base | ESP32-S3 | Tank drive, servos (I2C PWM), VL53L1X, obstacle bumpers; no modulated **IR TX** toward the dock in firmware. |
-| Audio | ESP32-S3 | DFPlayer or project-specific audio chain. |
+| Audio | ESP32-S3 | microSD WAV files + I2S amplifier. |
 | Vision | ESP32-S3 + PSRAM | OV2640; pin map is board-specific. |
 | Dock | ESP32-S3 | Charge MOSFET, ACS712, VL6180 I2C, TSOP IR receivers, NeoPixel, TFT. |
 

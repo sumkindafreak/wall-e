@@ -4,6 +4,7 @@
 #include "eve_acknowledgement_manager.h"
 #include "eve_head_tracking_manager.h"
 #include "eve_target_relay.h"
+#include "eve_emotion_engine.h"
 #include "servo_control.h"
 #include "config.h"
 
@@ -44,6 +45,10 @@ void eveSpatialAwarenessTick(uint32_t nowMs) {
 
   EveTargetSnapshot snap;
   eveTargetTrackerGetSnapshot(&snap);
+
+#if EVE_ENABLE_EYES
+  eveEmotionOnTofSnapshot(&snap, nowMs);
+#endif
 
   if (snap.zone != s_prevOut) {
     s_prevOut = snap.zone;

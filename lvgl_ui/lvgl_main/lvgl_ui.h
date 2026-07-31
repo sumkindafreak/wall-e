@@ -28,5 +28,5 @@ bool lvglUiIsSdReady(void);
 /** Modal: edit joystick / head tuning for the active profile (runtime). */
 void lvglUiProfileEditorOpen(void);
 
-/** Soundboard: broadcast DFPlayer track index (1–255) to audio node via ESP-NOW. */
+/** Soundboard: broadcast WAV track index (1–255) to audio node via ESP-NOW. */
 void lvglUiActionPlayAudioTrack(uint8_t track);

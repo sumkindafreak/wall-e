@@ -19,6 +19,11 @@ typedef enum {
   EVE_EXPR_TRACK_TARGET,
   EVE_EXPR_HAPPY,
   EVE_EXPR_CURIOUS,
+  EVE_EXPR_SAD,
+  EVE_EXPR_ANGRY,
+  EVE_EXPR_SLEEPY,
+  EVE_EXPR_THINKING,
+  EVE_EXPR_SURPRISED,
   EVE_EXPR_CONCERNED,
   EVE_EXPR_CONFUSED,
   EVE_EXPR_AFFECTION,
@@ -35,6 +40,8 @@ typedef struct {
   float gazeX; /* -1..1 */
   float gazeY;
   float lid;       /* 0 open, 1 closed */
+  float lidLeft;   /* per-eye override (wink); merged with lid in display */
+  float lidRight;
   float glowOpa;   /* 0–255 */
   float scanOpa;   /* 0–255 */
   float tiltDeg;   /* whole visor tilt */
@@ -61,6 +68,12 @@ void eveExpressionSetTracking(bool on);
 
 /** Legacy eyesSetMode: 0 neutral, 1 calm/social, 2 alert/confused */
 void eveExpressionSetLegacyMode(uint8_t mode);
+
+/** High-level emotion orchestrator (see eve_emotion_engine). EVE_EXPR_NEUTRAL_IDLE clears. */
+void eveExpressionSetOrchestrator(EveExpressionId id);
+
+/** Voice playback overlay: widens eyes, softens lids — no mouth animation. */
+void eveExpressionSetVoiceActive(bool on);
 
 #if EVE_FACE_DEBUG_BENCH
 void eveExpressionDebugSerialPoll(void);

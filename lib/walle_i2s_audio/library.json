@@ -1,0 +1,11 @@
+{
+  "name": "walle_i2s_audio",
+  "version": "1.0.0",
+  "description": "WALL-E / EVE SD-card WAV playback over I2S (non-blocking, queued)",
+  "frameworks": "arduino",
+  "platforms": "espressif32",
+  "build": {
+    "srcDir": "src",
+    "includeDir": "src"
+  }
+}

@@ -47,7 +47,9 @@ static uint8_t modeToProto(SystemMode m) {
 }
 static uint8_t faultToProto(const char* fault) {
   if (!fault || !*fault) return WALLE_AU_FAULT_NONE;
-  if (strstr(fault, "DFPLAYER")) return WALLE_AU_FAULT_DFPLAYER;
+  if (strstr(fault, "AUDIO") || strstr(fault, "I2S")) {
+    return WALLE_AU_FAULT_AUDIO;
+  }
   return WALLE_AU_FAULT_NONE;
 }
 

@@ -5,9 +5,9 @@
 #define AUDIO_ESP_CONFIG_H
 
 /*=============================================================================
- * UART (DFPlayer only; Base link is ESP-NOW)
+ * SD card + I2S WAV audio (Base link is ESP-NOW)
  *===========================================================================*/
-#define DFPLAYER_BAUD       9600
+#define I2S_AUDIO_PORT_INDEX 1
 #define VOICE_UART_BAUD     9600
 
 /*=============================================================================
@@ -33,7 +33,7 @@
 #define IR_ACTIVE_LOW       1   /* 1 = LOW when IR detected; 0 = HIGH when detected */
 
 /*=============================================================================
- * AUDIO — DFPlayer track IDs (001.mp3 = 1, 002.mp3 = 2, ...)
+ * AUDIO — WAV track IDs map to /audio/NNN.wav on SD card
  *===========================================================================*/
 #define TRACK_STARTUP       1
 #define TRACK_HELLO         2
@@ -44,7 +44,7 @@
 #define TRACK_WAKE          7
 #define TRACK_DOCK_GUIDE    8
 #define TRACK_STOP          9
-/* Character “fake MP3” + menu cues (place matching MP3s on SD: 010–016) */
+/* Character WAV cues (010.wav–016.wav on SD under /audio/) */
 #define TRACK_CHAR_PLAY         10
 #define TRACK_CHAR_STOP         11
 #define TRACK_CHAR_REWIND       12
