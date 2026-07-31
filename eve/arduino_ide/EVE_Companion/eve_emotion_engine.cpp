@@ -6,7 +6,7 @@
 #include "eve_expression_state.h"
 #include "eve_gaze_engine.h"
 #include "eve_idle_engine.h"
-#include "eve_eye_animations.h"
+#include "eve_eye_blink.h"
 #include <string.h>
 
 static EveEmotionState s_state = EVE_EMOTION_BOOT;
@@ -54,11 +54,11 @@ static void setState(EveEmotionState st, uint32_t nowMs) {
   eveExpressionSetOrchestrator(exprForState(st));
   if (st == EVE_EMOTION_SLEEP) {
     eveIdleSetEnabled(false);
-    eveEyeAnimationsSetSleepClosed(true);
+    eveEyeBlinkSetSleepClosed(true);
     eveGazeReturnCenter(1200);
   } else if (st == EVE_EMOTION_BOOT) {
     eveIdleSetEnabled(false);
-    eveEyeAnimationsWakeOpen();
+    eveEyeBlinkWakeOpen();
   } else {
     eveIdleSetEnabled(true);
     if (st == EVE_EMOTION_IDLE) {
@@ -119,8 +119,8 @@ void eveEmotionNotifySleep(bool sleeping) {
     setState(EVE_EMOTION_SLEEP, millis());
   } else if (s_state == EVE_EMOTION_SLEEP) {
     setState(EVE_EMOTION_IDLE, millis());
-    eveEyeAnimationsSetSleepClosed(false);
-    eveEyeAnimationsWakeOpen();
+    eveEyeBlinkSetSleepClosed(false);
+    eveEyeBlinkWakeOpen();
   }
 }
 
@@ -130,13 +130,13 @@ void eveEmotionNotifyVoice(bool playing, uint8_t track) {
   eveExpressionSetVoiceActive(playing);
   if (playing) {
     s_voiceUntil = millis() + 8000u;
-    eveEyeAnimationsTriggerWiden(0.22f);
+    eveEyeBlinkTriggerWiden(0.22f);
     if (s_state == EVE_EMOTION_IDLE || s_state == EVE_EMOTION_FOLLOW || s_state == EVE_EMOTION_CURIOUS) {
       setState(EVE_EMOTION_INTERACT, millis());
     }
     eveExpressionRequest(EVE_EXPR_SOFT_IDLE, 1800);
     if ((rand() % 4) == 0) {
-      eveEyeAnimationsTriggerBlink();
+      eveEyeBlinkTriggerRandom();
     }
   } else {
     s_voiceUntil = 0;
@@ -186,7 +186,7 @@ void eveEmotionOnTofSnapshot(const EveTargetSnapshot* snap, uint32_t nowMs) {
         eveGazeTrackZone(snap->zone);
         if (personClose(snap)) {
           eveExpressionRequest(EVE_EXPR_SURPRISED, 600);
-          eveEyeAnimationsTriggerWiden(0.35f);
+          eveEyeBlinkTriggerWiden(0.35f);
         }
       }
     } else {
@@ -226,7 +226,7 @@ void eveEmotionOnTofSnapshot(const EveTargetSnapshot* snap, uint32_t nowMs) {
 void eveEmotionTick(uint32_t nowMs) {
   if (s_state == EVE_EMOTION_BOOT && nowMs >= s_bootUntil) {
     setState(EVE_EMOTION_IDLE, nowMs);
-    eveEyeAnimationsWakeOpen();
+    eveEyeBlinkWakeOpen();
   }
 
   if (s_thinkingUntil != 0 && nowMs >= s_thinkingUntil) {
@@ -242,7 +242,7 @@ void eveEmotionTick(uint32_t nowMs) {
   }
 
   if (s_voice && (rand() % 900) == 0) {
-    eveEyeAnimationsTriggerBlink();
+    eveEyeBlinkTriggerRandom();
   }
 
   if (s_state != s_prevLogged) {

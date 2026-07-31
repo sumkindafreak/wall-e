@@ -4,7 +4,7 @@
 
 #include "eve_idle_engine.h"
 #include "eve_gaze_engine.h"
-#include "eve_eye_animations.h"
+#include "eve_eye_blink.h"
 #include "eve_expression_state.h"
 #include <stdlib.h>
 
@@ -139,21 +139,21 @@ void eveIdleTick(uint32_t nowMs) {
   IdleAction act = pickAction();
   switch (act) {
     case IDLE_ACT_BLINK:
-      eveEyeAnimationsTriggerBlink();
+      eveEyeBlinkTrigger((rand() & 1) ? EVE_EYE_SIDE_RIGHT : EVE_EYE_SIDE_LEFT);
       break;
     case IDLE_ACT_DOUBLE:
-      eveEyeAnimationsTriggerDoubleBlink();
+      eveEyeBlinkTriggerDouble((rand() & 1) ? EVE_EYE_SIDE_RIGHT : EVE_EYE_SIDE_LEFT);
       break;
     case IDLE_ACT_SLOW:
-      eveEyeAnimationsTriggerSlowBlink();
+      eveEyeBlinkTriggerSlow((rand() & 1) ? EVE_EYE_SIDE_RIGHT : EVE_EYE_SIDE_LEFT);
       break;
     case IDLE_ACT_WINK:
-      eveEyeAnimationsTriggerWink((rand() & 1) != 0);
+      eveEyeBlinkTriggerWink((rand() & 1) ? EVE_EYE_SIDE_LEFT : EVE_EYE_SIDE_RIGHT);
       break;
     case IDLE_ACT_GAZE_NUDGE: {
       float dx = ((float)(rand() % 200) / 100.f - 1.f) * 0.06f;
       float dy = ((float)(rand() % 200) / 100.f - 1.f) * 0.05f;
-      eveEyeAnimationsNudgeGaze(dx, dy);
+      eveEyeBlinkNudgeGaze(dx, dy);
       if ((rand() % 3) == 0) {
         eveGazeLook((EveGazeDirection)(1 + rand() % 4), randSpan(500, 1100));
       }
@@ -168,12 +168,12 @@ void eveIdleTick(uint32_t nowMs) {
     case IDLE_ACT_THINKING:
       eveExpressionRequest(EVE_EXPR_THINKING, randSpan(1400, 2600));
       eveGazeLook(EVE_GAZE_UP, randSpan(600, 1200));
-      eveEyeAnimationsTriggerSquint(0.35f);
+      eveEyeBlinkTriggerSquint(0.35f);
       break;
     case IDLE_ACT_SLEEPY:
       eveExpressionRequest(EVE_EXPR_SLEEPY, randSpan(1200, 2200));
-      eveEyeAnimationsTriggerSlowBlink();
-      eveEyeAnimationsTriggerSquint(0.25f);
+      eveEyeBlinkTriggerSlow((rand() & 1) ? EVE_EYE_SIDE_RIGHT : EVE_EYE_SIDE_LEFT);
+      eveEyeBlinkTriggerSquint(0.25f);
       break;
     default:
       break;
