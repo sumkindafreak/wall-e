@@ -1,5 +1,7 @@
 # EVE software architecture
 
+**Read first:** [`EVE_VISION.md`](EVE_VISION.md) — why this stack exists (companion coherence, not animatronics).
+
 **Architecture status:** **Locked**. The stack does not get redesigned — EVE evolves **inside** it through **experiences** (behaviour, presence, continuity). Phase N (Eye Controller) is **mature** — Phase R polish only.
 
 The question shifts from *"what should the architecture be?"* to *"what experiences should EVE create?"*
@@ -25,6 +27,20 @@ Each rung supports the next; no phase invalidates the previous.
 | Phases O–P | Building **behaviour** |
 | Phase S | Building **presence** |
 | Phase T | Building **continuity** |
+
+---
+
+## Three timescales
+
+Each layer runs on a different clock (see `EVE_VISION.md`):
+
+| Timescale | Examples | Primary layers |
+|-----------|----------|----------------|
+| **Milliseconds** | Blink, gaze ease, WAV playback | Outputs |
+| **Seconds** | Greet, follow, investigate, conversation | Awareness, Behaviour, Emotion |
+| **Hours / days** | Remembered interactions, personality profile | Memory, Character |
+
+Do not mix clocks (e.g. long-term recall inside blink timing).
 
 ---
 
@@ -355,6 +371,20 @@ Platform (pioarduino 3.3.9, CI, artifacts, versioning), SD asset manager, native
 ---
 
 ## Design discipline
+
+### Which layer owns the decision?
+
+> **When adding a new feature, first decide which layer owns the decision — not which file should contain the code.**
+
+| Example | Layer |
+|---------|--------|
+| Battery low | Awareness |
+| Looks tired | Emotion |
+| Chooses to dock | Behaviour |
+| Remembers yesterday | Memory |
+| Waits longer before greet (shy) | Character |
+
+### Where features land
 
 New features should land in **exactly one** layer:
 
