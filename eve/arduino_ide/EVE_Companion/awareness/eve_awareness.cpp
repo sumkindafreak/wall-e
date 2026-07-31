@@ -4,6 +4,7 @@
 
 #include "eve_awareness.h"
 #include "eve_awareness_zones.h"
+#include "eve_awareness_battery.h"
 #include "battery_monitor.h"
 #include "state_machine.h"
 #include "system_status.h"
@@ -81,11 +82,30 @@ static void publishPersonFacts(void) {
 }
 
 static void publishBatteryFacts(void) {
-  s_snap.batteryVoltage = eveBatteryDataValid() ? eveBatteryVoltage() : 0.f;
-  s_snap.batteryLow = eveBatteryIsCritical() || eveBatteryStatus() == EVE_BAT_WARN ||
-                      eveBatteryStatus() == EVE_BAT_CRITICAL;
-  s_snap.charging =
-      stateMachineIsDocked() && eveBatteryDataValid() && eveBatteryCurrentA() > 0.04f;
+#if EVE_ENABLE_BATTERY_MONITOR
+  const bool valid = eveBatteryDataValid();
+  if (valid) {
+    s_snap.batteryVoltage = eveBatteryVoltage();
+    s_snap.batteryPercent = (int8_t)eveBatteryPercent();
+    s_snap.batteryHealth =
+        eveAwarenessBatteryHealthFromStatus(eveBatteryStatus(), true);
+  } else {
+    s_snap.batteryVoltage = 0.f;
+    s_snap.batteryPercent = -1;
+    s_snap.batteryHealth = EVE_AWARENESS_BATTERY_HEALTH_UNKNOWN;
+  }
+
+  s_snap.charging = eveAwarenessChargingFromCurrentA(eveBatteryCurrentA(), valid,
+                                                     EVE_AWARENESS_CHARGING_MIN_A);
+  s_snap.batteryLow =
+      eveAwarenessBatteryLowFromPercent(s_snap.batteryPercent, EVE_AWARENESS_BATTERY_LOW_PCT);
+#else
+  s_snap.batteryVoltage = 0.f;
+  s_snap.batteryPercent = -1;
+  s_snap.batteryLow = false;
+  s_snap.charging = false;
+  s_snap.batteryHealth = EVE_AWARENESS_BATTERY_HEALTH_UNKNOWN;
+#endif
 }
 
 static void publishDockFacts(void) {
@@ -164,13 +184,21 @@ void eveAwarenessPrintSerial(void) {
   Serial.println(eveAwarenessZoneName(s_snap.personZone));
   Serial.print(F("Confidence...."));
   Serial.println(s_snap.personConfidence);
-  Serial.print(F("Battery......."));
+  Serial.print(F("Battery V....."));
   Serial.print(s_snap.batteryVoltage, 2);
   Serial.println(F("V"));
+  Serial.print(F("Battery %....."));
+  if (s_snap.batteryPercent >= 0) {
+    Serial.println(s_snap.batteryPercent);
+  } else {
+    Serial.println(F("—"));
+  }
   Serial.print(F("Battery low..."));
   printYesNo(s_snap.batteryLow);
   Serial.print(F("Charging......"));
   printYesNo(s_snap.charging);
+  Serial.print(F("Batt health..."));
+  Serial.println(eveAwarenessBatteryHealthName(s_snap.batteryHealth));
   Serial.print(F("Docked........"));
   printYesNo(s_snap.docked);
   Serial.print(F("WALL-E link..."));

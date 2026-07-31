@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 #include "eve_awareness_zones.h"
+#include "eve_awareness_battery.h"
 
 typedef struct {
   /* Person (O-2: ToF publisher fills these four fields only) */
@@ -14,10 +15,14 @@ typedef struct {
   uint8_t personZone; /* EveAwarenessPersonZone */
   uint8_t personConfidence; /* 0–100 */
 
-  /* Robot power / dock */
-  bool batteryLow;
+  /* Battery (O-3: battery_monitor — exactly these five facts) */
+  bool batteryLow; /* derived: batteryPercent <= EVE_AWARENESS_BATTERY_LOW_PCT */
   float batteryVoltage;
-  bool charging;
+  bool charging; /* derived: charge current > EVE_AWARENESS_CHARGING_MIN_A */
+  int8_t batteryPercent; /* 0–100, or -1 if unknown */
+  uint8_t batteryHealth; /* EveAwarenessBatteryHealth */
+
+  /* Dock (separate publisher — not battery chemistry) */
   bool docked;
 
   /* Connectivity */
