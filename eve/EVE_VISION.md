@@ -122,3 +122,39 @@ Everything else follows.
 Hardware fades into the background. People interacting with EVE feel like they are interacting with **her** — not a board, not a demo, not a feature list.
 
 Consistency across time scales creates that illusion. Complexity does not.
+
+---
+
+## Going forward (architecture complete)
+
+**Architectural saturation reached.** Documentation now serves the project; do not chase it with more layer diagrams or redesigns.
+
+### Believability over capability
+
+> **Every new capability must make EVE feel more believable, not merely more capable.**
+
+Those are not the same thing.
+
+- Facial recognition — only if it improves **continuity**
+- Speech recognition — only if it improves **conversation**
+- More sensors — only if they lead to more **natural behaviour**
+- More animations — only if they improve **expression**
+
+Complexity that does not strengthen the illusion is probably not worth adding.
+
+### One question per PR
+
+> **Does this make EVE feel more like herself?**
+
+Not: *Is it technically clever?* *Does it use more AI?* *Does it add another checkbox?*
+
+Instead: *Does this make her behaviour more coherent?*
+
+People forgive limited capabilities when a robot is **internally consistent**. They are less forgiving of impressive tech that behaves unpredictably.
+
+### Next implementation step
+
+**Phase O — Awareness.** Not the flashiest subsystem, but the first place the architecture becomes *real*. Once `EveAwarenessSnapshot` exists, everything above evolves independently as long as that contract stays stable.
+
+From here the question is not *"How should EVE be built?"* but **"What should EVE experience next?"**
+
