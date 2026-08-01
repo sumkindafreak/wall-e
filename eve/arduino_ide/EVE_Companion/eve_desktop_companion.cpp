@@ -7,7 +7,7 @@
 #include "neopixel_control.h"
 #include "servo_control.h"
 #include "uart_link.h"
-#include "../../../firmware_common/include/eve_personality.h"
+#include "../../firmware_common/include/eve_personality.h"
 
 #if EVE_ENABLE_EYES
 #include "eve_expression_state.h"

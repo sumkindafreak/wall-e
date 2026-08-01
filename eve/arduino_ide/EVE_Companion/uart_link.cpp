@@ -3,6 +3,7 @@
  */
 #include "uart_link.h"
 #include "config.h"
+#include <HardwareSerial.h>
 #include <string.h>
 
 static EveUartRxCallback s_rxCb = nullptr;

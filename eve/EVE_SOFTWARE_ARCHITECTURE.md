@@ -345,8 +345,8 @@ Steps 3–4: Character **biases** Behaviour; it does not choose expressions or p
 
 | Phase | Milestone | Focus |
 |-------|-----------|--------|
-| **O** | V2 | Awareness — sensor fusion, unified snapshot, confidence, no decisions |
-| **P** | V2 | Behaviour intelligence — Idle, Curious, Follow, Greeting, Sleep (+ Conversation) |
+| **O** | V2 | Awareness — O-1…O-5 incremental publishers; append-only snapshot; **complete at O-5** |
+| **P** | V2 | Behaviour — **P-1 Observe** (`IdleBehaviour`), then Curious, Follow, Greeting, … |
 | **Q** | V2 | Emotion refactor — remove world logic; affect + eye/audio hints only |
 | **R** | V2 | Expression polish — micro-saccades, async blinks, gaze easing, dwell |
 | **S** | **V3** | **Character System** — personality (bias, not fork), mood, preferences |

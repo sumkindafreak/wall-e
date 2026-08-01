@@ -21,7 +21,6 @@ void servoSetHeadPanTarget(int16_t deg) {
 
 void servoSetRightArmTarget(int16_t deg) {
   s_rightArmTarget = (int16_t)constrain((int)deg, 0, 180);
-  /* When servos are enabled and a right pin exists, map to output in servoTick. */
 }
 
 void servoTick(void) {

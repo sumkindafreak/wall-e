@@ -34,11 +34,33 @@ arduino_ide/
 
 4. **Port:** pick the COM port for your USB cable.
 
-## Library
+## Libraries
 
-Install **ArduinoJson** version **6.x**:
+### Bundled with the sketch (no extra install)
 
-- *Sketch → Include Library → Manage Libraries…* → search **ArduinoJson** → install **ArduinoJson** by **Benoit Blanchon** (v6.21.x or newer).
+These `.cpp` / `.h` files live **inside** `EVE_Companion/` and compile as sketch tabs:
+
+- **`walle_i2s_wav_player`** — SD → WAV → I2S audio (same as `lib/walle_i2s_audio` in PlatformIO)
+
+After changing the shared library under repo `lib/walle_i2s_audio/`, refresh the IDE copy:
+
+```bash
+cd eve && bash scripts/sync_arduino_i2s_lib.sh
+```
+
+Optional: install as a global library instead — copy `arduino_ide/libraries/walle_i2s_audio` to your Arduino **libraries** folder (e.g. `Documents/Arduino/libraries/`), then you may remove the duplicate tabs from the sketch folder if you prefer.
+
+### Install via Library Manager
+
+- **ArduinoJson** version **6.x** (Benoit Blanchon)
+
+### When `EVE_ENABLE_EYES` is 1
+
+You also need **LVGL 9** and **Arduino_GFX** (see `PHASE_J_EVE_FACE.md`). With eyes off (default in `config.h`), you can verify without them.
+
+### When `EVE_ENABLE_BATTERY_MONITOR` + INA219
+
+Install **Adafruit INA219** and **Adafruit BusIO** from Library Manager.
 
 ## Compile & upload
 
@@ -50,4 +72,12 @@ You should see `[EVE][UART]` and periodic `EVE_HELLO` until WALL-E answers with 
 
 ## Keeping in sync with PlatformIO
 
-The files under `EVE_Companion/` are meant to stay **logically identical** to `eve/src/` + `eve/include/` from the repo root. After editing one tree, copy changes to the other if you use both tools.
+From repo `eve/` folder, run:
+
+```bash
+bash scripts/sync_arduino_ide.sh
+```
+
+This copies `include/`, `src/` (except `main.cpp`), `awareness/`, `walle_i2s_audio`, and regenerates `EVE_Companion.ino` from `src/main.cpp`.
+
+After pulling git changes, **run sync again** before opening Arduino IDE.
