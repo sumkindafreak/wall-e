@@ -1,8 +1,9 @@
 /**
- * Personal Companion Robot — RoboEyes + SSD1306 OLED demo
+ * Personal Companion Robot — RoboEyes + SSD1306 OLED **bench demo only**
  *
- * Originally wired for ESP8266 NodeMCU (D1/D2/D5 names).
- * Also builds on ESP32 / ESP32-S3 when you pick the correct board in Arduino IDE.
+ * This is NOT the EVE companion firmware. EVE has no touch screen and no
+ * 128x64 OLED — she uses dual LVGL eyes (see arduino_ide/EVE_Companion or
+ * PlatformIO eve_s3). Use this sketch only for a separate ESP8266/ESP32 + OLED toy.
  *
  * Libraries: Adafruit GFX, Adafruit SSD1306, FluxGarage RoboEyes
  */
@@ -15,14 +16,14 @@
 #define SCREEN_HEIGHT 64
 
 #if defined(ARDUINO_ARCH_ESP8266)
-/** Wemos D1 Mini / NodeMCU style */
+/** Wemos D1 Mini — optional touch pad on D5 */
 #define TOUCH_PIN D5
 #define I2C_SDA D2
 #define I2C_SCL D1
 #elif defined(ARDUINO_ARCH_ESP32)
-/** ESP32 / ESP32-S3 — match your OLED + touch wiring */
+/** ESP32 / ESP32-S3 — EVE has no touch; default -1 = eyes idle only */
 #ifndef COMPANION_TOUCH_PIN
-#define COMPANION_TOUCH_PIN 14
+#define COMPANION_TOUCH_PIN (-1)
 #endif
 #ifndef COMPANION_I2C_SDA
 #define COMPANION_I2C_SDA 8
@@ -34,8 +35,7 @@
 #define I2C_SDA COMPANION_I2C_SDA
 #define I2C_SCL COMPANION_I2C_SCL
 #else
-/** Generic fallback (NodeMCU GPIO numbers) */
-#define TOUCH_PIN 14
+#define TOUCH_PIN (-1)
 #define I2C_SDA 4
 #define I2C_SCL 5
 #endif
@@ -47,8 +47,14 @@ RoboEyes<Adafruit_SSD1306> roboEyes(display);
 
 bool moveNE = true;
 
+static bool touchEnabled(void) {
+  return TOUCH_PIN >= 0;
+}
+
 void setup() {
-  pinMode(TOUCH_PIN, INPUT);
+  if (touchEnabled()) {
+    pinMode(TOUCH_PIN, INPUT);
+  }
   Wire.begin(I2C_SDA, I2C_SCL);
 
   if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
@@ -65,20 +71,16 @@ void setup() {
 }
 
 void loop() {
-  bool touched = digitalRead(TOUCH_PIN);
+  const bool touched = touchEnabled() && (digitalRead(TOUCH_PIN) == HIGH);
   unsigned long now = millis();
 
-  // ========= TAP / TOUCH =========
-  if (touched == HIGH) {
-
+  if (touched) {
     roboEyes.setMood(HAPPY);
     roboEyes.setAutoblinker(OFF);
     roboEyes.setIdleMode(OFF);
 
-    // smooth NE <-> NW movement
     if (now - touchedTime > 150) {
       touchedTime = now;
-
       if (moveNE) {
         roboEyes.setPosition(NE);
       } else {
@@ -86,14 +88,10 @@ void loop() {
       }
       moveNE = !moveNE;
     }
-  }
-
-  // ========= NORMAL IDLE =========
-  else {
+  } else {
     roboEyes.setMood(DEFAULT);
     roboEyes.setAutoblinker(ON, 3, 2);
     roboEyes.setIdleMode(ON, 2, 2);
-    // DO NOT force setPosition(DEFAULT)
   }
 
   roboEyes.update();
