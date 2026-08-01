@@ -1,5 +1,7 @@
 # Phase O-4 — Connection → Awareness (link facts)
 
+**Status: frozen when merged.** Exactly three connection facts — present tense only.
+
 **Goal:** EVE knows **"What am I connected to?"** — not what to do because of it.
 
 Present-tense facts only. No `wallERecentlyDisconnected` (that is Memory, Phase T).
