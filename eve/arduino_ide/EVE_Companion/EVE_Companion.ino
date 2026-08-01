@@ -1,18 +1,20 @@
 /**
- * EVE companion node — Arduino IDE sketch (ESP32-S3, same logic as PlatformIO eve/)
+ * EVE companion node — Arduino IDE (ESP32-S3 N16R8)
  *
- * Hand link: Serial1 @ GPIO17 TX / GPIO18 RX to WALL-E (see config.h).
+ * Same logic as PlatformIO `eve/src/main.cpp`. Regenerate after PIO edits:
+ *   bash scripts/sync_arduino_ide.sh
  *
- * Libraries (Library Manager): ArduinoJson 6.x; lvgl 9.x; GFX Library for Arduino (moononournation).
- * Battery/current: Adafruit INA219 + Adafruit BusIO (when EVE_BATTERY_INA219 in config.h).
- * Optional ToF: Pololu VL53L1X. walle_i2s_wav_player.* bundled in this folder.
+ * Hand link: Serial1 @ GPIO17 TX / GPIO18 RX (see config.h).
  *
- * Board: ESP32S3 Dev Module (16 MB flash, OPI PSRAM in Tools menu).
- * Regenerate this tree: bash scripts/sync_arduino_ide.sh
- */
-/**
- * EVE companion — ESP32-S3 N16R8
- * Primary link: UART1 (Serial1) to WALL-E hand pogo (see include/config.h).
+ * Libraries (Library Manager):
+ *   - ArduinoJson 6.x
+ *   - Adafruit INA219 + Adafruit BusIO (battery, when enabled in config.h)
+ *   - lvgl 9 + Arduino_GFX (eyes only, when EVE_ENABLE_EYES)
+ *   - Pololu VL53L1X (ToF, when EVE_ENABLE_TOF)
+ *
+ * Bundled in this sketch folder: walle_i2s_wav_player.* (SD → WAV → I2S; no DFPlayer).
+ *
+ * Board: ESP32S3 Dev Module — 16 MB flash, OPI PSRAM enabled in Tools menu.
  */
 #include <Arduino.h>
 #include "config.h"
