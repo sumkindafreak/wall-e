@@ -20,6 +20,8 @@ static const unsigned long EVE_UART_BAUD = 115200;
 
 // -----------------------------------------------------------------------------
 // SD card (SPI) — primary asset storage for audio, config, graphics
+// Playback: SD → WAV (walle_i2s_wav_player) → I2S amp. DFPlayer Mini is NOT used.
+// Implementation: eve_asset_manager.cpp (mount, /config/*.json, /audio/*.wav)
 // -----------------------------------------------------------------------------
 #define EVE_SD_SPI_CS (-1)
 #define EVE_SD_SPI_MOSI (-1)
