@@ -1,13 +1,18 @@
 /**
- * EVE companion node — Arduino IDE sketch (ESP32-S3, same logic as ../ PlatformIO eve/)
+ * EVE companion node — Arduino IDE sketch (ESP32-S3, same logic as PlatformIO eve/)
  *
  * Hand link: Serial1 @ GPIO17 TX / GPIO18 RX to WALL-E (see config.h).
  *
  * Libraries (Library Manager): ArduinoJson 6.x; lvgl 9.x; GFX Library for Arduino (moononournation).
  * Battery/current: Adafruit INA219 + Adafruit BusIO (when EVE_BATTERY_INA219 in config.h).
- * Optional ToF: Pololu VL53L1X. Place lv_conf.h in this sketch folder when using LVGL 9 face.
+ * Optional ToF: Pololu VL53L1X. walle_i2s_wav_player.* bundled in this folder.
  *
- * Board: ESP32S3 Dev Module (match your N16R8 module: 16 MB flash, OPI PSRAM in Tools menu).
+ * Board: ESP32S3 Dev Module (16 MB flash, OPI PSRAM in Tools menu).
+ * Regenerate this tree: bash scripts/sync_arduino_ide.sh
+ */
+/**
+ * EVE companion — ESP32-S3 N16R8
+ * Primary link: UART1 (Serial1) to WALL-E hand pogo (see include/config.h).
  */
 #include <Arduino.h>
 #include "config.h"
@@ -40,7 +45,7 @@ void setup() {
   delay(300);
   Serial.println();
   Serial.println(F("========================================"));
-  Serial.println(F(" EVE companion (Arduino IDE build)"));
+  Serial.println(F(" EVE companion node (ESP32-S3)"));
   Serial.println(F(" UART hand link: Serial1"));
   Serial.println(F("========================================"));
 

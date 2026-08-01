@@ -4,7 +4,6 @@
 #pragma once
 
 #include <stdint.h>
-#include "battery_monitor.h"
 
 typedef enum {
   EVE_AWARENESS_BATTERY_HEALTH_UNKNOWN = 0,
@@ -13,16 +12,22 @@ typedef enum {
   EVE_AWARENESS_BATTERY_HEALTH_CRITICAL,
 } EveAwarenessBatteryHealth;
 
-static inline uint8_t eveAwarenessBatteryHealthFromStatus(EveBatStatus status, bool valid) {
+/** Match EveBatStatus in battery_monitor.h (host tests use these literals). */
+#define EVE_AWARENESS_BAT_STATUS_OK 0
+#define EVE_AWARENESS_BAT_STATUS_WARN 1
+#define EVE_AWARENESS_BAT_STATUS_CRITICAL 2
+#define EVE_AWARENESS_BAT_STATUS_UNKNOWN 3
+
+static inline uint8_t eveAwarenessBatteryHealthFromStatus(int status, bool valid) {
   if (!valid) {
     return EVE_AWARENESS_BATTERY_HEALTH_UNKNOWN;
   }
   switch (status) {
-    case EVE_BAT_OK:
+    case EVE_AWARENESS_BAT_STATUS_OK:
       return EVE_AWARENESS_BATTERY_HEALTH_OK;
-    case EVE_BAT_WARN:
+    case EVE_AWARENESS_BAT_STATUS_WARN:
       return EVE_AWARENESS_BATTERY_HEALTH_WARN;
-    case EVE_BAT_CRITICAL:
+    case EVE_AWARENESS_BAT_STATUS_CRITICAL:
       return EVE_AWARENESS_BATTERY_HEALTH_CRITICAL;
     default:
       return EVE_AWARENESS_BATTERY_HEALTH_UNKNOWN;

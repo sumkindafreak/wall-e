@@ -72,6 +72,12 @@ You should see `[EVE][UART]` and periodic `EVE_HELLO` until WALL-E answers with 
 
 ## Keeping in sync with PlatformIO
 
-The files under `EVE_Companion/` are meant to stay **logically identical** to `eve/src/` + `eve/include/` from the repo root. After editing one tree, copy changes to the other if you use both tools.
+From repo `eve/` folder, run:
 
-Run `bash scripts/sync_arduino_i2s_lib.sh` after updating `lib/walle_i2s_audio/`.
+```bash
+bash scripts/sync_arduino_ide.sh
+```
+
+This copies `include/`, `src/` (except `main.cpp`), `awareness/`, `walle_i2s_audio`, and regenerates `EVE_Companion.ino` from `src/main.cpp`.
+
+After pulling git changes, **run sync again** before opening Arduino IDE.

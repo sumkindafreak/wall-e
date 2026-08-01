@@ -2,8 +2,8 @@
 
 #include <math.h>
 
-#if __has_include("../../../firmware_common/include/learning_engine.h")
-#include "../../../firmware_common/include/learning_engine.h"
+#if __has_include("../../firmware_common/include/learning_engine.h")
+#include "../../firmware_common/include/learning_engine.h"
 #define EVE_MIC_HAVE_LEARNING 1
 #else
 #define EVE_MIC_HAVE_LEARNING 0

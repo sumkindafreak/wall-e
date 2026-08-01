@@ -56,11 +56,12 @@
 #define LV_USE_ANIMATION 1
 #define LV_USE_CANVAS 1
 #define LV_USE_ARC 1
-#define LV_USE_IMAGE 0
+#define LV_USE_IMAGE 1
 #define LV_USE_LABEL 1
 #define LV_USE_OBJ 1
 
 #define LV_USE_DRAW_SW 1
+#define LV_USE_DRAW_SW_ASM LV_DRAW_SW_ASM_NONE
 
 #define LV_USE_THEME_DEFAULT 1
 #define LV_THEME_DEFAULT_DARK 1
