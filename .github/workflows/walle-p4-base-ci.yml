@@ -53,7 +53,7 @@ jobs:
         run: |
           arduino-cli compile \
             --warnings all \
-            --fqbn 'esp32:esp32:esp32p4:UploadSpeed=921600,USBMode=default,CDCOnBoot=cdc,FlashFreq=80,FlashMode=qio,FlashSize=16M,PartitionScheme=app3M_fat9M_16MB,PSRAM=enabled,ChipVariant=postv3' \
+            --fqbn 'esp32:esp32:esp32p4:UploadSpeed=921600,USBMode=default,CDCOnBoot=default,MSCOnBoot=default,DFUOnBoot=default,UploadMode=default,FlashFreq=80,FlashMode=qio,FlashSize=16M,PartitionScheme=app3M_fat9M_16MB,PSRAM=enabled,EraseFlash=none,JTAGAdapter=default,ChipVariant=postv3' \
             main_wall_E_base/main
 
   c6-radio-gateway:
