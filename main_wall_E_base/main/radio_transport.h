@@ -3,26 +3,22 @@
 #include <Arduino.h>
 #include <stddef.h>
 #include <stdint.h>
+#include "base_board_pins.h"
 
 // ============================================================
 // WALL-E Base radio transport
 //
-// ESP32-S3/other Wi-Fi ESPs: native ESP-NOW.
-// ESP32-P4: framed UART link to a dedicated ESP32 radio gateway.
+// Radio-capable ESP32 regression builds: native ESP-NOW.
+// ESP32-P4 production Base: framed UART link to ESP32-C6/C3/S3 gateway.
 // ============================================================
 
 #ifndef WALLE_RADIO_CHANNEL
 #define WALLE_RADIO_CHANNEL 11
 #endif
 
-// P4 UART defaults. These are ordinary GPIO-matrix UART pins and can be
-// changed here to match the two header pins chosen for the gateway link.
-#ifndef WALLE_RADIO_UART_RX
-#define WALLE_RADIO_UART_RX 24
-#endif
-#ifndef WALLE_RADIO_UART_TX
-#define WALLE_RADIO_UART_TX 25
-#endif
+#define WALLE_RADIO_UART_RX  BASE_PIN_RADIO_UART_RX
+#define WALLE_RADIO_UART_TX  BASE_PIN_RADIO_UART_TX
+
 #ifndef WALLE_RADIO_UART_BAUD
 #define WALLE_RADIO_UART_BAUD 921600UL
 #endif
