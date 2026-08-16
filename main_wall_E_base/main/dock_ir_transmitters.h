@@ -1,15 +1,15 @@
 #pragma once
 
 #include <stdint.h>
+#include "base_board_pins.h"
 
 /*******************************************************************************
- * Dock IR transmitters — two ~38 kHz LEDs on WALL-E aimed at the dock’s two
- * TSOP-style receivers. Alignment feedback: dock → ESP-NOW ir_align_hint.
- * Edit pins here if they clash with I2C or other wiring.
+ * Dock IR transmitters — two ~38 kHz LEDs on WALL-E aimed at the dock's
+ * left/right receivers. Alignment feedback returns via the dock radio beacon.
  ******************************************************************************/
 
-#define DOCK_IR_TX_LEFT_PIN   21
-#define DOCK_IR_TX_RIGHT_PIN  38
+#define DOCK_IR_TX_LEFT_PIN   BASE_PIN_DOCK_IR_LEFT
+#define DOCK_IR_TX_RIGHT_PIN  BASE_PIN_DOCK_IR_RIGHT
 
 void dockIrTransmittersInit(void);
 void dockIrTransmittersSetEnabled(bool on);
