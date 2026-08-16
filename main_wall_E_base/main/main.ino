@@ -1,8 +1,8 @@
 // ============================================================
 // Arduino IDE: open this folder ("main") and main.ino.
-// WALL-E Base Brain — ESP32-P4 primary target
+// WALL-E Base Brain — ESP32-S3 production target
 // Motor: L298N Dual H-Bridge
-// Radio: native ESP-NOW on radio ESPs, UART gateway on ESP32-P4
+// Radio: native Wi-Fi / ESP-NOW on the Base S3
 // ============================================================
 
 #include <Arduino.h>
@@ -53,11 +53,7 @@ unsigned long lastCommandMillis = 0;
 void setup() {
   Serial.begin(115200);
   delay(200);
-#if defined(CONFIG_IDF_TARGET_ESP32P4)
-  Serial.println("\n[WALL-E/P4] Starting Base Brain...");
-#else
-  Serial.println("\n[WALL-E] Starting Base Brain...");
-#endif
+  Serial.println("\n[WALL-E/S3] Starting Base Brain...");
 
   // Motors safe first — always.
   motorInit();
@@ -101,9 +97,8 @@ void setup() {
 
   dockSensorsBegin();
 
-  // Network/UI path. On P4 the Arduino core can provide Wi-Fi through a
-  // supported hosted radio configuration; radio_transport remains separate
-  // because ESP-NOW itself is not provided through ESP-Hosted.
+  // The Base S3 owns Wi-Fi directly. ESP-NOW uses the same radio hardware,
+  // while radio_transport keeps packet ownership in one place.
   wifiManagerInit();
   displayUpdateWifi();
 
@@ -116,7 +111,7 @@ void setup() {
   sequenceEngineInit();
   webServerInit();
 
-  // Radio receive/send abstraction. P4 uses the UART gateway.
+  // Native ESP-NOW receive/send abstraction on the Base S3.
   espnowReceiverInit();
   audioEspNowInit();
   nodeHealthInit();
@@ -129,7 +124,7 @@ void setup() {
   flashlightInit();
 
   lastCommandMillis = millis();
-  Serial.println("[WALL-E] Ready");
+  Serial.println("[WALL-E/S3] Ready");
 }
 
 unsigned long lastTelemSendMs = 0;
@@ -140,8 +135,8 @@ void loop() {
   const unsigned long now = millis();
   yield();
 
-  // P4 UART gateway must be drained continuously; native ESP-NOW makes this
-  // call effectively free.
+  // Native ESP-NOW is callback-driven; this remains as the transport service
+  // hook so higher-level code does not depend on the radio implementation.
   espnowReceiverHandle();
 
   WiFiState prevState = wifiGetState();
