@@ -7,12 +7,12 @@
 //   - Accept opaque TX packets from the P4 and transmit them by ESP-NOW.
 //   - Never interpret WALL-E commands; it is only a transport bridge.
 //
-// Wiring (defaults, change pins below to suit your gateway board):
+// Wiring:
 //   P4 TX GPIO25  -> C6 RX GPIO17
 //   P4 RX GPIO24  <- C6 TX GPIO16
 //   P4 GND        -- C6 GND
 //
-// Target: ESP32-C6 Dev Module, Arduino-ESP32 3.x
+// Target: ESP32-C6 Dev Module, Arduino-ESP32 3.3.x
 // ============================================================
 
 #include <Arduino.h>
@@ -23,9 +23,6 @@
 #include <freertos/queue.h>
 #include "../protocols/walle_radio_bridge_protocol.h"
 
-// ------------------------------------------------------------
-// User-adjustable gateway configuration
-// ------------------------------------------------------------
 #define GATEWAY_ESPNOW_CHANNEL  11
 #define GATEWAY_UART_BAUD       921600UL
 #define GATEWAY_UART_RX_PIN     17
@@ -66,10 +63,6 @@ enum ParserState : uint8_t {
 };
 static ParserState s_parserState = PARSER_WAIT_SOF_LO;
 
-// ============================================================
-// Framed UART helpers
-// ============================================================
-
 static void parserReset() {
   s_parserState = PARSER_WAIT_SOF_LO;
   s_parserPos = 0;
@@ -105,7 +98,6 @@ static bool bridgeWriteFrame(uint8_t type,
       (uint8_t)(crc >> 8)
   };
   written += BridgeSerial.write(crcBytes, sizeof(crcBytes));
-
   return written == sizeof(header) + payloadLength + sizeof(crcBytes);
 }
 
@@ -113,7 +105,7 @@ static void bridgeSendStatus() {
   WalleRadioGatewayStatus status = {};
   status.ready = s_radioReady ? 1u : 0u;
   status.channel = s_channel;
-  status.peerCount = 0; // ESP-NOW does not expose a cheap portable peer-count API.
+  status.peerCount = 0;
   status.uptimeMs = millis();
   status.rxPackets = s_rxPackets;
   status.txPackets = s_txPackets;
@@ -124,13 +116,8 @@ static void bridgeSendStatus() {
                          sizeof(status));
 }
 
-// ============================================================
-// ESP-NOW helpers
-// ============================================================
-
 static bool setRadioChannel(uint8_t channel) {
   if (channel < 1 || channel > 13) return false;
-
   if (esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE) != ESP_OK) {
     return false;
   }
@@ -164,7 +151,7 @@ static void onEspNowReceive(const esp_now_recv_info_t* info,
   GatewayRxItem item = {};
   memcpy(item.sourceMac, info->src_addr, 6);
   item.rssi = info->rx_ctrl ? (int8_t)info->rx_ctrl->rssi : -127;
-  item.channel = s_channel;
+  item.channel = info->rx_ctrl ? (uint8_t)info->rx_ctrl->channel : s_channel;
   item.length = (uint16_t)length;
   memcpy(item.data, data, (size_t)length);
 
@@ -173,9 +160,11 @@ static void onEspNowReceive(const esp_now_recv_info_t* info,
   }
 }
 
-static void onEspNowSent(const uint8_t* mac,
+// Arduino-ESP32 3.x send callbacks receive wifi_tx_info_t rather than the
+// destination MAC pointer used by Arduino-ESP32 2.x.
+static void onEspNowSent(const wifi_tx_info_t* info,
                          esp_now_send_status_t status) {
-  (void)mac;
+  (void)info;
   if (status != ESP_NOW_SEND_SUCCESS) ++s_txFailures;
 }
 
@@ -211,10 +200,6 @@ static bool initEspNow() {
                 (unsigned)s_channel);
   return true;
 }
-
-// ============================================================
-// P4 -> gateway frame handling
-// ============================================================
 
 static void handleTxPacket(const uint8_t* payload, uint16_t payloadLength) {
   if (!payload || payloadLength < sizeof(WalleRadioTxMeta)) return;
@@ -356,10 +341,6 @@ static void parserFeed(uint8_t value) {
   }
 }
 
-// ============================================================
-// Gateway -> P4 RX forwarding
-// ============================================================
-
 static void forwardQueuedRadioPackets() {
   if (!s_rxQueue) return;
 
@@ -386,10 +367,6 @@ static void forwardQueuedRadioPackets() {
     }
   }
 }
-
-// ============================================================
-// Arduino setup / loop
-// ============================================================
 
 void setup() {
   Serial.begin(115200);
