@@ -72,6 +72,10 @@ void setup() {
   beginIMU();
   Serial.println("[IMU] Init complete");
 
+  // Effects start in a deterministic safe state before any remote command can
+  // arrive. laserInit() attaches PWM and forces the output OFF.
+  laserInit();
+
   // Autonomy stack. Optional sensors fail gracefully.
   if (!sonarInit()) Serial.println(F("[Sonar] WARN: init failed"));
   else Serial.println(F("[Sonar] Ready"));
@@ -107,6 +111,9 @@ void setup() {
   apiSecurityInit();
   eveUartBridgeInit();
 
+  // Sequence persistence/state exists independently of the HTTP API, so
+  // initialize the engine before registering WebUI routes.
+  sequenceEngineInit();
   webServerInit();
 
   // Radio receive/send abstraction. P4 uses the UART gateway.
