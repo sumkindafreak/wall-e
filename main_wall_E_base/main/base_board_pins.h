@@ -6,19 +6,22 @@
 // ESP32-P4 primary target:
 //   Waveshare ESP32-P4-Module-DEV-KIT 40-pin header.
 //
-// IMPORTANT P4 choices:
-//   * I2C uses the board's documented SDA=GPIO7 / SCL=GPIO8.
-//   * GPIO24/25 are repurposed from the P4 USB-FS pair for the dedicated
-//     radio-gateway UART. Use the board's CH343 UART Type-C (GPIO37/38)
-//     for flashing / Serial diagnostics instead of native USB-FS CDC.
-//   * GPIO37/38 are intentionally left untouched for the onboard CH343.
-//   * GPIO53 is intentionally left untouched because the board uses it for
-//     the onboard audio power-amplifier enable.
+// P4 design rules:
+//   * I2C uses the board's SDA=GPIO7 / SCL=GPIO8.
+//   * GPIO24/25 are repurposed from USB-FS for the radio-gateway UART.
+//     Flash/debug through the CH343 UART Type-C on GPIO37/38.
+//   * GPIO54 is reserved for the onboard C6 ESP-Hosted reset path.
+//   * GPIO53 is reserved for the onboard speaker amplifier enable.
+//   * GPIO39..48 are kept out of WALL-E's 3.3 V peripheral map. They belong
+//     to the P4's separately powered I/O domain and several are used by the
+//     onboard microSD circuitry.
+//   * GPIO36 is a boot/strapping-related pin and is left unused externally.
+//   * GPS is RX-only on GPIO3. Standard NMEA operation does not require a
+//     Base->GPS TX wire.
+//   * The four obstacle sensors use a PCF8574 I2C input expander at 0x20.
+//   * Flashlight MOSFET is driven from spare PCA9685 channel 9.
 //   * The legacy SPI ST7789 Base display is disabled on P4. CYD/LROS remain
-//     operator displays; a P4 DSI display can be added separately later.
-//
-// Keep all Base hardware definitions here. Driver headers should alias these
-// constants rather than inventing their own GPIO numbers.
+//     operator displays; a P4 DSI display can be added later.
 // ============================================================
 
 #include <Arduino.h>
@@ -34,19 +37,18 @@
 #define BASE_PIN_MOTOR_LEFT_IN1   0
 #define BASE_PIN_MOTOR_LEFT_IN2   1
 #define BASE_PIN_MOTOR_LEFT_ENA   2
-#define BASE_PIN_FLASHLIGHT       3
 #define BASE_PIN_MOTOR_RIGHT_IN3  4
 #define BASE_PIN_MOTOR_RIGHT_IN4  5
 #define BASE_PIN_MOTOR_RIGHT_ENB  6
 
 // ------------------------------------------------------------
-// Shared I2C — PCA9685, MPU6050, compass, VL53L1X
+// Shared I2C — PCA9685, MPU6050, compass, VL53L1X, PCF8574
 // ------------------------------------------------------------
 #define BASE_PIN_I2C_SDA          7
 #define BASE_PIN_I2C_SCL          8
 
 // ------------------------------------------------------------
-// Analog monitoring (ESP32-P4 ADC1-capable exposed pins)
+// Analog monitoring (exposed ADC1-capable GPIO)
 // ------------------------------------------------------------
 #define BASE_PIN_BATTERY_ADC     20
 #define BASE_PIN_CURRENT_ADC     21
@@ -59,6 +61,11 @@
 #define BASE_PIN_SONAR_TRIGGER   26
 #define BASE_PIN_SONAR_ECHO      27
 
+// Flashlight uses unused PCA9685 output 9 rather than a scarce P4 GPIO.
+#define WALLE_BASE_FLASHLIGHT_ON_PCA9685  1
+#define BASE_FLASHLIGHT_PCA_CHANNEL       9
+#define BASE_PIN_FLASHLIGHT              -1
+
 // ------------------------------------------------------------
 // Dock IR transmitters
 // ------------------------------------------------------------
@@ -66,46 +73,49 @@
 #define BASE_PIN_DOCK_IR_RIGHT   33
 
 // ------------------------------------------------------------
-// GPS UART
-// GPIO36 is a strapping-related pin on the module, so it is used only as
-// WALL-E's TX output. Nothing external should drive it during reset.
+// GPS UART2 — NMEA receive only
 // ------------------------------------------------------------
-#define BASE_PIN_GPS_TX          36
-#define BASE_PIN_GPS_RX          54
+#define BASE_PIN_GPS_RX           3
+#define BASE_PIN_GPS_TX          -1
 
 // ------------------------------------------------------------
-// Four obstacle sensors — inputs only
+// Four obstacle sensors — PCF8574 I2C expander
+// 3.3 V PCF8574, address pins A0/A1/A2 low => 0x20.
+// Sensor outputs connect to P0..P3. Inputs are released HIGH internally by
+// writing ones to the PCF8574 port byte before reads.
 // ------------------------------------------------------------
-#define BASE_PIN_OBS_FRONT_L     45
-#define BASE_PIN_OBS_FRONT_R     46
-#define BASE_PIN_OBS_REAR_L      47
-#define BASE_PIN_OBS_REAR_R      48
+#define WALLE_BASE_OBSTACLES_PCF8574  1
+#define BASE_OBS_PCF8574_ADDR          0x20
+#define BASE_OBS_PCF8574_FRONT_L_BIT   0
+#define BASE_OBS_PCF8574_FRONT_R_BIT   1
+#define BASE_OBS_PCF8574_REAR_L_BIT    2
+#define BASE_OBS_PCF8574_REAR_R_BIT    3
+
+#define BASE_PIN_OBS_FRONT_L          -1
+#define BASE_PIN_OBS_FRONT_R          -1
+#define BASE_PIN_OBS_REAR_L           -1
+#define BASE_PIN_OBS_REAR_R           -1
 
 // ------------------------------------------------------------
-// P4 <-> ESP32 radio gateway UART
-// These are the module's USB1 full-speed GPIO pair repurposed as UART.
-// Native USB-FS on this pair is therefore unavailable in this build.
+// P4 <-> ESP32 radio gateway UART1
 // ------------------------------------------------------------
 #define BASE_PIN_RADIO_UART_RX   24
 #define BASE_PIN_RADIO_UART_TX   25
 
 // ------------------------------------------------------------
-// Board-reserved pins documented here so they are not accidentally reused.
+// Board-reserved / deliberately avoided GPIO
 // ------------------------------------------------------------
-#define BASE_PIN_DEBUG_UART_TX   37
-#define BASE_PIN_DEBUG_UART_RX   38
-#define BASE_PIN_AUDIO_PA_ENABLE 53
+#define BASE_PIN_BOOT_ENABLE      36
+#define BASE_PIN_DEBUG_UART_TX    37
+#define BASE_PIN_DEBUG_UART_RX    38
+#define BASE_PIN_AUDIO_PA_ENABLE  53
+#define BASE_PIN_HOSTED_WIFI_RST  54
 
-// ------------------------------------------------------------
-// Compile-time collision guard for all WALL-E-assigned P4 pins.
-// Negative pin values are ignored so future optional devices can use -1.
-// ------------------------------------------------------------
 namespace walle_base_pincheck {
 constexpr int kAssignedPins[] = {
     BASE_PIN_MOTOR_LEFT_IN1,
     BASE_PIN_MOTOR_LEFT_IN2,
     BASE_PIN_MOTOR_LEFT_ENA,
-    BASE_PIN_FLASHLIGHT,
     BASE_PIN_MOTOR_RIGHT_IN3,
     BASE_PIN_MOTOR_RIGHT_IN4,
     BASE_PIN_MOTOR_RIGHT_ENB,
@@ -144,11 +154,21 @@ constexpr bool avoidsBoardReservedPins() {
   for (size_t i = 0; i < (sizeof(kAssignedPins) / sizeof(kAssignedPins[0])); ++i) {
     const int p = kAssignedPins[i];
     if (p < 0) continue;
-    if (p == BASE_PIN_DEBUG_UART_TX ||
+    if (p == BASE_PIN_BOOT_ENABLE ||
+        p == BASE_PIN_DEBUG_UART_TX ||
         p == BASE_PIN_DEBUG_UART_RX ||
-        p == BASE_PIN_AUDIO_PA_ENABLE) {
+        p == BASE_PIN_AUDIO_PA_ENABLE ||
+        p == BASE_PIN_HOSTED_WIFI_RST) {
       return false;
     }
+  }
+  return true;
+}
+
+constexpr bool avoidsLowVoltageDomain() {
+  for (size_t i = 0; i < (sizeof(kAssignedPins) / sizeof(kAssignedPins[0])); ++i) {
+    const int p = kAssignedPins[i];
+    if (p >= 39 && p <= 48) return false;
   }
   return true;
 }
@@ -157,16 +177,14 @@ constexpr bool avoidsBoardReservedPins() {
 static_assert(walle_base_pincheck::allUnique(),
               "WALL-E P4 GPIO collision: two Base functions share a pin");
 static_assert(walle_base_pincheck::avoidsBoardReservedPins(),
-              "WALL-E P4 GPIO map uses a board-reserved pin");
+              "WALL-E P4 GPIO map uses a reserved/strapping/hosted-WiFi pin");
+static_assert(walle_base_pincheck::avoidsLowVoltageDomain(),
+              "WALL-E P4 GPIO map uses GPIO39..48 low-voltage domain");
 
 #else
 
 // ============================================================
 // Legacy ESP32-S3 regression map
-//
-// Retained to keep the existing S3 regression build useful while P4 becomes
-// the production Base. It intentionally mirrors the established hardware
-// definitions instead of silently changing an already-wired S3 robot.
 // ============================================================
 #define WALLE_BASE_BOARD_NAME "ESP32-S3 legacy Base"
 #define WALLE_BASE_LOCAL_TFT  1
@@ -185,6 +203,8 @@ static_assert(walle_base_pincheck::avoidsBoardReservedPins(),
 #define BASE_PIN_CURRENT_ADC      2
 #define BASE_PIN_LDR_ADC          3
 #define BASE_PIN_FLASHLIGHT      10
+#define WALLE_BASE_FLASHLIGHT_ON_PCA9685 0
+#define BASE_FLASHLIGHT_PCA_CHANNEL      -1
 #define BASE_PIN_LASER           18
 #define BASE_PIN_SONAR_TRIGGER   26
 #define BASE_PIN_SONAR_ECHO      27
@@ -195,16 +215,20 @@ static_assert(walle_base_pincheck::avoidsBoardReservedPins(),
 #define BASE_PIN_GPS_RX          16
 #define BASE_PIN_GPS_TX          17
 
+#define WALLE_BASE_OBSTACLES_PCF8574 0
+#define BASE_OBS_PCF8574_ADDR        0x20
+#define BASE_OBS_PCF8574_FRONT_L_BIT 0
+#define BASE_OBS_PCF8574_FRONT_R_BIT 1
+#define BASE_OBS_PCF8574_REAR_L_BIT  2
+#define BASE_OBS_PCF8574_REAR_R_BIT  3
 #define BASE_PIN_OBS_FRONT_L     22
 #define BASE_PIN_OBS_FRONT_R     23
 #define BASE_PIN_OBS_REAR_L      20
 #define BASE_PIN_OBS_REAR_R      47
 
-// Native ESP-NOW build does not use the UART gateway.
 #define BASE_PIN_RADIO_UART_RX   -1
 #define BASE_PIN_RADIO_UART_TX   -1
 
-// Legacy external ST7789 pins.
 #define BASE_PIN_TFT_MOSI        11
 #define BASE_PIN_TFT_SCK         12
 #define BASE_PIN_TFT_DC          13
