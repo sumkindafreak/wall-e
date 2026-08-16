@@ -55,6 +55,36 @@ static bool macIsSet(const uint8_t mac[6]) {
   return false;
 }
 
+static int servoDegreesToPercent(uint8_t degrees) {
+  return constrain(((int)degrees * 100) / 180, 0, 100);
+}
+
+// Translate the 10-slot controller packet into WALL-E's nine physical
+// PCA9685 channels. Wire slot 1 is deliberately unused; the master now
+// drives physical head tilt through the upper-neck slot (slot 4).
+static void applyControllerServoTargets(const ControlPacket* p) {
+  if (!p) return;
+
+  servoSet(SERVO_HEAD_PAN,
+           servoDegreesToPercent(p->servoTargets[WALLE_CTRL_SERVO_HEAD_PAN]), 85);
+  servoSet(SERVO_NECK_TOP,
+           servoDegreesToPercent(p->servoTargets[WALLE_CTRL_SERVO_NECK_TOP]), 85);
+  servoSet(SERVO_NECK_BOT,
+           servoDegreesToPercent(p->servoTargets[WALLE_CTRL_SERVO_NECK_BOTTOM]), 85);
+  servoSet(SERVO_EYE_LEFT,
+           servoDegreesToPercent(p->servoTargets[WALLE_CTRL_SERVO_EYE_LEFT]), 85);
+  servoSet(SERVO_EYE_RIGHT,
+           servoDegreesToPercent(p->servoTargets[WALLE_CTRL_SERVO_EYE_RIGHT]), 85);
+  servoSet(SERVO_ARM_LEFT,
+           servoDegreesToPercent(p->servoTargets[WALLE_CTRL_SERVO_LEFT_ARM]), 85);
+  servoSet(SERVO_ARM_RIGHT,
+           servoDegreesToPercent(p->servoTargets[WALLE_CTRL_SERVO_RIGHT_ARM]), 85);
+  servoSet(SERVO_BROW_RIGHT,
+           servoDegreesToPercent(p->servoTargets[WALLE_CTRL_SERVO_EYEBROW_RIGHT]), 85);
+  servoSet(SERVO_BROW_LEFT,
+           servoDegreesToPercent(p->servoTargets[WALLE_CTRL_SERVO_EYEBROW_LEFT]), 85);
+}
+
 static void onRadioPacket(const uint8_t sourceMac[6],
                           const uint8_t* data,
                           size_t length,
@@ -64,10 +94,8 @@ static void onRadioPacket(const uint8_t sourceMac[6],
   if (!data || length == 0) return;
   const int len = (int)length;
 
-  // Audio microphone telemetry has its own magic and silently ignores others.
   audioTelemOnPacket(data, len);
 
-  // Node-health heartbeat.
   if (len >= (int)sizeof(WalleNodeHealthPacket_t)) {
     const WalleNodeHealthPacket_t* hp =
         reinterpret_cast<const WalleNodeHealthPacket_t*>(data);
@@ -78,7 +106,6 @@ static void onRadioPacket(const uint8_t sourceMac[6],
     }
   }
 
-  // Dock beacon: RSSI + IR alignment + charging state.
   if (len >= (int)sizeof(DockBeaconPacket_t)) {
     const DockBeaconPacket_t* bp = reinterpret_cast<const DockBeaconPacket_t*>(data);
     if (bp->magic == DOCK_BEACON_MAGIC) {
@@ -92,7 +119,6 @@ static void onRadioPacket(const uint8_t sourceMac[6],
     }
   }
 
-  // Audio brain status: mic direction, dock IR, voice command, fault and busy.
   if (len >= (int)sizeof(WalleAudioStatusPacket_t)) {
     const WalleAudioStatusPacket_t* ap =
         reinterpret_cast<const WalleAudioStatusPacket_t*>(data);
@@ -102,7 +128,6 @@ static void onRadioPacket(const uint8_t sourceMac[6],
     }
   }
 
-  // Vision packet: camera node -> tracking/behaviour engine.
   if (len >= (int)VISION_PACKET_SIZE) {
     const VisionPacket_t* vp = reinterpret_cast<const VisionPacket_t*>(data);
     if (vp->magic == VISION_MAGIC) {
@@ -112,7 +137,6 @@ static void onRadioPacket(const uint8_t sourceMac[6],
     }
   }
 
-  // Legacy-compatible control header is seven bytes. Full current packets are 19.
   if (len < CONTROL_PACKET_HEADER_BYTES || !sourceMac) return;
   const ControlPacket* p = reinterpret_cast<const ControlPacket*>(data);
 
@@ -127,7 +151,6 @@ static void onRadioPacket(const uint8_t sourceMac[6],
     }
   }
 
-  // E-STOP is always honoured regardless of motion-authority policy.
   const bool estop = (p->systemFlags & FLAG_ESTOP) != 0;
   if (estop) {
     motorStop();
@@ -146,7 +169,6 @@ static void onRadioPacket(const uint8_t sourceMac[6],
 
   autonomySetEnabled((p->systemFlags & FLAG_AUTONOMOUS) != 0);
 
-  // Discrete actions.
   switch (p->action) {
     case ACTION_DOCK_GO:
 #if USE_AUTONOMOUS_DOCKING
@@ -193,14 +215,9 @@ static void onRadioPacket(const uint8_t sourceMac[6],
       break;
   }
 
-  // Full packets carry direct servo targets and laser state.
   if (cydAllowed && len >= CONTROL_PACKET_FULL_BYTES) {
     laserSetBrightness((p->systemFlags & FLAG_LASER) ? 255 : 0);
-    for (uint8_t i = 0; i < SERVO_COUNT && i < 10; ++i) {
-      int pos = ((int)p->servoTargets[i] * 100) / 180;
-      pos = constrain(pos, 0, 100);
-      servoSet(i, pos, 85);
-    }
+    applyControllerServoTargets(p);
   }
 
 #if USE_AUTONOMOUS_DOCKING
@@ -230,16 +247,13 @@ static void onRadioPacket(const uint8_t sourceMac[6],
   if (!cydAllowed) return;
 
   lastCommandMillis = millis();
-
-  // Physical WALL-E track wiring is intentionally swapped relative to logical L/R.
   motorSetLeftRight(right, left);
 
   const bool moving = abs(left) > 10 || abs(right) > 10;
   displaySetCommand(moving ? CMD_DRIVE : CMD_IDLE);
-  float jx = (right - left) / 255.0f;
-  float jy = -(left + right) / 255.0f;
-  displaySetStick(constrain(jx, -1.0f, 1.0f),
-                  constrain(jy, -1.0f, 1.0f));
+  const float jx = constrain((right - left) / 255.0f, -1.0f, 1.0f);
+  const float jy = constrain(-(left + right) / 255.0f, -1.0f, 1.0f);
+  displaySetStick(jx, jy);
   displaySetSpeed((uint8_t)((abs(left) + abs(right)) / 2));
 }
 
@@ -270,7 +284,7 @@ void espnowSendTelemetry() {
   telem.batteryVoltage = bat.voltage;
   telem.currentDraw = bat.currentA;
 
-  float chipTemp = temperatureRead();
+  const float chipTemp = temperatureRead();
   telem.temperature = std::isfinite(chipTemp) ? chipTemp : 0.0f;
   telem.moodState = (uint8_t)walleEmotionPoseGetState();
   telem.autonomousState = (uint8_t)unifiedAutonomyGetState();
