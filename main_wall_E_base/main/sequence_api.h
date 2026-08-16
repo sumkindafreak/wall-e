@@ -1,4 +1,4 @@
 #pragma once
 
-/** Register /api/sequences/* routes (call from webServerInit). */
+/** Register the /api/sequences/ route family from webServerInit(). */
 void sequenceRegisterWebRoutes(void);
