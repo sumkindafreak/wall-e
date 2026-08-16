@@ -1,0 +1,92 @@
+name: WALL-E P4 Base CI
+
+on:
+  pull_request:
+    paths:
+      - 'main_wall_E_base/**'
+      - 'wall_e_master_controller/**'
+      - 'wall_e_radio_gateway_c6/**'
+      - 'protocols/**'
+      - '.github/workflows/walle-p4-base-ci.yml'
+  push:
+    branches:
+      - 'agent/p4-base-brain'
+    paths:
+      - 'main_wall_E_base/**'
+      - 'wall_e_master_controller/**'
+      - 'wall_e_radio_gateway_c6/**'
+      - 'protocols/**'
+      - '.github/workflows/walle-p4-base-ci.yml'
+
+jobs:
+  p4-base-arduino:
+    name: ESP32-P4 Base (Arduino 3.3.11)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Arduino CLI
+        uses: arduino/setup-arduino-cli@v2
+
+      - name: Install ESP32 core 3.3.11
+        run: |
+          arduino-cli config init
+          arduino-cli config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core update-index
+          arduino-cli core install esp32:esp32@3.3.11
+
+      - name: Install WALL-E libraries
+        run: |
+          arduino-cli lib update-index
+          arduino-cli lib install 'ArduinoJson@6.21.5'
+          arduino-cli lib install 'Adafruit GFX Library'
+          arduino-cli lib install 'Adafruit ST7735 and ST7789 Library'
+          arduino-cli lib install 'Adafruit PWM Servo Driver Library'
+          arduino-cli lib install 'TinyGPSPlus'
+          arduino-cli lib install 'VL53L1X'
+          git clone --depth 1 https://github.com/jrowberg/i2cdevlib.git /tmp/i2cdevlib
+          mkdir -p "$HOME/Arduino/libraries"
+          cp -R /tmp/i2cdevlib/Arduino/I2Cdev "$HOME/Arduino/libraries/I2Cdev"
+          cp -R /tmp/i2cdevlib/Arduino/MPU6050 "$HOME/Arduino/libraries/MPU6050"
+
+      - name: Compile WALL-E Base for ESP32-P4
+        run: |
+          arduino-cli compile \
+            --warnings all \
+            --fqbn 'esp32:esp32:esp32p4:UploadSpeed=921600,USBMode=default,CDCOnBoot=cdc,FlashFreq=80,FlashMode=qio,FlashSize=16M,PartitionScheme=app3M_fat9M_16MB,PSRAM=enabled,ChipVariant=postv3' \
+            main_wall_E_base/main
+
+  c6-radio-gateway:
+    name: ESP32-C6 Radio Gateway
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Arduino CLI
+        uses: arduino/setup-arduino-cli@v2
+
+      - name: Install ESP32 core 3.3.11
+        run: |
+          arduino-cli config init
+          arduino-cli config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core update-index
+          arduino-cli core install esp32:esp32@3.3.11
+
+      - name: Compile radio gateway
+        run: |
+          arduino-cli compile \
+            --warnings all \
+            --fqbn 'esp32:esp32:esp32c6:CDCOnBoot=cdc' \
+            wall_e_radio_gateway_c6
+
+  s3-regression:
+    name: ESP32-S3 Regression Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PlatformIO
+        run: pip install --disable-pip-version-check platformio
+
+      - name: Compile canonical Base tree on ESP32-S3
+        run: pio run -d main_wall_E_base -e wall_e_brain_s3_regression
