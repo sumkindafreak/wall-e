@@ -3,24 +3,16 @@
 #include <Arduino.h>
 #include <stddef.h>
 #include <stdint.h>
-#include "base_board_pins.h"
 
 // ============================================================
-// WALL-E Base radio transport
+// WALL-E Base radio transport — ESP32-S3 production target
 //
-// Radio-capable ESP32 regression builds: native ESP-NOW.
-// ESP32-P4 production Base: framed UART link to ESP32-C6/C3/S3 gateway.
+// The S3 owns Wi-Fi/ESP-NOW directly. CYD, audio, vision and dock packets all
+// pass through this one abstraction, but there is no external radio gateway.
 // ============================================================
 
 #ifndef WALLE_RADIO_CHANNEL
 #define WALLE_RADIO_CHANNEL 11
-#endif
-
-#define WALLE_RADIO_UART_RX  BASE_PIN_RADIO_UART_RX
-#define WALLE_RADIO_UART_TX  BASE_PIN_RADIO_UART_TX
-
-#ifndef WALLE_RADIO_UART_BAUD
-#define WALLE_RADIO_UART_BAUD 921600UL
 #endif
 
 using WalleRadioReceiveCallback = void (*)(const uint8_t sourceMac[6],
