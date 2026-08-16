@@ -1,13 +1,13 @@
 /**
- * Node health registry — aggregates ESP-NOW heartbeats for WebUI.
+ * Node health registry — aggregates radio heartbeats for WebUI.
  */
 #include "node_health_registry.h"
 #include "node_health_protocol.h"
 #include "battery_monitor.h"
-#include <WiFi.h>
-#include <esp_now.h>
-#include <esp_wifi.h>
+#include "radio_transport.h"
+#include <Arduino.h>
 #include <cstring>
+#include <cmath>
 
 #ifndef NODE_HEALTH_TIMEOUT_MS
 #define NODE_HEALTH_TIMEOUT_MS 3500u
@@ -36,28 +36,12 @@ static NodeSlot s_slot[WALLE_NODE_COUNT];
 static uint32_t s_last_broadcast_ms = 0;
 static uint32_t s_last_base_fill_ms = 0;
 
-static uint8_t s_bcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-static bool s_peer_ok = false;
-
-static bool ensureBroadcastPeer(void) {
-  if (s_peer_ok) return true;
-  esp_now_peer_info_t peer = {};
-  memcpy(peer.peer_addr, s_bcast, 6);
-  peer.channel = 0;
-  peer.encrypt = false;
-  peer.ifidx = WIFI_IF_AP;
-  esp_err_t r = esp_now_add_peer(&peer);
-  if (r == ESP_OK || r == ESP_ERR_ESPNOW_EXIST) {
-    s_peer_ok = true;
-    return true;
-  }
-  return false;
-}
-
 static int8_t readBoardTempC(void) {
 #if defined(ARDUINO_ARCH_ESP32)
   float t = temperatureRead();
-  if (isnan(t) || t < -55.0f || t > 125.0f) return WALLE_NODE_HEALTH_UNKNOWN_TEMP;
+  if (!std::isfinite(t) || t < -55.0f || t > 125.0f) {
+    return WALLE_NODE_HEALTH_UNKNOWN_TEMP;
+  }
   return (int8_t)constrain((int)t, -127, 127);
 #else
   return WALLE_NODE_HEALTH_UNKNOWN_TEMP;
@@ -68,6 +52,7 @@ void nodeHealthInit(void) {
   memset(s_slot, 0, sizeof(s_slot));
   s_last_broadcast_ms = 0;
   s_last_base_fill_ms = 0;
+  (void)radioTransportInit();
 }
 
 static void fillBaseSlot(uint32_t now) {
@@ -91,9 +76,9 @@ static void fillBaseSlot(uint32_t now) {
 void nodeHealthOnPacket(const uint8_t* data, int len) {
   if (!data || len < (int)sizeof(WalleNodeHealthPacket_t)) return;
   const WalleNodeHealthPacket_t* p = (const WalleNodeHealthPacket_t*)data;
-  if (p->magic != WALLE_NODE_HEALTH_MAGIC || p->version != WALLE_NODE_HEALTH_VERSION) return;
+  if (p->magic != WALLE_NODE_HEALTH_MAGIC ||
+      p->version != WALLE_NODE_HEALTH_VERSION) return;
   if (p->node_id >= WALLE_NODE_COUNT) return;
-  /* Local BASE slot is filled from battery/ESP — ignore echoed or stray BASE packets. */
   if (p->node_id == WALLE_NODE_BASE) return;
 
   NodeSlot& sl = s_slot[p->node_id];
@@ -117,8 +102,12 @@ void nodeHealthOnDockBeacon(const DockBeaconPacket_t* bp) {
 
   uint16_t f = 0;
   if (bp->beam_present) f |= WALLE_NODE_FLAG_DOCKED;
-  if (bp->state == DOCK_ST_CHARGING || bp->state == DOCK_ST_CHARGED) f |= WALLE_NODE_FLAG_DOCKED;
-  if (bp->charge_enabled && (bp->state == DOCK_ST_CHARGING)) f |= WALLE_NODE_FLAG_CHARGING;
+  if (bp->state == DOCK_ST_CHARGING || bp->state == DOCK_ST_CHARGED) {
+    f |= WALLE_NODE_FLAG_DOCKED;
+  }
+  if (bp->charge_enabled && bp->state == DOCK_ST_CHARGING) {
+    f |= WALLE_NODE_FLAG_CHARGING;
+  }
   if (bp->state == DOCK_ST_FAULT) f |= WALLE_NODE_FLAG_FAULT;
   sl.pkt.flags = f;
 
@@ -127,7 +116,7 @@ void nodeHealthOnDockBeacon(const DockBeaconPacket_t* bp) {
 }
 
 void nodeHealthMarkVisionSeen(void) {
-  uint32_t now = millis();
+  const uint32_t now = millis();
   NodeSlot& sl = s_slot[WALLE_NODE_VISION];
   sl.pkt.magic = WALLE_NODE_HEALTH_MAGIC;
   sl.pkt.version = WALLE_NODE_HEALTH_VERSION;
@@ -143,7 +132,7 @@ void nodeHealthMarkVisionSeen(void) {
 }
 
 void nodeHealthTick(void) {
-  uint32_t now = millis();
+  const uint32_t now = millis();
 
   if (now - s_last_base_fill_ms >= 200u) {
     s_last_base_fill_ms = now;
@@ -152,10 +141,8 @@ void nodeHealthTick(void) {
 
   if (now - s_last_broadcast_ms >= NODE_HEALTH_BROADCAST_MS) {
     s_last_broadcast_ms = now;
-    if (ensureBroadcastPeer()) {
-      WalleNodeHealthPacket_t out = s_slot[WALLE_NODE_BASE].pkt;
-      esp_now_send(s_bcast, (uint8_t*)&out, sizeof(out));
-    }
+    WalleNodeHealthPacket_t out = s_slot[WALLE_NODE_BASE].pkt;
+    (void)radioTransportBroadcast(&out, sizeof(out));
   }
 }
 
@@ -181,7 +168,7 @@ uint16_t nodeHealthGetFlags(uint8_t node_id) {
 }
 
 String nodeHealthGetJSON(void) {
-  uint32_t now = millis();
+  const uint32_t now = millis();
   String j = "{\"v\":1,\"timeout_ms\":";
   j += (uint32_t)NODE_HEALTH_TIMEOUT_MS;
   j += ",\"global_hb_ms\":";
@@ -192,12 +179,15 @@ String nodeHealthGetJSON(void) {
   for (int i = 0; i < (int)WALLE_NODE_COUNT; i++) {
     if (i) j += ',';
     const NodeSlot& sl = s_slot[i];
-    bool online = slotOnline((uint8_t)i, now);
+    const bool online = slotOnline((uint8_t)i, now);
     j += '{';
     j += "\"id\":\""; j += names[i]; j += '"';
     j += ",\"nid\":"; j += (int)sl.pkt.node_id;
     j += ",\"role\":"; j += (int)sl.pkt.role;
-    j += ",\"battery_pct\":"; j += (sl.pkt.battery_pct == WALLE_NODE_HEALTH_UNKNOWN_BAT ? -1 : (int)sl.pkt.battery_pct);
+    j += ",\"battery_pct\":";
+    j += (sl.pkt.battery_pct == WALLE_NODE_HEALTH_UNKNOWN_BAT
+              ? -1
+              : (int)sl.pkt.battery_pct);
     j += ",\"temp_c\":";
     if (sl.pkt.temp_c == WALLE_NODE_HEALTH_UNKNOWN_TEMP) j += "null";
     else j += (int)sl.pkt.temp_c;
@@ -206,7 +196,7 @@ String nodeHealthGetJSON(void) {
     j += ",\"flags\":"; j += (uint32_t)sl.pkt.flags;
     j += ",\"online\":"; j += (online ? "true" : "false");
     if (sl.ever_seen) {
-      uint32_t age = (now - sl.last_seen_ms);
+      const uint32_t age = now - sl.last_seen_ms;
       j += ",\"age_ms\":"; j += age;
     } else {
       j += ",\"age_ms\":null";
