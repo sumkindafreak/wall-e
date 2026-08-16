@@ -1,9 +1,10 @@
 // ============================================================
-//  WALL-E eye laser — GPIO + PCA9685 aim (pan / tilt)
+// WALL-E eye laser — GPIO + PCA9685 aim (pan / tilt)
 // ============================================================
 
 #include "laser_control.h"
 #include "servo_manager.h"
+#include "ledc_compat.h"
 #include <Arduino.h>
 #include <cmath>
 
@@ -38,10 +39,19 @@ static int clamp100(int v) {
   return v;
 }
 
+static void writeLaserPwm(uint8_t duty) {
+  (void)walleLedcWrite(LASER_PIN, WALLE_LEDC_CH_LASER, duty);
+}
+
 void laserInit() {
   randomSeed(millis() ^ (uint32_t)micros());
-  ledcAttach(LASER_PIN, LASER_PWM_FREQ, LASER_PWM_RES);
-  ledcWrite(LASER_PIN, 0);
+  if (!walleLedcAttach(LASER_PIN,
+                       WALLE_LEDC_CH_LASER,
+                       LASER_PWM_FREQ,
+                       LASER_PWM_RES)) {
+    Serial.println(F("[LASER] ERROR: LEDC attach failed"));
+  }
+  writeLaserPwm(0);
   s_brightness = 0;
   s_laserEmitting = false;
   s_smoothPan = s_smoothTilt = 50.0f;
@@ -49,18 +59,17 @@ void laserInit() {
   s_smoothActive = false;
   s_firePhase = FIRE_IDLE;
   s_scanOn = false;
-  Serial.println(F("[LASER] Init OK (see LASER_PIN in laser_control.h), OFF"));
+  Serial.printf("[LASER] Init GPIO %d, OFF\n", LASER_PIN);
 }
 
 static void applyLaserOutput() {
-  ledcWrite(LASER_PIN, s_brightness);
-  bool on = (s_brightness > 0);
+  writeLaserPwm(s_brightness);
+  const bool on = s_brightness > 0;
   if (on && !s_laserEmitting) {
     s_laserEmitting = true;
     s_laserOnSince = millis();
     Serial.println(F("[LASER] emitting"));
-  }
-  if (!on && s_laserEmitting) {
+  } else if (!on && s_laserEmitting) {
     s_laserEmitting = false;
     Serial.println(F("[LASER] dark"));
   }
@@ -69,36 +78,27 @@ static void applyLaserOutput() {
 void laserOn() {
   s_brightness = 255;
   applyLaserOutput();
-  Serial.println(F("[LASER] ON (full)"));
 }
 
 void laserOff() {
   s_brightness = 0;
   applyLaserOutput();
-  Serial.println(F("[LASER] OFF"));
 }
 
 void laserSetBrightness(uint8_t value) {
   s_brightness = value;
   applyLaserOutput();
-  Serial.print(F("[LASER] Brightness "));
-  Serial.println((int)value);
 }
 
 static void aimServosNoLog(int pan, int tilt) {
-  pan = clamp100(pan);
-  tilt = clamp100(tilt);
-  servoSet((uint8_t)SERVO_PAN_CHANNEL, pan, SERVO_FAST_SPEED);
-  servoSet((uint8_t)SERVO_TILT_CHANNEL, tilt, SERVO_FAST_SPEED);
+  servoSet((uint8_t)SERVO_PAN_CHANNEL, clamp100(pan), SERVO_FAST_SPEED);
+  servoSet((uint8_t)SERVO_TILT_CHANNEL, clamp100(tilt), SERVO_FAST_SPEED);
 }
 
 void laserAim(int pan, int tilt) {
   s_scanOn = false;
   aimServosNoLog(pan, tilt);
-  Serial.print(F("[LASER] Aim PAN:"));
-  Serial.print(clamp100(pan));
-  Serial.print(F(" TILT:"));
-  Serial.println(clamp100(tilt));
+  Serial.printf("[LASER] Aim PAN:%d TILT:%d\n", clamp100(pan), clamp100(tilt));
 }
 
 void laserFire(int pan, int tilt, uint32_t durationMs) {
@@ -107,15 +107,12 @@ void laserFire(int pan, int tilt, uint32_t durationMs) {
     return;
   }
   s_scanOn = false;
-  pan = clamp100(pan);
-  tilt = clamp100(tilt);
-  s_firePan = pan;
-  s_fireTilt = tilt;
-  s_fireDuration = durationMs ? durationMs : 500;
+  s_firePan = clamp100(pan);
+  s_fireTilt = clamp100(tilt);
+  s_fireDuration = durationMs ? durationMs : 500u;
   aimServosNoLog(s_firePan, s_fireTilt);
   s_firePhase = FIRE_SETTLE;
   s_fireT0 = millis();
-  Serial.println(F("[LASER] Fire scheduled (non-blocking)"));
 }
 
 void laserSmoothSetTarget(int pan, int tilt, uint16_t stepPeriodMs) {
@@ -131,13 +128,10 @@ void laserSmoothSetTarget(int pan, int tilt, uint16_t stepPeriodMs) {
 void laserScanSetEnabled(bool on) {
   if (s_scanOn == on) return;
   s_scanOn = on;
-  Serial.println(s_scanOn ? F("[LASER] Scan ON") : F("[LASER] Scan OFF"));
 }
 
 void laserSetMoodMode(int8_t mood) {
-  s_mood = mood;
-  if (s_mood < 0) s_mood = 0;
-  if (s_mood > 2) s_mood = 2;
+  s_mood = constrain((int)mood, 0, 2);
 }
 
 static void updateLaserSafety(uint32_t now) {
@@ -163,15 +157,13 @@ static void updateFireMachine(uint32_t now) {
       if (now - s_fireT0 >= s_fireDuration) {
         laserOff();
         s_firePhase = FIRE_IDLE;
-        Serial.println(F("[LASER] Fire complete"));
       }
       break;
   }
 }
 
 static void updateSmooth(uint32_t now) {
-  if (!s_smoothActive) return;
-  if (now - s_lastSmoothStepMs < s_smoothPeriodMs) return;
+  if (!s_smoothActive || now - s_lastSmoothStepMs < s_smoothPeriodMs) return;
   s_lastSmoothStepMs = now;
 
   bool moved = false;
@@ -191,12 +183,9 @@ static void updateSmooth(uint32_t now) {
   }
 
   if (moved) {
-    int p = (int)(s_smoothPan + 0.5f);
-    int t = (int)(s_smoothTilt + 0.5f);
-    aimServosNoLog(p, t);
-  }
-
-  if (!moved && (int)s_smoothPan == s_tgtPan && (int)s_smoothTilt == s_tgtTilt) {
+    aimServosNoLog((int)(s_smoothPan + 0.5f),
+                   (int)(s_smoothTilt + 0.5f));
+  } else {
     s_smoothActive = false;
   }
 }
@@ -211,16 +200,13 @@ static uint16_t scanPeriodMsForMood() {
 
 static void updateScan(uint32_t now) {
   if (!s_scanOn) return;
-  uint16_t per = scanPeriodMsForMood();
-  if (now - s_lastScanMs < per) return;
+  const uint16_t period = scanPeriodMsForMood();
+  if (now - s_lastScanMs < period) return;
   s_lastScanMs = now;
 
-  float step = (s_mood == 1) ? 4.0f : (s_mood == 2 ? 2.2f : 1.2f);
+  const float step = (s_mood == 1) ? 4.0f : (s_mood == 2 ? 2.2f : 1.2f);
   s_scanAngle += (float)s_scanDir * step;
-
-  if (s_mood == 1) {
-    s_scanAngle += (float)(random(-3, 4));
-  }
+  if (s_mood == 1) s_scanAngle += (float)random(-3, 4);
 
   if (s_scanAngle >= 85.0f) {
     s_scanAngle = 85.0f;
@@ -230,14 +216,11 @@ static void updateScan(uint32_t now) {
     s_scanDir = 1;
   }
 
-  int pan = (int)(s_scanAngle + 0.5f);
   int tilt = 50;
   if (s_mood == 2) {
-    tilt = 42 + (int)(8.0f * sinf((float)now * 0.003f));
-    if (tilt < 35) tilt = 35;
-    if (tilt > 65) tilt = 65;
+    tilt = constrain(42 + (int)(8.0f * sinf((float)now * 0.003f)), 35, 65);
   }
-  aimServosNoLog(pan, tilt);
+  aimServosNoLog((int)(s_scanAngle + 0.5f), tilt);
 }
 
 void laserUpdate(uint32_t now) {
