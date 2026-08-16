@@ -1,6 +1,5 @@
 // ============================================================
-//  WALL-E Servo Manager — PCA9685 + acceleration-limited smoothing
-//  (reference-style: velocity + accel per channel, dt from micros)
+// WALL-E Servo Manager — PCA9685 + acceleration-limited smoothing
 // ============================================================
 
 #include "servo_manager.h"
@@ -47,7 +46,6 @@ static const int NEUTRAL_POS[SERVO_COUNT] = {
   NEUTRAL_BROW_RIGHT
 };
 
-// Max velocity (%/s) and acceleration (%/s²) — tuned from reference proportions
 static const float SERVO_MAXVEL[SERVO_COUNT] = {
   130.f, 110.f, 130.f,
   380.f, 380.f,
@@ -67,14 +65,15 @@ static const float SERVO_ACCEL[SERVO_COUNT] = {
 struct ServoState {
   float current;
   float target;
-  float curvel;    // % per second
-  float vel_scale; // scales maxvel/accel from servoSet(..., speed)
-  bool  enabled;
+  float curvel;
+  float vel_scale;
+  bool enabled;
 };
 
 static ServoState servo[SERVO_COUNT];
 static unsigned long lastServoUpdateMs = 0;
 static unsigned long lastServoMicros = 0;
+static bool s_pcaReady = false;
 
 static int posToMicros(uint8_t ch, float pos) {
   pos = constrain(pos, 0.0f, 100.0f);
@@ -82,7 +81,7 @@ static int posToMicros(uint8_t ch, float pos) {
 }
 
 static void writeMicros(uint8_t ch, int us) {
-  uint16_t pulse = (uint16_t)((us * 4096UL) / 20000UL);
+  const uint16_t pulse = (uint16_t)((us * 4096UL) / 20000UL);
   pca.setPWM(ch, 0, pulse);
 }
 
@@ -92,13 +91,14 @@ void servoInit() {
   pca.setOscillatorFrequency(PCA_OSC_FREQ);
   pca.setPWMFreq(50);
   delay(10);
+  s_pcaReady = true;
 
-  unsigned long now = millis();
+  const unsigned long now = millis();
   lastServoUpdateMs = now;
   lastServoMicros = micros();
 
   for (uint8_t i = 0; i < SERVO_COUNT; i++) {
-    float p = (float)NEUTRAL_POS[i];
+    const float p = (float)NEUTRAL_POS[i];
     servo[i].current = p;
     servo[i].target = p;
     servo[i].curvel = 0.f;
@@ -107,16 +107,23 @@ void servoInit() {
     writeMicros(i, posToMicros(i, p));
   }
 
-  Serial.printf("[Servos] PCA9685 initialised at 0x%02X, %d channels (accel smoothing)\n",
-                PCA9685_ADDR, SERVO_COUNT);
+  // Make every spare output deterministic at boot.
+  for (uint8_t ch = PCA_AUX_FIRST_CHANNEL; ch <= PCA_AUX_LAST_CHANNEL; ++ch) {
+    pca.setPin(ch, 0, false);
+  }
+
+  Serial.printf("[Servos] PCA9685 initialised at 0x%02X, %d servo channels + %d aux outputs\n",
+                PCA9685_ADDR,
+                SERVO_COUNT,
+                (PCA_AUX_LAST_CHANNEL - PCA_AUX_FIRST_CHANNEL + 1));
 }
 
 void servoHandle() {
-  unsigned long nowMs = millis();
+  const unsigned long nowMs = millis();
   if ((nowMs - lastServoUpdateMs) < SERVO_UPDATE_MS) return;
   lastServoUpdateMs = nowMs;
 
-  unsigned long nowMicros = micros();
+  const unsigned long nowMicros = micros();
   float dtMs = (nowMicros - lastServoMicros) / 1000.0f;
   lastServoMicros = nowMicros;
   if (dtMs < 0.5f || dtMs > 40.0f) dtMs = (float)SERVO_UPDATE_MS;
@@ -124,9 +131,9 @@ void servoHandle() {
   for (uint8_t i = 0; i < SERVO_COUNT; i++) {
     if (!servo[i].enabled) continue;
 
-    float posError = servo[i].target - servo[i].current;
-    float maxv = SERVO_MAXVEL[i] * servo[i].vel_scale;
-    float acc = SERVO_ACCEL[i] * servo[i].vel_scale;
+    const float posError = servo[i].target - servo[i].current;
+    const float maxv = SERVO_MAXVEL[i] * servo[i].vel_scale;
+    const float acc = SERVO_ACCEL[i] * servo[i].vel_scale;
 
     if (fabsf(posError) > SERVO_POS_THRESHOLD) {
       float acceleration = acc;
@@ -135,16 +142,13 @@ void servoHandle() {
         acceleration = -acc;
       }
 
-      if (posError > 0.0f) {
-        servo[i].curvel += acceleration * dtMs / 1000.0f;
-      } else {
-        servo[i].curvel -= acceleration * dtMs / 1000.0f;
-      }
+      if (posError > 0.0f) servo[i].curvel += acceleration * dtMs / 1000.0f;
+      else servo[i].curvel -= acceleration * dtMs / 1000.0f;
 
       if (servo[i].curvel > maxv) servo[i].curvel = maxv;
       if (servo[i].curvel < -maxv) servo[i].curvel = -maxv;
 
-      float dP = servo[i].curvel * dtMs / 1000.0f;
+      const float dP = servo[i].curvel * dtMs / 1000.0f;
       if (fabsf(dP) < fabsf(posError)) {
         servo[i].current += dP;
       } else {
@@ -163,15 +167,13 @@ void servoHandle() {
 void servoSet(uint8_t ch, int pos, int speed) {
   if (ch >= SERVO_COUNT) return;
   servo[ch].target = constrain((float)pos, 0.0f, 100.0f);
-  int spd = constrain(speed, 1, 100);
+  const int spd = constrain(speed, 1, 100);
   servo[ch].vel_scale = 0.25f + 0.75f * (spd / 100.0f);
 }
 
 void servoSetAll(int positions[SERVO_COUNT], int speed) {
   for (uint8_t i = 0; i < SERVO_COUNT; i++) {
-    if (positions[i] >= 0) {
-      servoSet(i, positions[i], speed);
-    }
+    if (positions[i] >= 0) servoSet(i, positions[i], speed);
   }
 }
 
@@ -205,4 +207,15 @@ String servoGetStatusJSON() {
   }
   s += "]}";
   return s;
+}
+
+bool servoAuxSetDigital(uint8_t channel, bool on) {
+  if (!s_pcaReady ||
+      channel < PCA_AUX_FIRST_CHANNEL ||
+      channel > PCA_AUX_LAST_CHANNEL) {
+    return false;
+  }
+
+  pca.setPin(channel, on ? 4095 : 0, false);
+  return true;
 }
