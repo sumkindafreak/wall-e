@@ -18,6 +18,10 @@ on:
       - 'protocols/**'
       - '.github/workflows/walle-p4-base-ci.yml'
 
+concurrency:
+  group: walle-p4-base-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   p4-base-arduino:
     name: ESP32-P4 Base (Arduino 3.3.11)
