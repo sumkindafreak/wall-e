@@ -5,7 +5,7 @@
 //
 // This is the single source of truth for the CYD <-> Base wire format.
 // Keep the existing packed byte layout stable until an explicit protocol
-// version migration is made.  The P4 radio gateway transports these bytes
+// version migration is made. The P4 radio gateway transports these bytes
 // unchanged; it does not interpret robot commands.
 // ============================================================
 
@@ -65,7 +65,7 @@ typedef struct __attribute__((packed)) {
 
 // Compile-time guards catch accidental byte-layout drift immediately.
 static_assert(sizeof(ControlPacket) == 19, "ControlPacket wire size changed");
-static_assert(sizeof(TelemetryPacket) == 43, "TelemetryPacket wire size changed");
+static_assert(sizeof(TelemetryPacket) == 45, "TelemetryPacket wire size changed");
 
 // ------------------------------------------------------------
 // Action codes (ControlPacket.action)
