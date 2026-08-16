@@ -25,6 +25,9 @@
 #define SERVO_BROW_RIGHT    8
 #define SERVO_COUNT         9
 
+#define PCA_AUX_FIRST_CHANNEL  SERVO_COUNT
+#define PCA_AUX_LAST_CHANNEL   15
+
 #define CAL_HEAD_PAN_LO     410
 #define CAL_HEAD_PAN_HI     120
 #define CAL_NECK_TOP_LO     532
@@ -68,3 +71,8 @@ void servoNeutral(int speed);
 int  servoGetPos(uint8_t ch);
 bool servoIsMoving();
 String servoGetStatusJSON();
+
+// Spare PCA9685 channels 9..15 can drive non-servo low-current logic loads
+// such as MOSFET gates. Values are full-off/full-on and do not participate in
+// servo interpolation.
+bool servoAuxSetDigital(uint8_t channel, bool on);
