@@ -24,10 +24,12 @@ uint32_t radioTransportGetTxFailureCount(void) { return s_txFailures; }
 #if defined(CONFIG_IDF_TARGET_ESP32P4)
 
 // ============================================================
-// ESP32-P4: UART radio gateway transport
+// ESP32-P4: UART1 radio gateway transport
+// UART0 remains the Waveshare CH343 debug/programming path.
+// UART2 remains dedicated to GPS.
 // ============================================================
 
-static HardwareSerial s_radioUart(2);
+static HardwareSerial s_radioUart(1);
 static bool s_started = false;
 static bool s_gatewayReady = false;
 static uint32_t s_lastGatewayStatusMs = 0;
@@ -55,8 +57,12 @@ static bool isBroadcastMac(const uint8_t mac[6]) {
   return true;
 }
 
-static bool sendBridgeFrame(uint8_t type, const uint8_t* payload, uint16_t payloadLength) {
-  if (!s_started || payloadLength > WALLE_RADIO_BRIDGE_MAX_PAYLOAD) return false;
+static bool sendBridgeFrame(uint8_t type,
+                            const uint8_t* payload,
+                            uint16_t payloadLength) {
+  if (!s_started || payloadLength > WALLE_RADIO_BRIDGE_MAX_PAYLOAD) {
+    return false;
+  }
 
   WalleRadioBridgeHeader header = {};
   header.sof = WALLE_RADIO_BRIDGE_SOF;
@@ -65,12 +71,22 @@ static bool sendBridgeFrame(uint8_t type, const uint8_t* payload, uint16_t paylo
   header.sequence = ++s_sequence;
   header.payloadLength = payloadLength;
 
-  uint16_t crc = walleRadioCrc16(reinterpret_cast<const uint8_t*>(&header), sizeof(header));
-  if (payloadLength && payload) crc = walleRadioCrc16(payload, payloadLength, crc);
+  uint16_t crc = walleRadioCrc16(
+      reinterpret_cast<const uint8_t*>(&header), sizeof(header));
+  if (payloadLength && payload) {
+    crc = walleRadioCrc16(payload, payloadLength, crc);
+  }
 
-  size_t written = s_radioUart.write(reinterpret_cast<const uint8_t*>(&header), sizeof(header));
-  if (payloadLength && payload) written += s_radioUart.write(payload, payloadLength);
-  uint8_t crcBytes[2] = { (uint8_t)(crc & 0xFFu), (uint8_t)(crc >> 8) };
+  size_t written = s_radioUart.write(
+      reinterpret_cast<const uint8_t*>(&header), sizeof(header));
+  if (payloadLength && payload) {
+    written += s_radioUart.write(payload, payloadLength);
+  }
+
+  const uint8_t crcBytes[2] = {
+      (uint8_t)(crc & 0xFFu),
+      (uint8_t)(crc >> 8)
+  };
   written += s_radioUart.write(crcBytes, sizeof(crcBytes));
 
   const size_t expected = sizeof(header) + payloadLength + sizeof(crcBytes);
@@ -78,7 +94,7 @@ static bool sendBridgeFrame(uint8_t type, const uint8_t* payload, uint16_t paylo
 }
 
 static void sendChannelRequest(void) {
-  uint8_t ch = WALLE_RADIO_CHANNEL;
+  const uint8_t ch = WALLE_RADIO_CHANNEL;
   (void)sendBridgeFrame(WALLE_RADIO_MSG_SET_CHANNEL, &ch, sizeof(ch));
 }
 
@@ -103,10 +119,12 @@ static void handleCompleteFrame(void) {
     return;
   }
 
-  const size_t bodyLength = sizeof(WalleRadioBridgeHeader) + header->payloadLength;
-  uint16_t expectedCrc = walleRadioCrc16(s_frameBuffer, bodyLength);
-  uint16_t receivedCrc = (uint16_t)s_frameBuffer[bodyLength] |
-                         ((uint16_t)s_frameBuffer[bodyLength + 1] << 8);
+  const size_t bodyLength = sizeof(WalleRadioBridgeHeader) +
+                            header->payloadLength;
+  const uint16_t expectedCrc = walleRadioCrc16(s_frameBuffer, bodyLength);
+  const uint16_t receivedCrc =
+      (uint16_t)s_frameBuffer[bodyLength] |
+      ((uint16_t)s_frameBuffer[bodyLength + 1] << 8);
   if (expectedCrc != receivedCrc) {
     Serial.println(F("[Radio/P4] CRC error from gateway"));
     parserReset();
@@ -115,31 +133,46 @@ static void handleCompleteFrame(void) {
 
   const uint8_t* payload = s_frameBuffer + sizeof(WalleRadioBridgeHeader);
 
-  if (header->type == WALLE_RADIO_MSG_RX_PACKET) {
-    if (header->payloadLength >= sizeof(WalleRadioRxMeta)) {
-      const WalleRadioRxMeta* meta = reinterpret_cast<const WalleRadioRxMeta*>(payload);
+  switch (header->type) {
+    case WALLE_RADIO_MSG_RX_PACKET: {
+      if (header->payloadLength < sizeof(WalleRadioRxMeta)) break;
+      const WalleRadioRxMeta* meta =
+          reinterpret_cast<const WalleRadioRxMeta*>(payload);
       const size_t available = header->payloadLength - sizeof(WalleRadioRxMeta);
-      if (meta->radioLength <= available &&
-          meta->radioLength <= WALLE_RADIO_BRIDGE_MAX_RADIO_BYTES) {
-        const uint8_t* radioData = payload + sizeof(WalleRadioRxMeta);
-        s_lastRxMs = millis();
-        ++s_rxCount;
-        if (s_receiveCallback) {
-          s_receiveCallback(meta->sourceMac, radioData, meta->radioLength,
-                            meta->rssi, meta->channel);
-        }
+      if (meta->radioLength > available ||
+          meta->radioLength > WALLE_RADIO_BRIDGE_MAX_RADIO_BYTES) {
+        break;
       }
+
+      const uint8_t* radioData = payload + sizeof(WalleRadioRxMeta);
+      s_lastRxMs = millis();
+      ++s_rxCount;
+      if (s_receiveCallback) {
+        s_receiveCallback(meta->sourceMac,
+                          radioData,
+                          meta->radioLength,
+                          meta->rssi,
+                          meta->channel);
+      }
+      break;
     }
-  } else if (header->type == WALLE_RADIO_MSG_STATUS) {
-    if (header->payloadLength >= sizeof(WalleRadioGatewayStatus)) {
+
+    case WALLE_RADIO_MSG_STATUS: {
+      if (header->payloadLength < sizeof(WalleRadioGatewayStatus)) break;
       const WalleRadioGatewayStatus* status =
           reinterpret_cast<const WalleRadioGatewayStatus*>(payload);
       s_gatewayReady = status->ready != 0;
       s_channel = status->channel;
       s_lastGatewayStatusMs = millis();
+      break;
     }
-  } else if (header->type == WALLE_RADIO_MSG_HEARTBEAT) {
-    s_lastGatewayStatusMs = millis();
+
+    case WALLE_RADIO_MSG_HEARTBEAT:
+      s_lastGatewayStatusMs = millis();
+      break;
+
+    default:
+      break;
   }
 
   parserReset();
@@ -180,7 +213,8 @@ static void parserFeed(uint8_t b) {
           parserReset();
           break;
         }
-        s_frameTarget = sizeof(WalleRadioBridgeHeader) + header->payloadLength + 2;
+        s_frameTarget = sizeof(WalleRadioBridgeHeader) +
+                        header->payloadLength + 2;
         s_parserState = PARSER_READ_REST;
       }
       break;
@@ -199,16 +233,19 @@ static void parserFeed(uint8_t b) {
 bool radioTransportInit(void) {
   if (s_started) return true;
 
-  s_radioUart.begin(WALLE_RADIO_UART_BAUD, SERIAL_8N1,
-                    WALLE_RADIO_UART_RX, WALLE_RADIO_UART_TX);
+  s_radioUart.begin(WALLE_RADIO_UART_BAUD,
+                    SERIAL_8N1,
+                    WALLE_RADIO_UART_RX,
+                    WALLE_RADIO_UART_TX);
   s_started = true;
   s_gatewayReady = false;
   s_lastGatewayStatusMs = 0;
   s_lastControlTxMs = 0;
   parserReset();
 
-  Serial.printf("[Radio/P4] UART gateway RX=%d TX=%d baud=%lu channel=%u\n",
-                WALLE_RADIO_UART_RX, WALLE_RADIO_UART_TX,
+  Serial.printf("[Radio/P4] UART1 gateway RX=%d TX=%d baud=%lu channel=%u\n",
+                WALLE_RADIO_UART_RX,
+                WALLE_RADIO_UART_TX,
                 (unsigned long)WALLE_RADIO_UART_BAUD,
                 (unsigned)WALLE_RADIO_CHANNEL);
   sendChannelRequest();
@@ -219,7 +256,7 @@ void radioTransportPoll(void) {
   if (!s_started) return;
 
   while (s_radioUart.available() > 0) {
-    int c = s_radioUart.read();
+    const int c = s_radioUart.read();
     if (c >= 0) parserFeed((uint8_t)c);
   }
 
@@ -248,27 +285,34 @@ bool radioTransportSend(const uint8_t destinationMac[6],
     return false;
   }
 
-  uint8_t payload[sizeof(WalleRadioTxMeta) + WALLE_RADIO_BRIDGE_MAX_RADIO_BYTES];
+  uint8_t payload[sizeof(WalleRadioTxMeta) +
+                  WALLE_RADIO_BRIDGE_MAX_RADIO_BYTES];
   WalleRadioTxMeta meta = {};
   memcpy(meta.destinationMac, destinationMac, 6);
   meta.channel = 0;
-  meta.flags = isBroadcastMac(destinationMac) ? WALLE_RADIO_FLAG_BROADCAST : 0;
+  meta.flags = isBroadcastMac(destinationMac)
+                   ? WALLE_RADIO_FLAG_BROADCAST
+                   : 0;
   meta.radioLength = (uint16_t)length;
 
   memcpy(payload, &meta, sizeof(meta));
   memcpy(payload + sizeof(meta), data, length);
 
-  if (!sendBridgeFrame(WALLE_RADIO_MSG_TX_PACKET, payload,
+  if (!sendBridgeFrame(WALLE_RADIO_MSG_TX_PACKET,
+                       payload,
                        (uint16_t)(sizeof(meta) + length))) {
     ++s_txFailures;
     return false;
   }
+
   ++s_txCount;
   return true;
 }
 
 bool radioTransportBroadcast(const void* data, size_t length) {
-  static const uint8_t broadcastMac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+  static const uint8_t broadcastMac[6] = {
+      0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
+  };
   return radioTransportSend(broadcastMac, data, length);
 }
 
@@ -280,7 +324,7 @@ bool radioTransportIsReady(void) {
 #else
 
 // ============================================================
-// Native Wi-Fi ESP: ESP-NOW transport
+// Native Wi-Fi ESP: ESP-NOW transport (S3 regression path)
 // ============================================================
 
 #include <WiFi.h>
@@ -290,7 +334,7 @@ bool radioTransportIsReady(void) {
 static bool s_started = false;
 
 static wifi_interface_t activeInterface(void) {
-  wifi_mode_t mode = WiFi.getMode();
+  const wifi_mode_t mode = WiFi.getMode();
   if (mode == WIFI_AP || mode == WIFI_AP_STA) return WIFI_IF_AP;
   return WIFI_IF_STA;
 }
@@ -304,7 +348,8 @@ static bool ensurePeer(const uint8_t mac[6]) {
   peer.channel = 0;
   peer.encrypt = false;
   peer.ifidx = activeInterface();
-  esp_err_t result = esp_now_add_peer(&peer);
+
+  const esp_err_t result = esp_now_add_peer(&peer);
   return result == ESP_OK || result == ESP_ERR_ESPNOW_EXIST;
 }
 
@@ -312,21 +357,24 @@ static void nativeReceive(const esp_now_recv_info_t* info,
                           const uint8_t* data,
                           int length) {
   if (!info || !data || length <= 0) return;
+
   int8_t rssi = -127;
-  uint8_t channel = s_channel;
-  if (info->rx_ctrl) {
-    rssi = (int8_t)info->rx_ctrl->rssi;
-    channel = info->rx_ctrl->channel;
-  }
+  if (info->rx_ctrl) rssi = (int8_t)info->rx_ctrl->rssi;
+
   s_lastRxMs = millis();
   ++s_rxCount;
   if (s_receiveCallback) {
-    s_receiveCallback(info->src_addr, data, (size_t)length, rssi, channel);
+    s_receiveCallback(info->src_addr,
+                      data,
+                      (size_t)length,
+                      rssi,
+                      s_channel);
   }
 }
 
 bool radioTransportInit(void) {
   if (s_started) return true;
+
   if (esp_now_init() != ESP_OK) {
     Serial.println(F("[Radio] ESP-NOW init failed"));
     return false;
@@ -340,7 +388,8 @@ bool radioTransportInit(void) {
   }
 
   s_started = true;
-  Serial.printf("[Radio] Native ESP-NOW ready on channel %u\n", (unsigned)s_channel);
+  Serial.printf("[Radio] Native ESP-NOW ready on channel %u\n",
+                (unsigned)s_channel);
   return true;
 }
 
@@ -355,26 +404,34 @@ bool radioTransportSend(const uint8_t destinationMac[6],
     ++s_txFailures;
     return false;
   }
+
   if (!ensurePeer(destinationMac)) {
     ++s_txFailures;
     return false;
   }
-  esp_err_t result = esp_now_send(destinationMac,
-                                  reinterpret_cast<const uint8_t*>(data),
-                                  length);
+
+  const esp_err_t result = esp_now_send(
+      destinationMac,
+      reinterpret_cast<const uint8_t*>(data),
+      length);
   if (result != ESP_OK) {
     ++s_txFailures;
     return false;
   }
+
   ++s_txCount;
   return true;
 }
 
 bool radioTransportBroadcast(const void* data, size_t length) {
-  static const uint8_t broadcastMac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+  static const uint8_t broadcastMac[6] = {
+      0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
+  };
   return radioTransportSend(broadcastMac, data, length);
 }
 
-bool radioTransportIsReady(void) { return s_started; }
+bool radioTransportIsReady(void) {
+  return s_started;
+}
 
 #endif
