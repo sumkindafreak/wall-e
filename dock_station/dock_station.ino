@@ -10,16 +10,18 @@
  ******************************************************************************/
 
 #include <Arduino.h>
+#include "dock_config.h"
+
+// ESP-NOW is a core docking service and is always compiled. ENABLE_WIFI only
+// controls the optional home-WiFi/OTA layer.
+#include "dock_espnow.h"
 #if ENABLE_WIFI
 #include <ArduinoOTA.h>
 #include <WiFi.h>
 #endif
-#include "dock_config.h"
+
 #include "dock_protocol.h"
 #include "dock_sensors.h"
-#if ENABLE_WIFI
-#include "dock_espnow.h"
-#endif
 #include "dock_state.h"
 #include "dock_alignment.h"
 #include "dock_ir_guidance.h"
@@ -37,6 +39,10 @@
 
 static uint32_t g_last_debug_ms = 0;
 static bool g_espnow_ok = false;
+
+#if ENABLE_WIFI
+static bool g_ota_started = false;
+#endif
 
 /*=============================================================================
  * SETUP
@@ -76,19 +82,20 @@ void setup() {
   /* NeoPixel strip on PIN_STATUS_NEOPIXEL (GPIO2) */
   Serial.println(F("[DOCK] Enabling NeoPixel status strip"));
   dockNeoPixelBegin();
+
   /* Dock TFT display */
   Serial.println(F("[DOCK] Enabling TFT display"));
   dockDisplayBegin();
 
-#if ENABLE_WIFI
-  /* WiFi: start connection (non-blocking). ESP-NOW inited from loop when WiFi connects. */
+  /*
+   * ESP-NOW is essential to docking and starts even when ENABLE_WIFI is 0.
+   * Optional home WiFi can therefore never be a prerequisite for beacons,
+   * homing commands, docking ARM/DISARM, or charge requests.
+   */
   g_espnow_ok = dockEspNowBegin();
   if (!g_espnow_ok) {
-    Serial.println(F("[DOCK] No WiFi credentials (set WIFI_HOME_SSID or use Share from WALL-E)"));
+    Serial.println(F("[DOCK] ERROR: ESP-NOW transport unavailable"));
   }
-#else
-  Serial.println(F("[DOCK] WiFi disabled (ENABLE_WIFI=0 in dock_config.h)"));
-#endif
 
 #if DOCK_TEST_MODE
   Serial.println(F("[DOCK] Running test sequence (DOCK_TEST_MODE=1)..."));
@@ -112,19 +119,29 @@ void loop() {
   }
 #endif
 
-#if ENABLE_WIFI
-  /* Finish WiFi/ESP-NOW init when connected (non-blocking) */
+  /* Maintain ESP-NOW first; optional home WiFi is secondary. */
   g_espnow_ok = dockEspNowPoll();
+
+#if ENABLE_WIFI
   if (g_espnow_ok && WiFi.status() == WL_CONNECTED) {
-    static bool ota_started = false;
-    if (!ota_started) {
-      ota_started = true;
+    if (!g_ota_started) {
+      g_ota_started = true;
       ArduinoOTA.setHostname("wall-e-dock");
       ArduinoOTA.begin();
       Serial.println(F("[DOCK] OTA enabled (hostname wall-e-dock, port 3232)"));
     }
+  } else if (g_ota_started && WiFi.status() != WL_CONNECTED) {
+    // The optional Wi-Fi link may be intentionally rejected if it is on a
+    // channel that conflicts with WALL-E's docking radio.
+    g_ota_started = false;
+    Serial.println(F("[DOCK] OTA paused; home WiFi unavailable"));
   }
-  ArduinoOTA.handle();
+
+  if (g_ota_started) {
+    ArduinoOTA.handle();
+  }
+#endif
+
   if (g_espnow_ok) {
     DockBeaconPacket_t pkt = {};
     pkt.magic = DOCK_BEACON_MAGIC;
@@ -140,7 +157,6 @@ void loop() {
     dockEspNowSendBeacon(&pkt);
     dockEspNowSendNodeHealth();
   }
-#endif
 
   /* 1. Read sensors */
   dockSensorsUpdate();
@@ -164,7 +180,8 @@ void loop() {
     NeoPixelState np = dockCalloutIsActive()
       ? NP_STATE_CALLOUT
       : (NeoPixelState)dockStateToNeoPixelState(s);
-    bool mouth_warn = dockMouthBlocked() && (s == STATE_DOCKED_IDLE || s == STATE_CHARGING);
+    bool mouth_warn = dockMouthBlocked() &&
+                      (s == STATE_DOCKED_IDLE || s == STATE_CHARGING);
     dockNeoPixelUpdateEx(np, mouth_warn, dockStateGetFaultCode(),
                          dockRobotInSlot(), dockMouthBlocked(), dockCurrentAmps());
   }
