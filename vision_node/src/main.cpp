@@ -1,7 +1,7 @@
 /**
  * WALL-E Vision Node - ESP32-S3 + OV2640
- * Motion detection, clustering, centroid, ESP-NOW to base brain.
- * WiFi: connects to WALL-E-Control AP, serves /snapshot for web UI.
+ * Motion detection, clustering, centroid, ESP-NOW to Base Brain.
+ * Wi-Fi: connects to WALL-E-Control AP, serves /snapshot for WebUI.
  */
 
 #include <Arduino.h>
@@ -19,6 +19,9 @@
 #define FRAME_W    160
 #define FRAME_H    120
 #define XCLK_FREQ  20000000
+
+static constexpr uint32_t WIFI_CONNECT_TIMEOUT_MS = 5000;
+static constexpr uint32_t WIFI_CONNECT_POLL_MS = 250;
 
 /* ESP32-S3-CAM N16R8 + OV2640 (S3N16R8 pinout) */
 static camera_config_t s_camConfig = {
@@ -61,46 +64,79 @@ static bool camInit(void) {
     Serial.printf("[Vision] Camera init FAILED: 0x%x\n", err);
     return false;
   }
+
   sensor_t* s = esp_camera_sensor_get();
   if (s) {
     s->set_framesize(s, (framesize_t)FRAMESIZE_QQVGA);
     s->set_pixformat(s, PIXFORMAT_GRAYSCALE);
   }
+
   Serial.println("[Vision] Camera OK (160x120 grayscale)");
   return true;
 }
 
 static void handleSnapshot() {
   sensor_t* s = esp_camera_sensor_get();
-  if (!s) { s_httpServer.send(500, "text/plain", "No sensor"); return; }
+  if (!s) {
+    s_httpServer.send(500, "text/plain", "No sensor");
+    return;
+  }
+
+  // Temporarily switch to JPEG/QVGA for a useful WebUI still image, then put
+  // the camera straight back into the low-cost grayscale mode used by motion
+  // and recognition processing.
   s->set_framesize(s, (framesize_t)FRAMESIZE_QVGA);
   s->set_pixformat(s, PIXFORMAT_JPEG);
   camera_fb_t* fb = esp_camera_fb_get();
   s->set_pixformat(s, PIXFORMAT_GRAYSCALE);
   s->set_framesize(s, (framesize_t)FRAMESIZE_QQVGA);
+
   if (!fb || fb->len == 0) {
     if (fb) esp_camera_fb_return(fb);
     s_httpServer.send(500, "text/plain", "Capture failed");
     return;
   }
+
   s_httpServer.send_P(200, "image/jpeg", (const char*)fb->buf, fb->len);
   esp_camera_fb_return(fb);
 }
 
 static void wifiInit() {
   WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(false);
   WiFi.begin(WALLE_AP_SSID, WALLE_AP_PASSWORD);
-  for (int i = 0; i < 30 && WiFi.status() != WL_CONNECTED; i++) {
-    delay(500);
-    Serial.print(".");
+
+  Serial.print("[Vision] Connecting to WALL-E-Control");
+  const uint32_t startedMs = millis();
+  while (WiFi.status() != WL_CONNECTED &&
+         millis() - startedMs < WIFI_CONNECT_TIMEOUT_MS) {
+    delay(WIFI_CONNECT_POLL_MS);
+    Serial.print('.');
   }
+
   if (WiFi.status() == WL_CONNECTED) {
     s_visionNodeIp = (uint32_t)WiFi.localIP();
-    Serial.printf("\n[Vision] WiFi OK %s\n", WiFi.localIP().toString().c_str());
+    Serial.printf("\n[Vision] WiFi OK %s ch=%d\n",
+                  WiFi.localIP().toString().c_str(), WiFi.channel());
+
     s_httpServer.on("/snapshot", HTTP_GET, handleSnapshot);
+    s_httpServer.on("/health", HTTP_GET, []() {
+      String body = "{\"ok\":true,\"node\":\"wall-e-vision\",\"ip\":\"";
+      body += WiFi.localIP().toString();
+      body += "\",\"channel\":";
+      body += String(WiFi.channel());
+      body += "}";
+      s_httpServer.send(200, "application/json", body);
+    });
     s_httpServer.begin();
+    Serial.println("[Vision] HTTP snapshot server ready: /snapshot /health");
   } else {
-    Serial.println("\n[Vision] WiFi failed, snapshot disabled");
+    // Do not leave the radio endlessly scanning for an AP. ESP-NOW is the
+    // primary robot link and vision_espnow.cpp will pin that fallback to the
+    // WALL-E channel-11 contract.
+    WiFi.disconnect(false);
+    s_visionNodeIp = 0;
+    Serial.println("\n[Vision] Base AP not found; snapshot disabled, ESP-NOW remains available");
   }
 }
 
@@ -113,6 +149,11 @@ void setup() {
     Serial.println("[Vision] HALT - no camera");
     while (1) delay(1000);
   }
+
+  // Bring up the Base AP link before ESP-NOW so both services share the same
+  // physical Wi-Fi channel. The previous code defined wifiInit() but never
+  // called it, so /snapshot could never be served.
+  wifiInit();
 
   motionDetectInit(&s_motion);
   motionDetectSetFrameSize(&s_motion, FRAME_W, FRAME_H);
@@ -138,10 +179,12 @@ void setup() {
 }
 
 void loop() {
-  uint32_t now = millis();
+  const uint32_t now = millis();
+
   camera_fb_t* fb = esp_camera_fb_get();
   if (!fb || fb->len < (size_t)(FRAME_W * FRAME_H)) {
     if (fb) esp_camera_fb_return(fb);
+    if (s_visionNodeIp) s_httpServer.handleClient();
     delay(10);
     return;
   }
@@ -173,8 +216,8 @@ void loop() {
       if (fr && fr->len >= (size_t)(FRAME_W * FRAME_H * 2)) {
         recognitionProcessRgbFrame(&pkt, fr->buf, FRAME_W, FRAME_H);
         esp_camera_fb_return(fr);
-      } else {
-        if (fr) esp_camera_fb_return(fr);
+      } else if (fr) {
+        esp_camera_fb_return(fr);
       }
       sens->set_pixformat(sens, PIXFORMAT_GRAYSCALE);
       sens->set_framesize(sens, FRAMESIZE_QQVGA);
@@ -191,9 +234,10 @@ void loop() {
   if (s_frameCount % 50 == 0) {
     Serial.printf(
       "[Vision] F=%lu motion=%d x=%d y=%d sz=%u class=%u col=%u ev=%u dist=%u\n",
-      (unsigned long)s_frameCount, (int)pkt.motionDetected, (int)pkt.targetX, (int)pkt.targetY,
-      (unsigned)pkt.objectSize, (unsigned)pkt.objectClass, (unsigned)pkt.colourId,
-      (unsigned)pkt.visionEvent, (unsigned)pkt.distanceBand);
+      (unsigned long)s_frameCount, (int)pkt.motionDetected, (int)pkt.targetX,
+      (int)pkt.targetY, (unsigned)pkt.objectSize, (unsigned)pkt.objectClass,
+      (unsigned)pkt.colourId, (unsigned)pkt.visionEvent,
+      (unsigned)pkt.distanceBand);
   }
 
   delay(5);

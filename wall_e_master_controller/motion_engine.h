@@ -1,7 +1,6 @@
 // ============================================================
-//  WALL-E Master Controller — Motion Engine
-//  9-servo offset blending + joystick override per axis
-//  2 animation tracks with crossfade + idle layer
+// WALL-E Master Controller — Motion Engine
+// 9 physical Base servos carried in a 10-slot compatibility packet.
 // ============================================================
 
 #ifndef MOTION_ENGINE_H
@@ -9,28 +8,28 @@
 
 #include <Arduino.h>
 
-// Servo indices (match Base controller servo mapping)
+// Packet/motion slots. Slot 1 is retained but unused for backward wire
+// compatibility. Head tilt is the physical upper-neck servo, so both names
+// intentionally address slot 4.
 #define SERVO_HEAD_PAN       0
-#define SERVO_HEAD_TILT      1
+#define SERVO_UNUSED_1       1
 #define SERVO_EYE_LEFT       2
 #define SERVO_EYE_RIGHT      3
 #define SERVO_NECK_TOP       4
+#define SERVO_HEAD_TILT      SERVO_NECK_TOP
 #define SERVO_NECK_BOTTOM    5
 #define SERVO_LEFT_ARM       6
 #define SERVO_RIGHT_ARM      7
-#define SERVO_EYEBROW_RIGHT  8  // NEW
-#define SERVO_EYEBROW_LEFT   9  // NEW
+#define SERVO_EYEBROW_RIGHT  8
+#define SERVO_EYEBROW_LEFT   9
 #define SERVO_COUNT          10
 
-// Servo limits (degrees, 0-180)
 #define SERVO_MIN 0
 #define SERVO_MAX 180
 
-// Animation system
 #define MAX_ANIMATION_TRACKS 2
 #define ANIMATION_CROSSFADE_MS 300
 
-// Animation track
 struct AnimationTrack {
   bool active;
   unsigned long startTime;
@@ -40,46 +39,36 @@ struct AnimationTrack {
   unsigned long frameStartTime;
 };
 
-// Motion engine state
 struct ServoState {
-  float basePosition[SERVO_COUNT];      // Base position (from profile/neutral)
-  float animationOffset[SERVO_COUNT];   // Current animation influence
-  float joystickOffset[SERVO_COUNT];    // Joystick override
-  float joystickInfluence[SERVO_COUNT]; // 0.0 = animation, 1.0 = joystick
-  float targetPosition[SERVO_COUNT];    // Final output (after blending)
-  float currentPosition[SERVO_COUNT];   // Smoothed output
+  float basePosition[SERVO_COUNT];
+  float animationOffset[SERVO_COUNT];
+  float joystickOffset[SERVO_COUNT];
+  float joystickInfluence[SERVO_COUNT];
+  float targetPosition[SERVO_COUNT];
+  float currentPosition[SERVO_COUNT];
 };
 
-// Init
 void motionInit();
-
-// Update (call every loop)
 void motionUpdate(unsigned long now);
 
-// Profile tuning
-void motionSetHeadSensitivity(float sensitivity);  // 0.5 to 2.0 multiplier
-void motionSetServoSpeedLimit(float limit);        // 0.0 to 1.0
+void motionSetHeadSensitivity(float sensitivity);
+void motionSetServoSpeedLimit(float limit);
 
-// Set joystick inputs (velocity-based for head, position-based for others)
-void motionSetHeadPanVelocity(float vel);   // -1.0 to 1.0 (rad/s scaled)
-void motionSetHeadTiltVelocity(float vel);  // -1.0 to 1.0
+void motionSetHeadPanVelocity(float vel);
+void motionSetHeadTiltVelocity(float vel);
 void motionSetJoystickOverride(uint8_t servoIndex, float offset, float influence);
 
-// Get final servo targets (0-180 degrees)
-void motionGetServoTargets(uint8_t* targets);  // Array of 10 values
+void motionGetServoTargets(uint8_t* targets);
 
-// Animation control
 void motionTriggerAnimation(uint8_t animId);
 void motionStopAllAnimations();
 
-// Safety
-void motionEmergencyStop();  // Neutral all servos
-void motionSetNeutralPositions(const uint8_t* neutral);  // Set base positions
+void motionEmergencyStop();
+void motionSetNeutralPositions(const uint8_t* neutral);
 
-// Direct servo control (for servo test page)
-void motionSetServoDirect(uint8_t servoIndex, uint8_t degrees);  // Set single servo directly
-void motionSetAllNeutral();  // Set all servos to 90°
-void motionTestPose1();  // Test pose 1
-void motionTestPose2();  // Test pose 2
+void motionSetServoDirect(uint8_t servoIndex, uint8_t degrees);
+void motionSetAllNeutral();
+void motionTestPose1();
+void motionTestPose2();
 
 #endif // MOTION_ENGINE_H

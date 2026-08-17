@@ -13,13 +13,16 @@ static bool s_initialized = false;
 static uint16_t s_distance_mm = 0;
 static bool s_valid = false;
 static uint32_t s_last_read_ms = 0;
+static uint32_t s_invalid_read_count = 0;
 #define TOF_POLL_MS 50   /* ~20 Hz */
 
 bool tofInit(void) {
   if (s_initialized) return s_valid;
+
   s_initialized = true;
   s_valid = false;
   s_distance_mm = 0;
+  s_invalid_read_count = 0;
   delay(1);
   yield();
 
@@ -27,6 +30,7 @@ bool tofInit(void) {
     Serial.println("[ToF] VL53L1X not found (I2C 0x29)");
     return false;
   }
+
   s_tof.setDistanceMode(VL53L1X::Long);
   s_tof.setMeasurementTimingBudget(33000);
   s_tof.startContinuous(50);
@@ -36,15 +40,35 @@ bool tofInit(void) {
 }
 
 void tofUpdate(uint32_t now) {
-  if (!s_initialized || !s_valid) return;
+  // s_valid describes the LAST measurement, not whether the sensor exists.
+  // Keep polling after an out-of-range sample so the ToF can recover as soon
+  // as WALL-E moves back into a measurable range.
+  if (!s_initialized) return;
   if ((now - s_last_read_ms) < TOF_POLL_MS) return;
   s_last_read_ms = now;
 
-  if (s_tof.dataReady()) {
-    s_distance_mm = s_tof.read(false);
-    if (s_distance_mm >= 8190) s_valid = false;
-    else s_valid = true;
+  if (!s_tof.dataReady()) return;
+
+  const uint16_t distance = s_tof.read(false);
+  if (distance >= 8190) {
+    s_valid = false;
+    s_invalid_read_count++;
+    if (s_invalid_read_count == 1 || (s_invalid_read_count % 100u) == 0u) {
+      Serial.printf("[ToF] Invalid/out-of-range reading (%u), retrying\n",
+                    (unsigned)distance);
+    }
+    return;
   }
+
+  if (!s_valid && s_invalid_read_count > 0) {
+    Serial.printf("[ToF] Recovered after %lu invalid reading(s): %u mm\n",
+                  (unsigned long)s_invalid_read_count,
+                  (unsigned)distance);
+  }
+
+  s_invalid_read_count = 0;
+  s_distance_mm = distance;
+  s_valid = true;
 }
 
 uint16_t tofGetDistanceMm(void) {

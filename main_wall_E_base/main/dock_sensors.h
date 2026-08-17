@@ -1,6 +1,6 @@
 /*******************************************************************************
  * dock_sensors.h
- * Obstacle bumpers on WALL-E base (onboard IR break-beam removed — use ToF + dock ESP-NOW).
+ * Four obstacle sensors on WALL-E Base.
  ******************************************************************************/
 
 #ifndef DOCK_SENSORS_H
@@ -8,31 +8,25 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "base_board_pins.h"
 
-/*
- * PIN PLAN (ESP32-S3 — avoid 33/34 Octal PSRAM)
- *   PIN_OBS_FRONT_L  (22), PIN_OBS_FRONT_R  (23)
- *   PIN_OBS_REAR_L     (20), PIN_OBS_REAR_R   (47)
- */
+#define PIN_OBS_FRONT_L  BASE_PIN_OBS_FRONT_L
+#define PIN_OBS_FRONT_R  BASE_PIN_OBS_FRONT_R
+#define PIN_OBS_REAR_L   BASE_PIN_OBS_REAR_L
+#define PIN_OBS_REAR_R   BASE_PIN_OBS_REAR_R
 
-#define PIN_OBS_FRONT_L    22
-#define PIN_OBS_FRONT_R    23
-#define PIN_OBS_REAR_L     20
-#define PIN_OBS_REAR_R     47
+#define INVERT_OBS_FRONT_L   0
+#define INVERT_OBS_FRONT_R   0
+#define INVERT_OBS_REAR_L    0
+#define INVERT_OBS_REAR_R    0
 
-#define INVERT_OBS_FRONT_L     0
-#define INVERT_OBS_FRONT_R     0
-#define INVERT_OBS_REAR_L      0
-#define INVERT_OBS_REAR_R      0
-
-#define DOCK_DEBOUNCE_MS   50
+#define DOCK_DEBOUNCE_MS  50
 
 extern bool gDockingEnabled;
 
 void dockSensorsBegin(void);
 void dockSensorsUpdate(void);
 
-/** Legacy API — always false (no local IR break-beam). */
 bool dockBeamPresent(void);
 
 bool obstacleFrontBlocked(void);

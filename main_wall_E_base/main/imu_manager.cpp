@@ -8,6 +8,7 @@
 #include <Wire.h>
 #include <MPU6050.h>
 #include <Arduino.h>
+#include <math.h>
 
 static MPU6050 mpu;
 static ImuData _data = {};
@@ -26,16 +27,18 @@ static float sumAx = 0, sumAy = 0, sumAz = 0;
 static uint32_t calCount = 0;
 static float prevAx = 0, prevAy = 0, prevAz = 0;
 static bool prevAccelValid = false;
-static unsigned long movementFirstSeen = 0;  // debounce: restart only after sustained movement
+static unsigned long movementFirstSeen = 0;
 
-// Scale factors (MPU6050 ±250 deg/s → 131 LSB/(deg/s); ±2g → 16384 LSB/g)
-#define GYRO_LSB_PER_DEG_S   131.0f
-#define ACCEL_LSB_PER_G      16384.0f
-#define CALIBRATION_DURATION_MS  3000UL
-// Movement thresholds: high enough to ignore sensor noise, low enough to catch real motion
-#define GYRO_MOVE_THRESH_RAW     1200    // LSB (~9 deg/s) — bias/noise often 200–800
-#define ACCEL_MOVE_THRESH_G      0.15f   // g — delta from previous sample (noise ~0.02–0.05)
-#define MOVEMENT_DEBOUNCE_MS     150UL   // require sustained movement before restart
+// Scale factors (MPU6050 +/-250 deg/s -> 131 LSB/(deg/s); +/-2g -> 16384 LSB/g)
+#define GYRO_LSB_PER_DEG_S      131.0f
+#define ACCEL_LSB_PER_G         16384.0f
+#define GRAVITY_MPS2            9.80665f
+#define CALIBRATION_DURATION_MS 3000UL
+
+// Movement thresholds: high enough to ignore sensor noise, low enough to catch real motion.
+#define GYRO_MOVE_THRESH_RAW    1200
+#define ACCEL_MOVE_THRESH_G     0.15f
+#define MOVEMENT_DEBOUNCE_MS    150UL
 
 static void clearCalibrationSums() {
   sumGx = sumGy = sumGz = 0;
@@ -54,14 +57,16 @@ void beginIMU() {
     _data.valid = false;
     imuCalibrated = false;
     calibrating = false;
-    Serial.println("[IMU] MPU6050 not found — check wiring and I2C address");
+    Serial.println("[IMU] MPU6050 not found - check wiring and I2C address");
     return;
   }
+
   _data.valid = true;
   mpu.setFullScaleAccelRange(MPU6050_ACCEL_FS_2);
   mpu.setFullScaleGyroRange(MPU6050_GYRO_FS_250);
   mpu.setDLPFMode(MPU6050_DLPF_BW_20);
   Serial.printf("[IMU] MPU6050 found at 0x%02X\n", MPU6050_ADDR);
+  Serial.println("[IMU] Keep WALL-E level and still for calibration");
   calibrateIMU();
 }
 
@@ -92,27 +97,32 @@ void updateIMU() {
     int16_t ax, ay, az, gx, gy, gz;
     mpu.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
 
-    float axG = ax / ACCEL_LSB_PER_G;
-    float ayG = ay / ACCEL_LSB_PER_G;
-    float azG = az / ACCEL_LSB_PER_G;
+    const float axG = ax / ACCEL_LSB_PER_G;
+    const float ayG = ay / ACCEL_LSB_PER_G;
+    const float azG = az / ACCEL_LSB_PER_G;
 
-    // Movement detection: gyro above threshold or accel jump (thresholds set to ignore noise)
+    // Movement detection: gyro above threshold or accelerometer jump.
     bool movement = (abs(gx) > GYRO_MOVE_THRESH_RAW) ||
                     (abs(gy) > GYRO_MOVE_THRESH_RAW) ||
                     (abs(gz) > GYRO_MOVE_THRESH_RAW);
+
     if (prevAccelValid) {
       if (fabsf(axG - prevAx) > ACCEL_MOVE_THRESH_G ||
           fabsf(ayG - prevAy) > ACCEL_MOVE_THRESH_G ||
-          fabsf(azG - prevAz) > ACCEL_MOVE_THRESH_G)
+          fabsf(azG - prevAz) > ACCEL_MOVE_THRESH_G) {
         movement = true;
+      }
     }
-    prevAx = axG; prevAy = ayG; prevAz = azG;
+
+    prevAx = axG;
+    prevAy = ayG;
+    prevAz = azG;
     prevAccelValid = true;
 
     if (movement) {
-      if (movementFirstSeen == 0)
+      if (movementFirstSeen == 0) {
         movementFirstSeen = millis();
-      else if ((millis() - movementFirstSeen) >= MOVEMENT_DEBOUNCE_MS) {
+      } else if ((millis() - movementFirstSeen) >= MOVEMENT_DEBOUNCE_MS) {
         Serial.println("[IMU] Movement detected - restarting calibration");
         calibrationStartTime = millis();
         clearCalibrationSums();
@@ -125,30 +135,37 @@ void updateIMU() {
     sumGx += gx / GYRO_LSB_PER_DEG_S;
     sumGy += gy / GYRO_LSB_PER_DEG_S;
     sumGz += gz / GYRO_LSB_PER_DEG_S;
-    sumAx += axG * 9.81f;
-    sumAy += ayG * 9.81f;
-    sumAz += azG * 9.81f;
+    sumAx += axG * GRAVITY_MPS2;
+    sumAy += ayG * GRAVITY_MPS2;
+    sumAz += azG * GRAVITY_MPS2;
     calCount++;
 
     if ((millis() - calibrationStartTime) >= CALIBRATION_DURATION_MS && calCount > 0) {
       gyroOffsetX = sumGx / calCount;
       gyroOffsetY = sumGy / calCount;
       gyroOffsetZ = sumGz / calCount;
+
+      // WALL-E is calibrated sitting level. X and Y should read 0 m/s^2,
+      // while Z must retain +1 g. The old code subtracted the complete mean
+      // Z acceleration, including gravity, leaving almost a zero vector and
+      // making pitch/roll numerically meaningless after calibration.
       accelOffsetX = sumAx / calCount;
       accelOffsetY = sumAy / calCount;
-      accelOffsetZ = sumAz / calCount;
+      accelOffsetZ = (sumAz / calCount) - GRAVITY_MPS2;
+
       imuCalibrated = true;
       calibrating = false;
+
       Serial.println("[IMU] Calibration complete");
-      Serial.printf("[IMU] Gyro offsets:  X: %.3f  Y: %.3f  Z: %.3f (deg/s)\n",
-        gyroOffsetX, gyroOffsetY, gyroOffsetZ);
-      Serial.printf("[IMU] Accel offsets: X: %.3f  Y: %.3f  Z: %.3f (m/s^2)\n",
-        accelOffsetX, accelOffsetY, accelOffsetZ);
+      Serial.printf("[IMU] Gyro offsets:  X: %.3f  Y: %.3f  Z: %.3f deg/s\n",
+                    gyroOffsetX, gyroOffsetY, gyroOffsetZ);
+      Serial.printf("[IMU] Accel bias:    X: %.3f  Y: %.3f  Z: %.3f m/s^2 (gravity preserved)\n",
+                    accelOffsetX, accelOffsetY, accelOffsetZ);
     }
     return;
   }
 
-  // Normal operation: rate-limit and apply offsets
+  // Normal operation: rate-limit and apply offsets.
   if ((millis() - _lastRead) < IMU_POLL_MS) return;
   _lastRead = millis();
 
@@ -157,21 +174,25 @@ void updateIMU() {
   int16_t ax, ay, az, gx, gy, gz;
   mpu.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
 
-  float gxDeg = gx / GYRO_LSB_PER_DEG_S - gyroOffsetX;
-  float gyDeg = gy / GYRO_LSB_PER_DEG_S - gyroOffsetY;
-  float gzDeg = gz / GYRO_LSB_PER_DEG_S - gyroOffsetZ;
-  (void)gxDeg; (void)gyDeg; (void)gzDeg; // reserved for future use
+  const float gxDeg = gx / GYRO_LSB_PER_DEG_S - gyroOffsetX;
+  const float gyDeg = gy / GYRO_LSB_PER_DEG_S - gyroOffsetY;
+  const float gzDeg = gz / GYRO_LSB_PER_DEG_S - gyroOffsetZ;
+  (void)gxDeg;
+  (void)gyDeg;
+  (void)gzDeg;
 
-  float axG = ax / ACCEL_LSB_PER_G;
-  float ayG = ay / ACCEL_LSB_PER_G;
-  float azG = az / ACCEL_LSB_PER_G;
-  _data.accelX = axG * 9.81f - accelOffsetX;
-  _data.accelY = ayG * 9.81f - accelOffsetY;
-  _data.accelZ = azG * 9.81f - accelOffsetZ;
+  const float axG = ax / ACCEL_LSB_PER_G;
+  const float ayG = ay / ACCEL_LSB_PER_G;
+  const float azG = az / ACCEL_LSB_PER_G;
 
-  float axGc = _data.accelX / 9.81f;
-  float ayGc = _data.accelY / 9.81f;
-  float azGc = _data.accelZ / 9.81f;
+  _data.accelX = axG * GRAVITY_MPS2 - accelOffsetX;
+  _data.accelY = ayG * GRAVITY_MPS2 - accelOffsetY;
+  _data.accelZ = azG * GRAVITY_MPS2 - accelOffsetZ;
+
+  const float axGc = _data.accelX / GRAVITY_MPS2;
+  const float ayGc = _data.accelY / GRAVITY_MPS2;
+  const float azGc = _data.accelZ / GRAVITY_MPS2;
+
   _data.pitch = atan2f(ayGc, sqrtf(axGc * axGc + azGc * azGc)) * 180.0f / PI;
   _data.roll  = atan2f(-axGc, azGc) * 180.0f / PI;
   _data.tiltAlert = (fabsf(_data.pitch) > TILT_ALERT_DEG ||

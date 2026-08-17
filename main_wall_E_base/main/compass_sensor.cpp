@@ -56,7 +56,7 @@ static bool detectCompassType() {
     return true;
   }
   
-  Serial.println(F("[Compass] ⚠️  No compass detected"));
+  Serial.println(F("[Compass] No compass detected"));
   return false;
 }
 
@@ -70,20 +70,36 @@ static bool initHMC5883L() {
   return (Wire.endTransmission() == 0);
 }
 
-static bool initQMC5883L() {
-  // Soft reset QMC5883L
+static bool writeQmcRegister(uint8_t reg, uint8_t value) {
   Wire.beginTransmission(COMPASS_ADDR_QMC);
-  Wire.write(QMC_REG_CONTROL2);
-  Wire.write(0x80);
-  Wire.endTransmission();
-  delay(10);
-  
-  // Configure QMC5883L
-  Wire.beginTransmission(COMPASS_ADDR_QMC);
-  Wire.write(QMC_REG_CONTROL1);
-  Wire.write(0x0D);  // Mode: continuous, ODR: 10Hz, Range: 2G, OSR: 512
-  Wire.write(0x01);  // Period register
+  Wire.write(reg);
+  Wire.write(value);
   return (Wire.endTransmission() == 0);
+}
+
+static bool initQMC5883L() {
+  // QST specifies a software reset through CONTROL2, followed by a dedicated
+  // write of 0x01 to the SET/RESET period register at 0x0B.
+  if (!writeQmcRegister(QMC_REG_CONTROL2, 0x80)) {
+    Serial.println(F("[Compass] QMC5883L soft reset write failed"));
+    return false;
+  }
+  delay(10);
+
+  if (!writeQmcRegister(QMC_REG_PERIOD, 0x01)) {
+    Serial.println(F("[Compass] QMC5883L set/reset period write failed"));
+    return false;
+  }
+
+  // 0x0D = OSR 512, range +/-2G, ODR 200 Hz, continuous measurement.
+  // WALL-E still reads at COMPASS_UPDATE_MS, so the faster sensor ODR gives a
+  // fresh sample whenever the control loop asks for one.
+  if (!writeQmcRegister(QMC_REG_CONTROL1, 0x0D)) {
+    Serial.println(F("[Compass] QMC5883L control write failed"));
+    return false;
+  }
+
+  return true;
 }
 
 bool compassInit() {
@@ -102,7 +118,7 @@ bool compassInit() {
     s_initialized = true;
     Serial.printf("[Compass] Initialized %s\n", compassGetTypeName());
   } else {
-    Serial.println(F("[Compass] ⚠️  Initialization failed"));
+    Serial.println(F("[Compass] Initialization failed"));
   }
   
   return success;
@@ -212,7 +228,7 @@ void compassStartCalibration() {
   s_minX = 32767; s_maxX = -32768;
   s_minY = 32767; s_maxY = -32768;
   s_minZ = 32767; s_maxZ = -32768;
-  Serial.println(F("[Compass] Calibration started - rotate WALL-E 360°"));
+  Serial.println(F("[Compass] Calibration started - rotate WALL-E 360 degrees"));
 }
 
 bool compassIsCalibrating() {

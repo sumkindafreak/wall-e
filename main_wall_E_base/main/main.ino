@@ -1,11 +1,8 @@
 // ============================================================
-//  Arduino IDE: You opened the correct sketch (folder "main" + main.ino).
-//  See ../ARDUINO_IDE_QUICK_START.md — ignore platformio.ini for daily use.
-// ============================================================
-//  WALL-E Simple WebUI + Tank Drive Controller
-//  Platform:   ESP32-S3 Dev Module
-//  Motor:      L298N Dual H-Bridge
-//  Boot mode:  AP-first (always reachable at 192.168.4.1)
+// Arduino IDE: open this folder ("main") and main.ino.
+// WALL-E Base Brain — ESP32-S3 production target
+// Motor: L298N Dual H-Bridge
+// Radio: native Wi-Fi / ESP-NOW on the Base S3
 // ============================================================
 
 #include <Arduino.h>
@@ -31,7 +28,6 @@
 #include "walle_emotion_pose_bridge.h"
 #include "walle_emotion_pose.h"
 
-// NEW: Autonomy and behavioral brain includes
 #include "sonar_sensor.h"
 #include "compass_sensor.h"
 #include "gps_module.h"
@@ -50,55 +46,43 @@
 #include "laser_control.h"
 #include "sequence_engine.h"
 
-// ============================================================
-//  Failsafe
-// ============================================================
 #define FAILSAFE_TIMEOUT_MS 500UL
 
 unsigned long lastCommandMillis = 0;
 
-// ============================================================
-//  setup()
-// ============================================================
 void setup() {
   Serial.begin(115200);
   delay(200);
-  Serial.println("\n[WALL-E] Starting...");
+  Serial.println("\n[WALL-E/S3] Starting Base Brain...");
 
-  // Motors safe first — always
+  // Motors safe first — always.
   motorInit();
   motionLayerInit();
   Serial.println("[Motors] Initialised");
 
-  // Display up early so user gets boot feedback
   displayInit();
 
-  // I2C bus: servos init first (calls Wire.begin)
+  // Shared I2C bus: PCA9685 starts the bus; IMU follows.
   servoInit();
   servoNeutral(SERVO_SLOW_SPEED);
-
-  // IMU shares same I2C bus — init and start auto-calibration (~3 s when stationary)
   beginIMU();
   Serial.println("[IMU] Init complete");
 
-  // Autonomy stack: sensors + behavioural engines (safe if compass/GPS absent)
-  if (!sonarInit()) {
-    Serial.println(F("[Sonar] WARN: init failed"));
-  } else {
-    Serial.println(F("[Sonar] Ready"));
-  }
-  if (!compassInit()) {
-    Serial.println(F("[Compass] WARN: not available (continuing)"));
-  } else {
-    Serial.println(F("[Compass] Ready"));
-  }
-  if (!gpsInit()) {
-    Serial.println(F("[GPS] WARN: init failed"));
-  } else {
-    Serial.println(F("[GPS] Ready"));
-  }
+  // Effects start in a deterministic safe state before any remote command can
+  // arrive. laserInit() attaches PWM and forces the output OFF.
+  laserInit();
+
+  // Autonomy stack. Optional sensors fail gracefully.
+  if (!sonarInit()) Serial.println(F("[Sonar] WARN: init failed"));
+  else Serial.println(F("[Sonar] Ready"));
+
+  if (!compassInit()) Serial.println(F("[Compass] WARN: not available (continuing)"));
+  else Serial.println(F("[Compass] Ready"));
+
+  if (!gpsInit()) Serial.println(F("[GPS] WARN: init failed"));
+  else Serial.println(F("[GPS] Ready"));
+
   waypointInit();
-  Serial.println(F("[Waypoint] Ready"));
   personalityInit();
   emotionInit();
   interestInit();
@@ -108,94 +92,67 @@ void setup() {
   unifiedAutonomyInit();
   Serial.println(F("[Autonomy] Engine ready"));
 
-  // Battery monitor
   batteryInit();
-  Serial.println("[Setup] Post-battery");
   displayUpdateBattery();
 
-  // Dock system: sensors, homing. ToF deferred (can block if sensor absent)
   dockSensorsBegin();
-  Serial.println("[Setup] Post-dockSensors");
 
-  // WiFi — AP starts immediately
+  // The Base S3 owns Wi-Fi directly. ESP-NOW uses the same radio hardware,
+  // while radio_transport keeps packet ownership in one place.
   wifiManagerInit();
   displayUpdateWifi();
-  Serial.println("[Setup] Post-wifi");
 
   motionAuthorityInit();
   apiSecurityInit();
   eveUartBridgeInit();
 
-  // Web server
+  // Sequence persistence/state exists independently of the HTTP API, so
+  // initialize the engine before registering WebUI routes.
+  sequenceEngineInit();
   webServerInit();
-  Serial.println("[Setup] Post-webServer");
 
-  // ESP-NOW receiver (CYD controller)
+  // Native ESP-NOW receive/send abstraction on the Base S3.
   espnowReceiverInit();
-  Serial.println("[Setup] Post-espnow");
   audioEspNowInit();
-  Serial.println("[Setup] Post-audioEspNow");
   nodeHealthInit();
-  Serial.println("[Setup] Post-nodeHealth");
   walleEmotionPoseBridgeInit();
-  Serial.println("[Setup] Post-emotionPoseBridge");
 
-  // Vision behaviour (servo tracking from camera node ESP-NOW packets)
   visionBehaviourInit();
-  Serial.println("[Setup] Post-visionBehaviour");
-
-  // Dock controller (ESP-NOW commands to dock, e.g. REQUEST_CHARGE)
   dockControllerInit();
-  Serial.println("[Setup] Post-dockController");
-
   dockIrTransmittersInit();
-  Serial.println("[Setup] Post-dockIrTx");
-
-  // Autonomous docking state machine
   autonomousDockingInit();
-  Serial.println("[Setup] Post-autonomousDocking");
-
-  // LDR + MOSFET flashlight (on when dark)
   flashlightInit();
-  Serial.println("[Setup] Post-flashlight");
 
   lastCommandMillis = millis();
-  Serial.println("[WALL-E] Ready");
+  Serial.println("[WALL-E/S3] Ready");
 }
 
-// ============================================================
-//  loop()
-// ============================================================
 unsigned long lastTelemSendMs = 0;
-#define TELEM_SEND_INTERVAL_MS 100  // 10 Hz telemetry updates
+#define TELEM_SEND_INTERVAL_MS 100
 
 void loop() {
-  delay(1);  /* Yield first — prevents TG1WDT before any blocking */
-  unsigned long now = millis();
+  delay(1);
+  const unsigned long now = millis();
   yield();
-  
-  // WiFi state polling
+
+  // Native ESP-NOW is callback-driven; this remains as the transport service
+  // hook so higher-level code does not depend on the radio implementation.
+  espnowReceiverHandle();
+
   WiFiState prevState = wifiGetState();
   wifiManagerHandle();
   if (wifiGetState() != prevState) displayUpdateWifi();
 
-  // Web requests
   webServerHandle();
   eveUartBridgePoll();
   sequenceEngineTick(now);
 
-  // Servo velocity interpolation
   servoHandle();
   laserUpdate(now);
-
-  // Vision behaviour (scan/timeouts when no motion; uses packets from ESP-NOW callback)
   visionBehaviourUpdate(now);
 
-  // IMU: update (runs calibration until done, then provides offset-corrected data)
   updateIMU();
-  // Behaviour that uses imuGetData() should check isIMUCalibrated() before use
 
-  // Autonomy: sensors + engine (drive applied after docking when not manually overridden)
   sonarUpdate(now);
   compassUpdate(now);
   gpsUpdate(now);
@@ -205,34 +162,34 @@ void loop() {
   }
   personalityUpdate(now);
 
-  bool manualFromControl = (motionAuthorityAllowCyd() && espnowIsManualControlActive()) ||
-                           (motionAuthorityAllowWeb() && webServerIsManualOverrideActive());
+  const bool manualFromControl =
+      (motionAuthorityAllowCyd() && espnowIsManualControlActive()) ||
+      (motionAuthorityAllowWeb() && webServerIsManualOverrideActive());
   autonomySetManualOverride(manualFromControl);
 
-  int8_t autoLeft = 0, autoRight = 0;
+  int8_t autoLeft = 0;
+  int8_t autoRight = 0;
   autonomyUpdate(now, &autoLeft, &autoRight);
 
-  // Battery polling (rate-limited internally to 10s); refresh TFT when we have a new reading
   if (batteryHandle()) displayUpdateBattery();
 
-  // Dock: ToF (lazy init on first call), sensors
   static bool tofTried = false;
-  if (!tofTried) { tofTried = true; tofInit(); }
+  if (!tofTried) {
+    tofTried = true;
+    tofInit();
+  }
   tofUpdate(now);
   dockSensorsUpdate();
   dockIrTransmittersUpdate(now);
 
   bool dockDriving = false;
 #if USE_AUTONOMOUS_DOCKING
-  // Autonomous docking FSM (IDLE→SEARCH→ALIGN→APPROACH→DOCKED→CHARGING)
   autonomousDockingUpdate(now);
 #else
-  // Legacy dock homing (RSSI-based)
   dockHomingCheckAutoReturn(now);
   dockHomingUpdate(now);
 #endif
 
-  // Unified autonomy brain: one state machine view + safety gate (non-blocking)
   unifiedAutonomyTick(now, manualFromControl);
   const bool safetyBlock = unifiedAutonomySafetyActive();
   if (safetyBlock) {
@@ -240,12 +197,12 @@ void loop() {
     lastCommandMillis = now;
   }
 
-  /* Central motion layer: drive profile, speed caps, turn feel (manual: CYD/WebUI still set profile per command) */
   motionLayerUpdate(now, manualFromControl, safetyBlock);
 
 #if USE_AUTONOMOUS_DOCKING
   if (!safetyBlock && autonomousDockingIsActive()) {
-    int16_t left, right;
+    int16_t left = 0;
+    int16_t right = 0;
     if (autonomousDockingGetMotorOutput(&left, &right)) {
       motionLayerApplyMotorTankLimits(&left, &right);
       motorSetLeftRight(left, right);
@@ -255,7 +212,8 @@ void loop() {
   }
 #else
   if (!safetyBlock && dockHomingIsActive()) {
-    int16_t left, right;
+    int16_t left = 0;
+    int16_t right = 0;
     if (dockHomingGetMotorOutput(&left, &right)) {
       motionLayerApplyMotorTankLimits(&left, &right);
       motorSetLeftRight(left, right);
@@ -270,17 +228,14 @@ void loop() {
     int16_t mr = (int16_t)((int32_t)autoRight * 255 / 100);
     ml = (int16_t)constrain((int)ml, -255, 255);
     mr = (int16_t)constrain((int)mr, -255, 255);
+    motionLayerApplyMotorTankLimits(&ml, &mr);
     motorSetLeftRight(ml, mr);
     lastCommandMillis = now;
   }
 
-  // LDR: turn flashlight on when dark
   flashlightHandle();
-
-  // Display redraws (rate-limited internally)
   displayHandle();
 
-  // ESP-NOW telemetry send (10 Hz)
   if ((now - lastTelemSendMs) >= TELEM_SEND_INTERVAL_MS) {
     espnowSendTelemetry();
     lastTelemSendMs = now;
@@ -290,16 +245,14 @@ void loop() {
   walleEmotionPoseBridgeTick();
   walleEmotionPoseApplyToServosStub();
 
-  // Failsafe: stop drive motors if no command received (includes autonomy + dock keepalive)
   if ((now - lastCommandMillis) > FAILSAFE_TIMEOUT_MS) {
     motorStop();
     displaySetCommand(CMD_IDLE);
     lastCommandMillis = now;
   }
 
-  // L298N: ramp toward targets and drive PWM (after motorSetLeftRight + failsafe motorStop)
   motorHandle();
 
-  delay(1);  /* Yield — prevents TG1WDT_SYS_RST */
+  delay(1);
   yield();
 }
