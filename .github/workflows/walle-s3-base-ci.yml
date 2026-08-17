@@ -35,15 +35,19 @@ jobs:
       matrix:
         include:
           - name: ESP32-S3 Base Brain
+            artifact_name: base-brain
             project_dir: main_wall_E_base
             environment: wall_e_brain_s3
           - name: CYD Controller + Buttons
+            artifact_name: cyd-controller
             project_dir: wall_e_master_controller
             environment: cyd_esp32_2432s028
           - name: WALL-E Dock Station
+            artifact_name: dock-station
             project_dir: dock_station
             environment: dock_esp32
           - name: WALL-E Vision / Camera
+            artifact_name: vision-camera
             project_dir: vision_node
             environment: vision_s3
 
@@ -70,3 +74,12 @@ jobs:
             tail -n 160 pio-build.log
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Retain compiler log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}-compiler-log
+          path: pio-build.log
+          if-no-files-found: warn
+          retention-days: 7
