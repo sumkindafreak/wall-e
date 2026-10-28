@@ -6,7 +6,7 @@ This document matches the **EVE** firmware in `../eve/` and the same MCU class a
 
 - **MCU:** ESP32-S3 (Xtensa dual-core, 3.3 V logic).
 - **Flash + PSRAM:** N16R8 — use a partition scheme that fits **16 MB flash**; enable **OPI PSRAM** in the build if your module uses it (see `eve/platformio.ini`).
-- **Reference pinout:** ESP32-S3-DevKitC-1 style diagrams (e.g. UART1 on **GPIO17 TX / GPIO18 RX**) are a **reference** only. Your **full PCB** is the source of truth — update `eve/include/config.h` to match the routed signals.
+- **Reference pinout:** ESP32-S3-DevKitC-1 style diagrams (e.g. UART1 on **GPIO17 TX / GPIO18 RX**) are a **reference** only. Your **full PCB** is the source of truth — update `eve/arduino_ide/EVE_Companion/config.h` to match the routed signals.
 
 ## Hand link to WALL-E (primary): UART over pogo pins
 
@@ -58,9 +58,9 @@ Pins are **placeholders** until your PCB is final — set real values once in `c
 ## Firmware tree
 
 - Source: **`eve/`** (PlatformIO). See **`eve/README.md`** for build/upload.
-- Pins and feature flags: **`eve/include/config.h`** (must match your full PCB).
+- Pins and feature flags: **`eve/arduino_ide/EVE_Companion/config.h`** (must match your full PCB).
 
 ## Related docs
 
-- Protocol framing: **`eve/include/eve_protocol.h`** (same message IDs as the base’s UART bridge parser).
+- Protocol framing: **`firmware_common/include/eve_link_protocol.h`** (included by `eve/arduino_ide/EVE_Companion/eve_protocol.h`) (same message IDs as the base’s UART bridge parser).
 - **Base (WALL-E brain):** optional **`main_wall_E_base/main/eve_uart_bridge.cpp`** — HTTP **`GET /api/eve/status`** for operator visibility when the hand link is wired.

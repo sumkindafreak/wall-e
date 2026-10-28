@@ -1,11 +1,16 @@
 /**
  * LVGL 9 configuration — EVE companion face (RGB565, partial flush).
- * Included via -DLV_CONF_INCLUDE_SIMPLE and -I include
+ * PlatformIO: found via -DLV_CONF_INCLUDE_SIMPLE and -I arduino_ide/EVE_Companion.
+ * Arduino IDE: copy this file next to the lvgl library folder (see eve/arduino_ide/README.md).
  */
 #ifndef LV_CONF_H
 #define LV_CONF_H
 
+/* LVGL also feeds this file to its .S assembler sources (Arduino IDE builds compile them):
+ * C headers must stay out of assembler context. */
+#ifndef __ASSEMBLY__
 #include <stdint.h>
+#endif
 
 /*====================
  * COLOR
@@ -56,11 +61,12 @@
 #define LV_USE_ANIMATION 1
 #define LV_USE_CANVAS 1
 #define LV_USE_ARC 1
-#define LV_USE_IMAGE 0
+#define LV_USE_IMAGE 1
 #define LV_USE_LABEL 1
 #define LV_USE_OBJ 1
 
 #define LV_USE_DRAW_SW 1
+#define LV_USE_DRAW_SW_ASM LV_DRAW_SW_ASM_NONE
 
 #define LV_USE_THEME_DEFAULT 1
 #define LV_THEME_DEFAULT_DARK 1

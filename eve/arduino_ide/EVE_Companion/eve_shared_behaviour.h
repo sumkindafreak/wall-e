@@ -16,6 +16,7 @@ typedef enum {
   EVE_SHARED_STATE_COUNT
 } EveSharedState;
 
+/** Alias for documentation / parity with shared “character state” naming. */
 typedef EveSharedState SharedState;
 
 void eveSharedBehaviourInit(void);
