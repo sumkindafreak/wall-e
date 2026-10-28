@@ -26,4 +26,6 @@ Verified targets (Core 3.x): **main_wall_E_base**, **eve**, **audio_esp**, **doc
 ### Notes
 - Flashing/running firmware requires physical boards; the VM only cross-compiles.
 - `webui/build-embed.ps1` is PowerShell-only (regenerates embedded LROS header in base firmware).
-- Protocol header check: `./scripts/verify_protocol_headers.sh` (also run by `ota_build_all.sh`).
+- Protocol header check: `./scripts/verify_protocol_headers.sh` (also run by `ota_build_all.sh`); it also checks the EVE dock's message IDs against `firmware_common/include/eve_link_protocol.h`.
+- EVE ↔ WALL-E link logic host tests (simulated UART, no hardware): `./tests/eve_host/run_tests.sh` (needs g++; fetches ArduinoJson 6.21.5 unless `ARDUINOJSON_DIR` is set).
+- EVE has one source tree: `eve/platformio.ini` compiles `eve/arduino_ide/EVE_Companion/` (the Arduino IDE sketch).
