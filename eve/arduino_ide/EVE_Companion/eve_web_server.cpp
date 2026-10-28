@@ -8,6 +8,8 @@
 #include "eve_status_manager.h"
 #include "mic_input.h"
 #include "neopixel_control.h"
+#include "eve_output_ids.h"
+#include "eve_safety.h"
 #include "servo_control.h"
 #include "state_machine.h"
 #include <WebServer.h>
@@ -33,12 +35,13 @@ static const char EVE_WEB_PAGE[] PROGMEM = R"HTML(
 button{border:0;border-radius:15px;background:linear-gradient(135deg,var(--blue),#fff);color:var(--ink);padding:10px 12px;font-weight:900;box-shadow:0 8px 18px #8de7ff55}button.green{background:linear-gradient(135deg,var(--green),#fff)}button.warn{background:linear-gradient(135deg,var(--warn),#fff)}button.ghost{background:#fff;border:1px solid var(--line)}
 .buttons{display:grid;grid-template-columns:repeat(auto-fit,minmax(108px,1fr));gap:9px}.controls{display:grid;grid-template-columns:1fr 1fr;gap:10px}label{display:block;font-size:13px;color:var(--muted);font-weight:800;margin-top:7px}input[type=range]{width:100%}.last{margin-top:10px;color:var(--muted);font-size:13px}
 </style></head><body><div class="wrap">
-<section class="hero"><div class="kicker">EVE docked companion</div><h1 class="title">EVE Companion Console</h1><p class="sub">Interact with EVE, tune her personality, test her senses, and run safe dock-only manual controls.</p><div class="chips"><span class="pill" id="link">loading...</span><span class="pill" id="state">state -</span><span class="pill" id="peer">peer -</span><span class="pill" id="bat">battery -</span><span class="pill" id="mic-en">mic -</span></div></section>
+<section class="hero"><div class="kicker">EVE docked companion</div><h1 class="title">EVE Companion Console</h1><p class="sub">Interact with EVE, tune her personality, test her senses, and run safe dock-only manual controls.</p><div class="chips"><span class="pill" id="link">loading...</span><span class="pill" id="state">state -</span><span class="pill" id="stopchip">stop -</span><span class="pill" id="peer">peer -</span><span class="pill" id="bat">battery -</span><span class="pill" id="mic-en">mic -</span></div></section>
 <div class="grid">
-<div class="card span"><h2>Interact With EVE</h2><div class="buttons"><button class="green" onclick="interact('hello')">Say Hi</button><button onclick="interact('look')">Look At Me</button><button onclick="interact('curious')">Curious</button><button class="green" onclick="interact('happy')">Happy</button><button onclick="interact('sleepy')">Sleepy</button><button class="warn" onclick="interact('wake')">Wake Up</button><button onclick="interact('calm')">Calm Down</button><button onclick="interact('attention')">Attention</button><button onclick="interact('play')">Play</button></div><div class="last" id="last-action">Ready.</div></div>
+<div class="card span"><h2>Safety</h2><div class="buttons"><button class="warn" style="background:linear-gradient(135deg,#ff8a8a,#fff)" onclick="act('/api/control/stop')">STOP</button><button class="ghost" onclick="act('/api/control/clear_stop')">Clear Stop</button><button class="ghost" onclick="act('/api/control/standby?on=1')">Standby</button><button class="ghost" onclick="act('/api/control/standby?on=0')">Wake From Standby</button></div><p class="tiny">STOP latches: gestures cancel, servos halt, audio stops. Only Clear Stop releases it, and nothing resumes by itself. The UART link shows communication with WALL-E, not physical hand contact.</p><div class="row"><span>Faults</span><span class="val" id="faults">-</span></div><div class="row"><span>Routine</span><span class="val" id="routine">-</span></div></div>
+<div class="card span"><h2>Interact With EVE</h2><div class="buttons"><button class="green" onclick="interact('hello')">Say Hi</button><button onclick="interact('look')">Look At Me</button><button onclick="interact('curious')">Curious</button><button class="green" onclick="interact('happy')">Happy</button><button onclick="interact('sleepy')">Sleepy</button><button class="warn" onclick="interact('wake')">Wake Up</button><button onclick="interact('calm')">Calm Down</button><button onclick="interact('attention')">Attention</button><button onclick="interact('play')">Play</button></div><h2 style="margin-top:14px">Routines</h2><div class="buttons"><button class="green" onclick="routine('greet')">Greet</button><button onclick="routine('scan')">Scan (animation)</button><button onclick="routine('play')">Playful</button><button onclick="routine('protect')">Protective</button><button class="ghost" onclick="routine('wake')">Wake</button></div><div class="last" id="last-action">Ready.</div></div>
 <div class="card"><h2>Live Status</h2><div class="row"><span>Docked</span><span class="val" id="docked">-</span></div><div class="row"><span>Dock mimic</span><span class="val" id="mimic">-</span></div><div class="row"><span>AP</span><span class="val" id="ap">-</span></div><div class="row"><span>Session</span><span class="val" id="session">-</span></div><div class="row"><span>Heap</span><span class="val" id="heap">-</span></div><div class="row"><span>Current</span><span class="val" id="cur">-</span></div></div>
-<div class="card"><h2>Manual Pose</h2><label>Head pan <span id="headv">90</span></label><input id="head" type="range" min="45" max="135" value="90" oninput="headv.textContent=this.value"><label>Right arm <span id="armv">90</span></label><input id="arm" type="range" min="0" max="180" value="90" oninput="armv.textContent=this.value"><div class="buttons"><button onclick="pose()">Send Pose</button><button class="ghost" onclick="posePreset('neutral')">Neutral</button><button class="warn" onclick="posePreset('stop')">Stop</button></div></div>
-<div class="card"><h2>Glow & Audio</h2><label>Glow pattern <span id="glowv">5</span></label><input id="glow" type="range" min="0" max="9" value="5" oninput="glowv.textContent=this.value"><label>Audio track <span id="trackv">1</span></label><input id="track" type="range" min="0" max="20" value="1" oninput="trackv.textContent=this.value"><div class="buttons"><button onclick="setGlow()">Set Glow</button><button onclick="playAudio()">Play Track</button><button class="green" onclick="pulse()">Soft Pulse</button></div></div>
+<div class="card"><h2>Manual Pose</h2><label>Head pan <span id="headv">90</span></label><input id="head" type="range" min="%HMIN%" max="%HMAX%" value="%HREST%" oninput="headv.textContent=this.value"><label>Right arm <span id="armv">90</span></label><input id="arm" type="range" min="%AMIN%" max="%AMAX%" value="%AREST%" oninput="armv.textContent=this.value"><div class="buttons"><button onclick="pose()">Send Pose</button><button class="ghost" onclick="posePreset('neutral')">Neutral</button><button class="warn" onclick="posePreset('stop')">Stop</button></div></div>
+<div class="card"><h2>Glow & Audio</h2><label>Glow pattern <span id="glowv">5</span></label><input id="glow" type="range" min="0" max="15" value="5" oninput="glowv.textContent=this.value"><label>Audio track <span id="trackv">1</span></label><input id="track" type="range" min="0" max="20" value="1" oninput="trackv.textContent=this.value"><div class="buttons"><button onclick="setGlow()">Set Glow</button><button onclick="playAudio()">Play Track</button><button class="green" onclick="pulse()">Soft Pulse</button></div></div>
 <div class="card"><h2>Personality</h2><div class="buttons"><button onclick="profile('calm')">Calm</button><button onclick="profile('curious')">Curious</button><button onclick="profile('sleepy')">Sleepy</button><button onclick="profile('excited')">Excited</button><button onclick="profile('desk')">Desk</button></div><label>Curiosity <span id="curiosityv">70</span></label><input id="curiosity" type="range" min="0" max="100" value="70" oninput="curiosityv.textContent=this.value"><label>Comfort <span id="comfortv">55</span></label><input id="comfort" type="range" min="0" max="100" value="55" oninput="comfortv.textContent=this.value"><label>Excitement <span id="excitementv">35</span></label><input id="excitement" type="range" min="0" max="100" value="35" oninput="excitementv.textContent=this.value"><label>Sleepiness <span id="sleepinessv">20</span></label><input id="sleepiness" type="range" min="0" max="100" value="20" oninput="sleepinessv.textContent=this.value"><label>Responsiveness <span id="responsev">65</span></label><input id="response" type="range" min="0" max="100" value="65" oninput="responsev.textContent=this.value"><label>Activity <span id="activityv">50</span></label><input id="activity" type="range" min="0" max="100" value="50" oninput="activityv.textContent=this.value"><button onclick="personality()">Update Buddy</button></div>
 <div class="card"><h2>Mic Sense</h2><div class="row"><span>Level</span><span class="val" id="mic-level">-</span></div><div class="row"><span>Ambient</span><span class="val" id="mic-amb">-</span></div><div class="row"><span>Last event</span><span class="val" id="mic-event">-</span></div><div class="row"><span>Spike / clap / quiet</span><span class="val" id="mic-flags">-</span></div><label>Spike threshold</label><input id="mic-spike" type="range" min="50" max="8000" value="1800"><label>Clap threshold</label><input id="mic-clap" type="range" min="100" max="12000" value="4200"><label>Quiet threshold</label><input id="mic-quiet" type="range" min="10" max="2000" value="180"><label>Cooldown ms</label><input id="mic-cooldown" type="range" min="250" max="10000" value="2500"><div class="buttons"><button onclick="saveMic(1)">Mic On</button><button class="ghost" onclick="saveMic(0)">Mic Off</button><button class="green" onclick="testMic()">Test</button></div></div>
 <div class="card"><h2>Dock Test</h2><p class="tiny">Bench-only controls. Leave mimic off for normal docking.</p><div class="buttons"><button class="warn" onclick="dockMimic(1)">Mimic Dock</button><button class="ghost" onclick="dockMimic(0)">Mimic Off</button><button class="ghost" onclick="resetState()">Reset State</button></div></div>
@@ -46,8 +49,10 @@ button{border:0;border-radius:15px;background:linear-gradient(135deg,var(--blue)
 </div></div>
 <script>
 function set(id,v){var e=document.getElementById(id);if(e)e.textContent=v}
-function call(p){return fetch(p,{cache:'no-store'}).then(r=>r.json()).then(j=>{set('last-action',(j.event||j.profile||j.action||j.ok?'OK':'Failed')+' '+p);refresh();return j}).catch(e=>set('last-action','Request failed: '+p))}
-function refresh(){fetch('/api/status',{cache:'no-store'}).then(r=>r.json()).then(j=>{set('link',j.docked?'Docked WebUI active':'Not docked');set('state','state '+(j.state||'-'));set('peer','peer '+(j.uart_peer||'-'));set('bat','battery '+(j.bat_pct||0)+'% '+Number(j.bat_v||0).toFixed(2)+'V');set('docked',j.docked?'yes':'no');set('mimic',j.dock_mimic?'on':'off');set('ap',j.ap_up?'up':'off');set('session',j.session||0);set('heap',j.heap);set('cur',Number(j.bat_a||0).toFixed(2)+'A');var m=j.mic||{};set('mic-en','mic '+(m.enabled?'on':'off'));set('mic-level',m.level!=null?m.level:'-');set('mic-amb',m.ambient!=null?m.ambient:'-');set('mic-event',m.last_event||'-');set('mic-flags','S:'+(m.spike?'Y':'N')+' C:'+(m.clap?'Y':'N')+' Q:'+(m.quiet?'Y':'N'));set('raw',JSON.stringify(j,null,2));}).catch(()=>set('link','offline'))}
+function call(p){return fetch(p,{cache:'no-store'}).then(r=>r.json()).then(j=>{set('last-action',(j.ok?'OK ':'Refused ')+p+(j.err?' ('+j.err+')':''));refresh();return j}).catch(e=>set('last-action','Request failed: '+p))}
+function act(p){call(p)}
+function routine(n){call('/api/control/routine?name='+encodeURIComponent(n))}
+function refresh(){fetch('/api/status',{cache:'no-store'}).then(r=>r.json()).then(j=>{set('link',j.docked?'Docked WebUI active':'Not docked');set('state','state '+(j.state||'-'));set('stopchip',j.stop?'STOPPED ('+j.stop_src+')':'stop clear');set('faults',j.faults?('0x'+Number(j.faults).toString(16)):'none');set('routine',j.routine||'-');set('peer','peer '+(j.uart_peer||'-'));set('bat','battery '+(j.bat_pct||0)+'% '+Number(j.bat_v||0).toFixed(2)+'V');set('docked',j.docked?'yes':'no');set('mimic',j.dock_mimic?'on':'off');set('ap',j.ap_up?'up':'off');set('session',j.session||0);set('heap',j.heap);set('cur',Number(j.bat_a||0).toFixed(2)+'A'+(j.bat_chg<0?' (charging unknown)':(j.bat_chg?' charging':'')));var m=j.mic||{};set('mic-en','mic '+(m.enabled?'on':'off'));set('mic-level',m.level!=null?m.level:'-');set('mic-amb',m.ambient!=null?m.ambient:'-');set('mic-event',m.last_event||'-');set('mic-flags','S:'+(m.spike?'Y':'N')+' C:'+(m.clap?'Y':'N')+' Q:'+(m.quiet?'Y':'N'));set('raw',JSON.stringify(j,null,2));}).catch(()=>set('link','offline'))}
 function interact(a){call('/api/interaction?action='+encodeURIComponent(a))}
 function pose(){call('/api/control/pose?head='+head.value+'&arm='+arm.value)}
 function posePreset(p){call('/api/control/pose?preset='+p)}
@@ -119,7 +124,41 @@ static void performInteraction(const char* action) {
 
 static void handleRoot() {
   addCors();
-  s_server.send_P(200, "text/html", EVE_WEB_PAGE);
+  String page = FPSTR(EVE_WEB_PAGE);
+  int16_t hmin = 0, hmax = 180, amin = 0, amax = 180;
+  servoGetLimits(EVE_SERVO_HEAD_PAN, &hmin, &hmax);
+  servoGetLimits(EVE_SERVO_RIGHT_ARM, &amin, &amax);
+  page.replace("%HMIN%", String(hmin));
+  page.replace("%HMAX%", String(hmax));
+  page.replace("%HREST%", String(EVE_SERVO_HEAD_REST_DEG));
+  page.replace("%AMIN%", String(amin));
+  page.replace("%AMAX%", String(amax));
+  page.replace("%AREST%", String(EVE_SERVO_ARM_REST_DEG));
+  s_server.send(200, "text/html", page);
+}
+
+static void sendResult(bool ok, const char* action, const char* err) {
+  String j = "{\"ok\":";
+  j += ok ? "true" : "false";
+  if (action && *action) {
+    j += ",\"action\":\"";
+    j += action;
+    j += "\"";
+  }
+  if (!ok && err) {
+    j += ",\"err\":\"";
+    j += err;
+    j += "\"";
+  }
+  j += "}";
+  addCors();
+  s_server.send(ok ? 200 : 409, "application/json", j);
+}
+
+static bool refuseIfStopped(const char* action) {
+  if (!eveSafetyStopLatched()) return false;
+  sendResult(false, action, "stopped");
+  return true;
 }
 
 static void handleStatus() {
@@ -129,7 +168,6 @@ static void handleStatus() {
   j += ",\"docked\":"; j += stateMachineIsDocked() ? "true" : "false";
   j += ",\"dock_mimic\":"; j += stateMachineIsDockMimic() ? "true" : "false";
   j += ",\"ap_up\":"; j += s_apUp ? "true" : "false";
-  j += ",\"session\":"; j += (uint32_t)stateMachineGetSessionId();
   j += ",\"ap_ssid\":\""; j += EVE_WEBUI_AP_SSID; j += "\"";
   j += ",\"mic\":"; j += getMicStatusJson();
   j += "}";
@@ -137,14 +175,13 @@ static void handleStatus() {
 }
 
 static void handlePose() {
-  int head = s_server.hasArg("head") ? s_server.arg("head").toInt() : 90;
-  int arm = s_server.hasArg("arm") ? s_server.arg("arm").toInt() : 90;
-  head = constrain(head, 45, 135);
-  arm = constrain(arm, 0, 180);
-  servoSetHeadPanTarget((int16_t)head);
-  servoSetRightArmTarget((int16_t)arm);
-  addCors();
-  s_server.send(200, "application/json", "{\"ok\":true}");
+  if (refuseIfStopped("pose")) return;
+  int head = s_server.hasArg("head") ? s_server.arg("head").toInt() : EVE_SERVO_HEAD_REST_DEG;
+  int arm = s_server.hasArg("arm") ? s_server.arg("arm").toInt() : EVE_SERVO_ARM_REST_DEG;
+  /* The servo driver clamps to the calibrated limits and refuses while motion is not allowed. */
+  const bool okH = servoMoveTo(EVE_SERVO_HEAD_PAN, (int16_t)constrain(head, -360, 360), EVE_SERVO_DEFAULT_DPS);
+  const bool okA = servoMoveTo(EVE_SERVO_RIGHT_ARM, (int16_t)constrain(arm, -360, 360), EVE_SERVO_DEFAULT_DPS);
+  sendResult(okH || okA, "pose", "servo_unavailable_or_blocked");
 }
 
 static void handlePulse() {
@@ -172,6 +209,7 @@ static void handlePersonality() {
 }
 
 static void handleInteraction() {
+  if (refuseIfStopped("interaction")) return;
   String actionArg = s_server.hasArg("action") ? s_server.arg("action") : "";
   const char* action = actionArg.c_str();
   performInteraction(action);
@@ -184,27 +222,63 @@ static void handleInteraction() {
 
 static void handleControlPose() {
   String preset = s_server.hasArg("preset") ? s_server.arg("preset") : "";
-  int head = s_server.hasArg("head") ? s_server.arg("head").toInt() : 90;
-  int arm = s_server.hasArg("arm") ? s_server.arg("arm").toInt() : 90;
-  if (preset == "neutral" || preset == "stop") {
-    head = 90;
-    arm = 90;
+  if (preset == "stop") {
+    /* "Stop" is a real latched stop now (it used to just move both servos to 90 degrees). */
+    stateMachineLocalStop(EVE_STOP_SRC_WEBUI);
+    sendResult(true, "stop", nullptr);
+    return;
   }
-  servoSetHeadPanTarget((int16_t)constrain(head, 45, 135));
-  servoSetRightArmTarget((int16_t)constrain(arm, 0, 180));
-  sendOkJson(preset.length() ? preset.c_str() : "pose");
+  if (refuseIfStopped("pose")) return;
+  int head = s_server.hasArg("head") ? s_server.arg("head").toInt() : EVE_SERVO_HEAD_REST_DEG;
+  int arm = s_server.hasArg("arm") ? s_server.arg("arm").toInt() : EVE_SERVO_ARM_REST_DEG;
+  if (preset == "neutral") {
+    head = EVE_SERVO_HEAD_REST_DEG;
+    arm = EVE_SERVO_ARM_REST_DEG;
+  }
+  const bool okH = servoMoveTo(EVE_SERVO_HEAD_PAN, (int16_t)constrain(head, -360, 360), EVE_SERVO_DEFAULT_DPS);
+  const bool okA = servoMoveTo(EVE_SERVO_RIGHT_ARM, (int16_t)constrain(arm, -360, 360), EVE_SERVO_DEFAULT_DPS);
+  sendResult(okH || okA, preset.length() ? preset.c_str() : "pose", "servo_unavailable_or_blocked");
+}
+
+static void handleControlStop() {
+  stateMachineLocalStop(EVE_STOP_SRC_WEBUI);
+  sendResult(true, "stop", nullptr);
+}
+
+static void handleControlClearStop() {
+  const bool was = stateMachineLocalClearStop(EVE_STOP_SRC_WEBUI);
+  sendResult(true, was ? "stop_cleared" : "no_stop_latched", nullptr);
+}
+
+static void handleControlRoutine() {
+  String name = s_server.hasArg("name") ? s_server.arg("name") : "";
+  name.toLowerCase();
+  const char* why = nullptr;
+  const bool ok = stateMachineLocalRoutine(name.c_str(), &why);
+  sendResult(ok, name.c_str(), why);
+}
+
+static void handleControlStandby() {
+  const bool on = !s_server.hasArg("on") || s_server.arg("on") != "0";
+  const char* why = nullptr;
+  const bool ok = stateMachineLocalStandby(on, &why);
+  sendResult(ok, on ? "standby_on" : "standby_off", why);
 }
 
 static void handleControlGlow() {
-  uint8_t pattern = (uint8_t)constrain(s_server.hasArg("pattern") ? s_server.arg("pattern").toInt() : 1, 0, 255);
-  neopixelSetPattern(pattern);
-  sendOkJson("glow");
+  const int pattern = s_server.hasArg("pattern") ? s_server.arg("pattern").toInt() : 1;
+  if (pattern < 0 || pattern >= EVE_GLOW_COUNT) {
+    sendResult(false, "glow", "range");
+    return;
+  }
+  neopixelSetOperator((int8_t)pattern);
+  sendOkJson(eveGlowName((uint8_t)pattern));
 }
 
 static void handleControlAudio() {
+  if (refuseIfStopped("audio")) return;
   uint8_t track = (uint8_t)constrain(s_server.hasArg("track") ? s_server.arg("track").toInt() : 1, 0, 255);
-  audioPlayTrack(track);
-  sendOkJson("audio");
+  sendResult(audioPlayTrack(track), "audio", "audio_off_or_file_missing");
 }
 
 static void handleControlDockMimic() {
@@ -214,7 +288,7 @@ static void handleControlDockMimic() {
 }
 
 static void handleControlResetState() {
-  stateMachineInit();
+  stateMachineLocalReset(); /* restarts the handshake; a latched stop stays latched */
   sendOkJson("reset_state");
 }
 
@@ -250,6 +324,7 @@ static void handleMicSettings() {
 }
 
 static void handleMicTest() {
+  if (refuseIfStopped("mic_test")) return;
   neopixelSetPattern(5);
   servoSetHeadPanTarget(102);
   servoSetRightArmTarget(130);
@@ -277,6 +352,10 @@ static void startWebUi() {
     s_server.on("/api/control/audio", HTTP_GET, handleControlAudio);
     s_server.on("/api/control/dock_mimic", HTTP_GET, handleControlDockMimic);
     s_server.on("/api/control/reset_state", HTTP_GET, handleControlResetState);
+    s_server.on("/api/control/stop", HTTP_GET, handleControlStop);
+    s_server.on("/api/control/clear_stop", HTTP_GET, handleControlClearStop);
+    s_server.on("/api/control/routine", HTTP_GET, handleControlRoutine);
+    s_server.on("/api/control/standby", HTTP_GET, handleControlStandby);
     s_server.on("/api/control/personality_profile", HTTP_GET, handlePersonalityProfile);
     s_server.on("/api/mic/status", HTTP_GET, handleMicStatus);
     s_server.on("/api/mic/settings", HTTP_GET, handleMicSettings);

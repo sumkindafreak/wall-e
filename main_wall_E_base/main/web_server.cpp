@@ -776,6 +776,70 @@ static void handleEveStatusApi(void) {
   server.send(200, "application/json", eveUartBridgeGetJSON());
 }
 
+/** Reply for EVE commands: "sent" means the frame left WALL-E. EVE's own verdict (accepted or
+ *  refused, with a reason) arrives a moment later in /api/eve/status -> last_result. */
+static void sendEveCmdReply(bool sent, const char* what) {
+  addCORS();
+  String j = "{\"ok\":";
+  j += sent ? "true" : "false";
+  j += ",\"sent\":";
+  j += sent ? "true" : "false";
+  j += ",\"command\":\"";
+  j += what;
+  j += "\",\"uart_link\":";
+  j += eveUartBridgeIsLinkUp() ? "true" : "false";
+  if (!sent) j += ",\"error\":\"not_sent_check_uart_link\"";
+  j += "}";
+  server.send(sent ? 200 : 503, "application/json", j);
+}
+
+/** EVE STOP: no token needed — a stop can only make EVE safer, and it is sent even before the
+ *  UART handshake. Clearing it (below) does need the token. */
+static void handleEveStopApi(void) {
+  apiSecurityAudit("[eve] stop");
+  sendEveCmdReply(eveUartBridgeSendStop("webui"), "stop");
+}
+
+static void handleEveClearStopApi(void) {
+  if (requireApiToken()) return;
+  apiSecurityAudit("[eve] clear stop");
+  sendEveCmdReply(eveUartBridgeSendClearStop(), "clear_stop");
+}
+
+static void handleEveModeApi(void) {
+  if (requireApiToken()) return;
+  String name = server.hasArg("name") ? server.arg("name") : "";
+  name.toLowerCase();
+  sendEveCmdReply(eveUartBridgeSendModeByName(name.c_str()), name.c_str());
+}
+
+static void handleEveRoutineApi(void) {
+  if (requireApiToken()) return;
+  String name = server.hasArg("name") ? server.arg("name") : "";
+  name.toLowerCase();
+  sendEveCmdReply(eveUartBridgeSendRoutine(name.c_str()), name.c_str());
+}
+
+static void handleEveEyesApi(void) {
+  if (requireApiToken()) return;
+  String name = server.hasArg("name") ? server.arg("name") : "";
+  name.toLowerCase();
+  const int ms = server.hasArg("ms") ? constrain(server.arg("ms").toInt(), 0, 30000) : 0;
+  sendEveCmdReply(eveUartBridgeSendEyes(name.c_str(), (uint16_t)ms), name.c_str());
+}
+
+static void handleEveGlowApi(void) {
+  if (requireApiToken()) return;
+  String name = server.hasArg("name") ? server.arg("name") : "";
+  name.toLowerCase();
+  sendEveCmdReply(eveUartBridgeSendGlow(name.c_str()), name.c_str());
+}
+
+static void handleEveResetApi(void) {
+  if (requireApiToken()) return;
+  sendEveCmdReply(eveUartBridgeSendReset(), "reset");
+}
+
 static void handleEvePersonalityApi(void) {
   if (requireApiToken()) return;
   int curiosity = server.hasArg("curiosity") ? server.arg("curiosity").toInt() : 60;
@@ -981,6 +1045,13 @@ void webServerInit() {
   server.on("/api/eve/status", HTTP_GET, handleEveStatusApi);
   server.on("/api/eve/personality", HTTP_GET, handleEvePersonalityApi);
   server.on("/api/eve/mic", HTTP_GET, handleEveMicApi);
+  server.on("/api/eve/stop", HTTP_GET, handleEveStopApi);
+  server.on("/api/eve/clear_stop", HTTP_GET, handleEveClearStopApi);
+  server.on("/api/eve/mode", HTTP_GET, handleEveModeApi);
+  server.on("/api/eve/routine", HTTP_GET, handleEveRoutineApi);
+  server.on("/api/eve/eyes", HTTP_GET, handleEveEyesApi);
+  server.on("/api/eve/glow", HTTP_GET, handleEveGlowApi);
+  server.on("/api/eve/reset", HTTP_GET, handleEveResetApi);
   server.on("/api/companion/panel", HTTP_GET, handleCompanionPanelApi);
   server.on("/api/learning/shared", HTTP_GET, handleSharedLearningApi);
   server.on("/api/uart/log", HTTP_GET, handleUartMonitorApi);

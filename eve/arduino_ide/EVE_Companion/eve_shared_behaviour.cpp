@@ -20,6 +20,7 @@ static uint32_t s_lastOutMs = 0;
 static uint32_t s_lastInMs = 0;
 static uint32_t s_lastInteractMs = 0;
 
+/** Partner cue: head bias frames (spatial may override next frame unless we extend hold). */
 static uint32_t s_partnerHeadHoldUntil = 0;
 static int16_t s_partnerHeadDeg = 90;
 

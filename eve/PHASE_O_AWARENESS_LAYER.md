@@ -111,7 +111,7 @@ Phase O **wraps** existing modules; it does not replace ToF drivers. It replaces
 
 ## Success criteria
 
-- [ ] `EveAwarenessSnapshot` defined in `eve/include/`
+- [ ] `EveAwarenessSnapshot` defined in `eve/arduino_ide/EVE_Companion/`
 - [ ] `eveAwarenessTick()` fuses ToF + battery + link when enabled
 - [ ] No new decision logic in Awareness
 - [ ] Emotion engine **unchanged** in Phase O (Behaviour migration is Phase P)

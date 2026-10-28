@@ -30,7 +30,7 @@ See `eve/sd_card_template/` for the recommended card structure:
 
 ## Configuration
 
-Set pins in `eve/include/config.h`:
+Set pins in `eve/arduino_ide/EVE_Companion/config.h`:
 
 - `EVE_SD_SPI_*` — SD card (SPI)
 - `EVE_I2S_*` — speaker I2S (use port 1 if mic uses port 0)

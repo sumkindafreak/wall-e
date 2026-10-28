@@ -1,418 +1,347 @@
 /**
- * EVE companion state machine + handshake with WALL-E over UART.
+ * EVE state machine — Arduino glue.
+ *
+ * The decisions (link health, command validation, modes, stop latch) live in plain-C++ modules
+ * that are unit-tested on a PC:
+ *   eve_control_core  — handshake, heartbeats, link supervision, commands, mode arbitration
+ *   eve_safety        — latched stop + fault register
+ *   eve_routines      — timed, cancellable expressions
+ * This file connects them to the real outputs (eyes, glow, audio, servos) and to the
+ * desktop-companion / spatial-awareness modules that already existed.
  */
 #include "state_machine.h"
-#include "config.h"
-#include "uart_link.h"
-#include "eve_protocol.h"
+
 #include <string.h>
-#include "system_status.h"
-#include "eyes_control.h"
-#include "battery_monitor.h"
-#include "servo_control.h"
-#include "neopixel_control.h"
+
 #include "audio_control.h"
-#include "eve_behavior_manager.h"
 #include "battery_monitor.h"
-#include "eve_desktop_companion.h"
-#include "eve_spatial_awareness.h"
+#include "config.h"
 #include "eve_attachment_manager.h"
-#if EVE_ENABLE_EYES
+#include "eve_behavior_manager.h"
+#include "eve_control_core.h"
+#include "eve_desktop_companion.h"
 #include "eve_expression_state.h"
+#include "eve_output_ids.h"
+#include "eve_pin_check.h"
+#include "eve_routines.h"
+#include "eve_spatial_awareness.h"
+#include "eyes_control.h"
+#include "neopixel_control.h"
+#include "servo_control.h"
+#include "uart_link.h"
+#if EVE_ENABLE_EYES
 #include "eve_emotion_engine.h"
 #endif
-#include <ArduinoJson.h>
 
-enum class EveState : uint8_t {
-  BOOT,
-  WAIT_ATTACH,
-  HANDSHAKE,
-  IDLE,
-  ATTACHED,
-  ESCORT,
-  INTERACT,
-  LOW_POWER,
-  DOCKED,
-  ERROR,
-  SLEEP
-};
+static bool s_initDone = false;
 
-static EveState s_state = EveState::BOOT;
-static uint32_t s_sessionId = 0;
-static uint32_t s_lastHelloMs = 0;
-static uint32_t s_lastEveHbMs = 0;
-static uint32_t s_lastRxMs = 0;
-static uint32_t s_lastLowBatMs = 0;
-static uint32_t s_lastUnauthorizedLogMs = 0;
-static char s_peerLabel[24] = "none";
-static bool s_dockMimic = false;
-static bool s_dockMimicCharging = false;
+// =============================================================================
+// Shared helpers
+// =============================================================================
+static void logLine(const char* line) { Serial.println(line); }
 
-static bool stateAllowsRemoteControl(void) {
-  return (s_state == EveState::IDLE || s_state == EveState::ATTACHED || s_state == EveState::ESCORT ||
-          s_state == EveState::INTERACT || s_state == EveState::DOCKED || s_state == EveState::LOW_POWER);
+/** Base glow for a mode (operator / routine / stop layers sit on top, see neopixel_control.h). */
+static uint8_t glowForMode(EveMode m) {
+  switch (m) {
+    case EVE_MODE_WAIT_ATTACH: return EVE_GLOW_WAITING;
+    case EVE_MODE_IDLE:
+    case EVE_MODE_ATTACHED: return EVE_GLOW_LINKED;
+    case EVE_MODE_ESCORT: return EVE_GLOW_ESCORT;
+    case EVE_MODE_INTERACT: return EVE_GLOW_INTERACT;
+    case EVE_MODE_LOW_POWER: return EVE_GLOW_LOW_POWER;
+    case EVE_MODE_ERROR: return EVE_GLOW_FAULT;
+    case EVE_MODE_SLEEP: return EVE_GLOW_STANDBY_BEACON;
+    case EVE_MODE_DOCKED:
+      if (eveControlDockMimicCharging() || eveBatteryCharging() == 1) return eveBatteryFull() ? EVE_GLOW_FULL : EVE_GLOW_CHARGING;
+      return EVE_GLOW_IDLE;
+    default: return EVE_GLOW_WAITING;
+  }
 }
 
-static void sendEveHello(void) {
-  StaticJsonDocument<256> doc;
-  doc["proto"] = 1;
-  doc["eve"] = "eve-s3";
-  doc["caps"] = 0;
-  doc["uptime_ms"] = systemStatusUptimeMs();
-  String out;
-  serializeJson(doc, out);
-  uartLinkSendJson(MSG_EVE_HELLO, out.c_str());
-#if EVE_SERIAL_VERBOSE_LOGS
-  Serial.println(F("[EVE][SM] -> EVE_HELLO"));
+/** Charging as far as EVE can actually tell (dock mimic fakes it on the bench). */
+static bool dockCharging(void) { return eveControlDockMimicCharging() || eveBatteryCharging() == 1; }
+
+// =============================================================================
+// Safety hooks: what a STOP (or a blocking fault) does to the hardware
+// =============================================================================
+static void haltOutputs(void) {
+  eveRoutineCancel();   /* active + pending gesture steps */
+  servoHaltAll(true);   /* freeze, then HOLD or RELEASE per EVE_SERVO_STOP_POLICY */
+  audioStop();          /* explicit audio stop */
+}
+
+// =============================================================================
+// Routine hooks
+// =============================================================================
+static void routineExpression(uint8_t exprId, uint32_t holdMs) { eveExpressionRequest((EveExpressionId)exprId, holdMs); }
+
+static void routineGlow(uint8_t pattern, uint32_t ms) { neopixelSetOverlay(pattern, ms); }
+
+static void routineSound(uint8_t track) { audioPlayTrack(track); }
+
+static bool routineServo(uint8_t ch, int16_t deg, uint16_t dps) { return servoMoveTo(ch, deg, dps); }
+
+// =============================================================================
+// Control-core hooks
+// =============================================================================
+static bool hookSend(uint8_t type, const char* json) { return uartLinkSendJson((EveMsgType)type, json); }
+
+static uint32_t hookHeap(void) { return ESP.getFreeHeap(); }
+
+static uint8_t hookOutputs(void) {
+  uint8_t o = 0;
+#if EVE_ENABLE_EYES
+  if (EVE_FACE_GFX_READY) o |= EVE_OUT_EYES;
+#endif
+  if (servoAvailable(EVE_SERVO_HEAD_PAN) || servoAvailable(EVE_SERVO_RIGHT_ARM)) o |= EVE_OUT_SERVOS;
+  if (neopixelStripActive()) o |= EVE_OUT_GLOW_STRIP;
+  if (neopixelOnboardActive()) o |= EVE_OUT_ONBOARD_RGB;
+  if (audioIsReady()) o |= EVE_OUT_AUDIO;
+#if EVE_ENABLE_TOF
+  if (EVE_I2C_SDA >= 0 && EVE_I2C_SCL >= 0) o |= EVE_OUT_TOF;
+#endif
+  if (eveAttachmentPresence() >= 0) o |= EVE_OUT_PRESENCE;
+  if (eveBatteryHardwareEnabled()) o |= EVE_OUT_BATTERY;
+  return o;
+}
+
+static int8_t hookPresent(void) { return eveAttachmentPresence(); }
+
+static uint32_t hookRxErrors(void) { return uartLinkRxErrors(); }
+
+static bool hookRemoteSound(uint8_t track) { return eveBehaviorOnRemoteSound(track); }
+
+static void hookEyesLegacy(uint8_t mode) { eyesSetMode(mode); }
+
+static void hookGlowOperator(int8_t pattern) { neopixelSetOperator(pattern); }
+
+static bool hookBusCommand(const char* json) { return eveDesktopCompanionApplyConfigJson(json); }
+
+static void hookModeChanged(EveMode from, EveMode to) {
+  neopixelSetOperator(-1); /* operator glow lasts until the next mode change */
+  neopixelSetBase(glowForMode(to));
+  if (to == EVE_MODE_DOCKED) {
+    eyesNotifyDockingState(true, dockCharging());
+  } else if (from == EVE_MODE_DOCKED) {
+    eyesNotifyDockingState(false, false);
+  }
+  if (to == EVE_MODE_ATTACHED) eyesSetMode(1); /* calm / social, as before */
+  if (to == EVE_MODE_ERROR) {
+    Serial.printf("[EVE][SM] ERROR: blocking fault 0x%04x - motion disabled until the cause is fixed\n",
+                  (unsigned)eveSafetyFaults());
+  }
+}
+
+static void hookLink(bool up, bool timedOut) {
+  if (up) {
+    eyesNotifyWallEConnected();
+  } else {
+    eyesNotifyWallEDisconnected();
+    if (timedOut) Serial.println(F("[EVE][LINK] no valid frames from WALL-E - waiting again"));
+  }
+}
+
+// =============================================================================
+// Boot-time configuration check
+// =============================================================================
+static void checkPinConfig(void) {
+  EvePinUse uses[32];
+  size_t n = 0;
+  auto add = [&](const char* name, int pin, uint8_t group) {
+    if (pin >= 0 && n < sizeof(uses) / sizeof(uses[0])) uses[n++] = {name, pin, group};
+  };
+  add("UART TX to WALL-E", EVE_UART_TX_PIN, EVE_PINGRP_EXCLUSIVE);
+  add("UART RX from WALL-E", EVE_UART_RX_PIN, EVE_PINGRP_EXCLUSIVE);
+  add("presence pin", EVE_PRESENT_PIN, EVE_PINGRP_EXCLUSIVE);
+#if EVE_ENABLE_BATTERY_MONITOR && EVE_BATTERY_INA219
+  add("INA219 SDA", EVE_INA219_SDA, EVE_PINGRP_I2C_SDA);
+  add("INA219 SCL", EVE_INA219_SCL, EVE_PINGRP_I2C_SCL);
+#elif EVE_ENABLE_BATTERY_MONITOR
+  add("battery ADC", EVE_BAT_ADC_PIN, EVE_PINGRP_EXCLUSIVE);
+  add("current ADC", EVE_CUR_ADC_PIN, EVE_PINGRP_EXCLUSIVE);
+#endif
+#if EVE_ONBOARD_RGB_HEARTBEAT
+  add("onboard RGB", EVE_ONBOARD_RGB_PIN, EVE_PINGRP_EXCLUSIVE);
+#endif
+#if EVE_ENABLE_NEOPIXEL
+  add("NeoPixel strip", EVE_NEOPIXEL_PIN, EVE_PINGRP_EXCLUSIVE);
+#endif
+#if EVE_ENABLE_SERVOS
+  add("head servo", EVE_SERVO_L_PIN, EVE_PINGRP_EXCLUSIVE);
+  add("arm servo", EVE_SERVO_R_PIN, EVE_PINGRP_EXCLUSIVE);
+#endif
+#if EVE_ENABLE_TOF
+  add("ToF SDA", EVE_I2C_SDA, EVE_PINGRP_I2C_SDA);
+  add("ToF SCL", EVE_I2C_SCL, EVE_PINGRP_I2C_SCL);
+  add("ToF XSHUT", EVE_TOF_XSHUT_SECOND, EVE_PINGRP_EXCLUSIVE);
+#endif
+#if EVE_ENABLE_EYES
+  add("eye MOSI", EVE_TFT_SPI_MOSI, EVE_PINGRP_SPI_MOSI);
+  add("eye SCK", EVE_TFT_SPI_SCK, EVE_PINGRP_SPI_SCK);
+  add("eye MISO", EVE_TFT_SPI_MISO, EVE_PINGRP_SPI_MISO);
+  add("left eye CS", EVE_LEFT_EYE_CS, EVE_PINGRP_EXCLUSIVE);
+  add("right eye CS", EVE_RIGHT_EYE_CS, EVE_PINGRP_EXCLUSIVE);
+  add("eye DC", EVE_TFT_DC, EVE_PINGRP_EXCLUSIVE);
+  add("eye RST", EVE_TFT_RST, EVE_PINGRP_EXCLUSIVE);
+#endif
+  /* The SD card is mounted whenever its pins are set (asset manager), audio or not. */
+  add("SD MOSI", EVE_SD_SPI_MOSI, EVE_PINGRP_SPI_MOSI);
+  add("SD SCK", EVE_SD_SPI_SCK, EVE_PINGRP_SPI_SCK);
+  add("SD MISO", EVE_SD_SPI_MISO, EVE_PINGRP_SPI_MISO);
+  add("SD CS", EVE_SD_SPI_CS, EVE_PINGRP_EXCLUSIVE);
+#if EVE_ENABLE_AUDIO
+  add("I2S BCLK", EVE_I2S_BCLK_PIN, EVE_PINGRP_EXCLUSIVE);
+  add("I2S LRCK", EVE_I2S_LRCK_PIN, EVE_PINGRP_EXCLUSIVE);
+  add("I2S DOUT", EVE_I2S_DOUT_PIN, EVE_PINGRP_EXCLUSIVE);
+#endif
+
+  char msg[128];
+  int problems = evePinCheck(uses, n, msg, sizeof(msg));
+#if EVE_ENABLE_TOF && EVE_ENABLE_BATTERY_MONITOR && EVE_BATTERY_INA219
+  /* Both use the one Wire bus: different pins would re-route it and lose the INA219. */
+  if (EVE_I2C_SDA != EVE_INA219_SDA || EVE_I2C_SCL != EVE_INA219_SCL) {
+    if (problems == 0) snprintf(msg, sizeof(msg), "ToF and INA219 share Wire: set EVE_I2C_SDA/SCL = EVE_INA219_SDA/SCL");
+    problems++;
+  }
+#endif
+  if (problems > 0) {
+    Serial.printf("[EVE][CONFIG] %d pin problem(s): %s\n", problems, msg);
+    Serial.println(F("[EVE][CONFIG] blocking fault raised - motion stays disabled until config.h is fixed"));
+    eveSafetySetFault(EVE_FAULT_PIN_CONFLICT, true);
+  } else {
+    Serial.printf("[EVE][CONFIG] %u configured pins checked - no conflicts\n", (unsigned)n);
+  }
+
+#if EVE_ENABLE_EYES
+  if (!EVE_FACE_GFX_READY) {
+    Serial.println(F("[EVE][CONFIG] eyes enabled but TFT pins are not set - eye panels stay dark"));
+    eveSafetySetFault(EVE_FAULT_EYES, true);
+  }
 #endif
 }
 
-static void sendEveReady(void) {
-  StaticJsonDocument<128> doc;
-  doc["session"] = s_sessionId;
-  String out;
-  serializeJson(doc, out);
-  uartLinkSendJson(MSG_EVE_READY, out.c_str());
-  Serial.println(F("[EVE][SM] -> EVE_READY"));
-}
-
-static void sendEveHeartbeat(void) {
-  StaticJsonDocument<384> doc;
-  doc["session"] = s_sessionId;
-  doc["uptime_ms"] = systemStatusUptimeMs();
-  doc["heap"] = ESP.getFreeHeap();
-  doc["bat_ok"] = eveBatteryDataValid();
-  doc["bat_v"] = eveBatteryVoltage();
-  doc["bat_a"] = eveBatteryCurrentA();
-  doc["bat_pct"] = eveBatteryPercent();
-  doc["bat_st"] = (int)eveBatteryStatus();
-  String out;
-  serializeJson(doc, out);
-  uartLinkSendJson(MSG_EVE_HEARTBEAT, out.c_str());
-}
-
-static void sendEveLowBatteryJson(void) {
-  StaticJsonDocument<160> doc;
-  doc["v"] = eveBatteryVoltage();
-  doc["a"] = eveBatteryCurrentA();
-  doc["pct"] = eveBatteryPercent();
-  doc["session"] = s_sessionId;
-  String out;
-  serializeJson(doc, out);
-  uartLinkSendJson(MSG_EVE_LOW_BATTERY, out.c_str());
-  Serial.println(F("[EVE][SM] -> MSG_EVE_LOW_BATTERY"));
-}
-
-static void batteryAlarmTick(uint32_t now) {
-  if (!eveBatteryHardwareEnabled() || !eveBatteryDataValid()) return;
-
-  if (eveBatteryPercent() > EVE_BAT_CRIT_PCT) {
-    if (s_state == EveState::LOW_POWER && eveBatteryPercent() > (EVE_BAT_WARN_PCT + 5)) {
-      Serial.println(F("[EVE][SM] battery recovered -> IDLE"));
-      s_state = EveState::IDLE;
-    }
-    return;
-  }
-
-  if (now - s_lastLowBatMs < EVE_BAT_LOW_REPORT_MIN_MS) return;
-  s_lastLowBatMs = now;
-  sendEveLowBatteryJson();
-
-  if (s_state == EveState::IDLE || s_state == EveState::ATTACHED || s_state == EveState::ESCORT ||
-      s_state == EveState::INTERACT || s_state == EveState::DOCKED) {
-    Serial.println(F("[EVE][SM] critical battery -> LOW_POWER"));
-    s_state = EveState::LOW_POWER;
-  }
-}
-
-static void sendEveError(const char* msg, int code) {
-  StaticJsonDocument<192> doc;
-  doc["code"] = code;
-  doc["msg"] = msg;
-  String out;
-  serializeJson(doc, out);
-  uartLinkSendJson(MSG_EVE_ERROR, out.c_str());
+// =============================================================================
+// Public API
+// =============================================================================
+void stateMachineEarlyInit(void) {
+  static const EveSafetyHooks safetyHooks = {haltOutputs, logLine};
+  eveSafetyInit(&safetyHooks);
+  static const EveRoutineHooks routineHooks = {routineExpression, routineGlow, routineSound,
+                                               routineServo,      eveSafetyRoutinesAllowed, logLine};
+  eveRoutinesInit(&routineHooks);
+  checkPinConfig();
 }
 
 void stateMachineInit(void) {
-  s_state = EveState::WAIT_ATTACH;
-  s_sessionId = 0;
-  s_dockMimic = false;
-  s_dockMimicCharging = false;
-  strncpy(s_peerLabel, "none", sizeof(s_peerLabel) - 1);
-  s_peerLabel[sizeof(s_peerLabel) - 1] = '\0';
-  s_lastHelloMs = 0;
-  s_lastEveHbMs = 0;
-  s_lastRxMs = millis();
+  if (s_initDone) {
+    /* Old callers used stateMachineInit() as "reset": keep that meaning, never clear the stop. */
+    stateMachineLocalReset();
+    return;
+  }
+  s_initDone = true;
+  EveControlHooks h;
+  memset(&h, 0, sizeof(h));
+  h.send = hookSend;
+  h.battery = eveBatteryFillReport;
+  h.freeHeap = hookHeap;
+  h.outputs = hookOutputs;
+  h.present = hookPresent;
+  h.rxErrors = hookRxErrors;
+  h.servoAvailable = servoAvailable;
+  h.servoLimits = servoGetLimits;
+  h.servoMove = servoMoveTo;
+  h.haltMotion = servoHaltAll;
+  h.remoteSound = hookRemoteSound;
+  h.stopSound = audioStop;
+  h.eyesExpression = routineExpression;
+  h.eyesLegacyMode = hookEyesLegacy;
+  h.glowOperator = hookGlowOperator;
+  h.busCommand = hookBusCommand;
+  h.onModeChanged = hookModeChanged;
+  h.onLink = hookLink;
+  h.log = logLine;
   eveDesktopCompanionInit();
-  Serial.println(F("[EVE][SM] WAIT_ATTACH"));
+  eveControlInit(&h, millis());
+  neopixelSetBase(glowForMode(eveControlMode()));
 #if EVE_ENABLE_DOCK_MIMIC_TEST && EVE_DOCK_MIMIC_ON_BOOT
   stateMachineSetDockMimic(true, EVE_DOCK_MIMIC_FAKE_CHARGING != 0);
 #endif
 }
 
 void stateMachineTick(void) {
-  uint32_t now = millis();
+  const uint32_t now = millis();
 
-  switch (s_state) {
-    case EveState::BOOT:
-      break;
-    case EveState::WAIT_ATTACH:
-      if (now - s_lastHelloMs >= EVE_HELLO_RETRY_MS) {
-        s_lastHelloMs = now;
-        sendEveHello();
-      }
-      break;
-    case EveState::HANDSHAKE:
-      break;
-    case EveState::IDLE:
-    case EveState::ATTACHED:
-    case EveState::ESCORT:
-    case EveState::INTERACT:
-    case EveState::DOCKED:
-      batteryAlarmTick(now);
-      if (now - s_lastEveHbMs >= EVE_HEARTBEAT_MS) {
-        s_lastEveHbMs = now;
-        sendEveHeartbeat();
-      }
-      if ((s_state == EveState::ESCORT || s_state == EveState::INTERACT || s_state == EveState::DOCKED) && !s_dockMimic) {
-        if (now - s_lastRxMs > EVE_LINK_LOST_MS) {
-          Serial.println(F("[EVE][SM] link lost -> WAIT_ATTACH"));
-          sendEveError("link_timeout", 1);
-          s_state = EveState::WAIT_ATTACH;
-          s_sessionId = 0;
-          strncpy(s_peerLabel, "none", sizeof(s_peerLabel) - 1);
-          s_peerLabel[sizeof(s_peerLabel) - 1] = '\0';
-          s_lastHelloMs = 0;
-          eyesNotifyWallEDisconnected();
-        }
-      }
-      break;
-    case EveState::LOW_POWER:
-      batteryAlarmTick(now);
-      if (now - s_lastEveHbMs >= EVE_HEARTBEAT_MS) {
-        s_lastEveHbMs = now;
-        sendEveHeartbeat();
-      }
-      break;
-    case EveState::ERROR:
-    case EveState::SLEEP:
-      break;
+  // ---- Battery: hand trustworthy changes to the core --------------------------------------------
+  static EveBatLevel s_lvl = EVE_BATLVL_UNKNOWN;
+  static int8_t s_chg = -1;
+  static bool s_full = false;
+  static bool s_batSent = false;
+  const EveBatLevel lvl = eveBatteryLevel();
+  const int8_t chg = eveBatteryCharging();
+  const bool full = eveBatteryFull();
+  if (!s_batSent || lvl != s_lvl || chg != s_chg || full != s_full) {
+    s_batSent = true;
+    s_lvl = lvl;
+    s_chg = chg;
+    s_full = full;
+    eveControlSetBattery(lvl, chg, full, now);
   }
 
+  eveControlTick(now);
+
+  const EveMode mode = eveControlMode();
+  neopixelSetBase(glowForMode(mode)); /* docked charging / full can change without a mode change */
+  eveExpressionSetSearchingWallE(mode == EVE_MODE_WAIT_ATTACH);
+
+  // ---- Docked eye state follows measured charging -----------------------------------------------
+  static bool s_prevDockChg = false;
+  const bool docked = (mode == EVE_MODE_DOCKED);
+  const bool chgNow = docked && dockCharging();
+  if (docked && chgNow != s_prevDockChg) eyesNotifyDockingState(true, chgNow);
+  s_prevDockChg = chgNow;
+
+  // ---- Behaviour flags for spatial awareness / emotion engine (unchanged meaning) ----------------
   {
     uint8_t sf = 0;
-    static bool s_prevSleepEmotion = false;
-    const bool sleepNow = (s_state == EveState::SLEEP);
+    const bool sleepNow = (mode == EVE_MODE_SLEEP);
 #if EVE_ENABLE_EYES
+    static bool s_prevSleepEmotion = false;
     if (sleepNow != s_prevSleepEmotion) {
       eveEmotionNotifySleep(sleepNow);
       s_prevSleepEmotion = sleepNow;
     }
 #endif
-    if (s_state == EveState::SLEEP) {
-      sf |= EVE_SPATIAL_FLAG_SLEEP;
-    }
-    if (s_state == EveState::LOW_POWER) {
-      sf |= EVE_SPATIAL_FLAG_LOW_BATTERY;
-    }
-    if (s_state == EveState::ESCORT || s_state == EveState::INTERACT) {
-      sf |= EVE_SPATIAL_FLAG_ALERT;
-    }
-    if (eveAttachmentIsAttached()) {
-      sf |= EVE_SPATIAL_FLAG_ATTACHED;
-    }
+    if (sleepNow) sf |= EVE_SPATIAL_FLAG_SLEEP;
+    if (mode == EVE_MODE_LOW_POWER) sf |= EVE_SPATIAL_FLAG_LOW_BATTERY;
+    if (mode == EVE_MODE_ESCORT || mode == EVE_MODE_INTERACT) sf |= EVE_SPATIAL_FLAG_ALERT;
+    if (eveAttachmentIsAttached()) sf |= EVE_SPATIAL_FLAG_ATTACHED;
 #if EVE_ENABLE_EYES
-    if (eveExpressionGetCurrent() == EVE_EXPR_CONFUSED) {
-      sf |= EVE_SPATIAL_FLAG_CONFUSED;
-    }
+    if (eveExpressionGetCurrent() == EVE_EXPR_CONFUSED) sf |= EVE_SPATIAL_FLAG_CONFUSED;
 #endif
     eveSpatialSetBehaviorFlags(sf);
   }
 
-  const bool dockDesktopActive = (s_state == EveState::DOCKED);
-  const bool dockCharging = s_dockMimic ? s_dockMimicCharging : (eveBatteryDataValid() && eveBatteryCurrentA() > 0.03f);
-  eveDesktopCompanionSetActive(dockDesktopActive, dockCharging);
-  if (dockDesktopActive) {
-    eveDesktopCompanionTick(now);
-  }
+  // ---- Desktop companion only while docked -------------------------------------------------------
+  eveDesktopCompanionSetActive(docked, chgNow);
+  if (docked) eveDesktopCompanionTick(now);
 }
 
 void stateMachineOnUartRx(uint8_t type, const uint8_t* payload, size_t len, uint8_t seq) {
-  (void)seq;
-  s_lastRxMs = millis();
-
-  char jsonBuf[EVE_MAX_PAYLOAD + 1];
-  if (len > EVE_MAX_PAYLOAD) {
-    return;
-  }
-  if (len > 0) {
-    memcpy(jsonBuf, payload, len);
-  }
-  jsonBuf[len] = '\0';
-
 #if EVE_SERIAL_VERBOSE_LOGS
-  Serial.print(F("[EVE][SM] RX type=0x"));
-  Serial.print(type, HEX);
-  Serial.print(F(" seq="));
-  Serial.println(seq);
+  Serial.printf("[EVE][LINK] RX %s seq=%u len=%u\n", eveLinkMsgName(type), (unsigned)seq, (unsigned)len);
 #endif
-
-  switch (type) {
-    case MSG_WALL_E_ACK: {
-      StaticJsonDocument<128> doc;
-      if (deserializeJson(doc, jsonBuf)) {
-        return;
-      }
-      s_sessionId = doc["session"] | 0u;
-      const char* peer = doc["peer"] | "wall_e";
-      if (!peer || peer[0] == '\0') {
-        peer = "wall_e";
-      }
-      strncpy(s_peerLabel, peer, sizeof(s_peerLabel) - 1);
-      s_peerLabel[sizeof(s_peerLabel) - 1] = '\0';
-      Serial.print(F("[EVE][SM] WALL_E_ACK session="));
-      Serial.println(s_sessionId);
-      Serial.print(F("[EVE][SM] peer="));
-      Serial.println(s_peerLabel);
-      s_state = EveState::HANDSHAKE;
-      sendEveReady();
-      s_state = EveState::IDLE;
-      neopixelSetPattern(1);
-      eyesNotifyWallEConnected();
-      break;
-    }
-    case MSG_ATTACH_CONFIRMED:
-      if (s_sessionId == 0) {
-        break;
-      }
-      s_state = EveState::ATTACHED;
-      eyesSetMode(1);
-      Serial.println(F("[EVE][SM] ATTACHED"));
-      break;
-    case MSG_MODE_ESCORT:
-      if (s_sessionId == 0) {
-        break;
-      }
-      s_state = EveState::ESCORT;
-      Serial.println(F("[EVE][SM] ESCORT"));
-      break;
-    case MSG_MODE_DOCK:
-      if (s_sessionId == 0) {
-        break;
-      }
-      s_state = EveState::DOCKED;
-      Serial.println(F("[EVE][SM] DOCK"));
-      eyesNotifyDockingState(true, eveBatteryDataValid() && eveBatteryCurrentA() > 0.03f);
-      break;
-    case MSG_MODE_IDLE:
-      if (s_sessionId == 0) {
-        break;
-      }
-      s_state = EveState::IDLE;
-      Serial.println(F("[EVE][SM] IDLE"));
-      eyesNotifyDockingState(false, false);
-      break;
-    case MSG_MOVE_SERVO: {
-      if (s_sessionId == 0 || !stateAllowsRemoteControl()) {
-        uint32_t now = millis();
-        if ((uint32_t)(now - s_lastUnauthorizedLogMs) > 1000u) {
-          s_lastUnauthorizedLogMs = now;
-          Serial.println(F("[EVE][SM] Ignored MOVE_SERVO before handshake/state ready"));
-        }
-        break;
-      }
-      StaticJsonDocument<128> doc;
-      if (deserializeJson(doc, jsonBuf)) {
-        break;
-      }
-      int l = doc["l"] | 90;
-      int r = doc["r"] | 90;
-      servoSetAngles((int16_t)l, (int16_t)r);
-      break;
-    }
-    case MSG_PLAY_SOUND: {
-      if (s_sessionId == 0 || !stateAllowsRemoteControl()) {
-        uint32_t now = millis();
-        if ((uint32_t)(now - s_lastUnauthorizedLogMs) > 1000u) {
-          s_lastUnauthorizedLogMs = now;
-          Serial.println(F("[EVE][SM] Ignored PLAY_SOUND before handshake/state ready"));
-        }
-        break;
-      }
-      StaticJsonDocument<64> doc;
-      if (deserializeJson(doc, jsonBuf)) {
-        break;
-      }
-      uint8_t tr = doc["track"] | 1;
-      eveBehaviorOnRemoteSound(tr);
-      break;
-    }
-    case MSG_STOP:
-      if (s_sessionId == 0 || !stateAllowsRemoteControl()) {
-        uint32_t now = millis();
-        if ((uint32_t)(now - s_lastUnauthorizedLogMs) > 1000u) {
-          s_lastUnauthorizedLogMs = now;
-          Serial.println(F("[EVE][SM] Ignored STOP before handshake/state ready"));
-        }
-        break;
-      }
-      servoSetAngles(90, 90);
-      audioPlayTrack(0);
-      break;
-    case MSG_RESET_STATE:
-      stateMachineInit();
-      break;
-    case MSG_BUS_COMMAND:
-      if (s_sessionId == 0 || !stateAllowsRemoteControl()) {
-        uint32_t now = millis();
-        if ((uint32_t)(now - s_lastUnauthorizedLogMs) > 1000u) {
-          s_lastUnauthorizedLogMs = now;
-          Serial.println(F("[EVE][SM] Ignored BUS_COMMAND before handshake/state ready"));
-        }
-        break;
-      }
-      if (eveDesktopCompanionApplyConfigJson(jsonBuf)) {
-        Serial.println(F("[EVE][SM] BUS_COMMAND applied"));
-      }
-      break;
-    default:
-      break;
-  }
+  eveControlOnFrame(type, payload, len, seq, millis());
 }
 
-uint32_t stateMachineGetSessionId(void) {
-  return s_sessionId;
-}
+uint32_t stateMachineGetSessionId(void) { return eveControlSession(); }
 
-bool stateMachineIsDocked(void) {
-  return s_state == EveState::DOCKED;
-}
+bool stateMachineIsDocked(void) { return eveControlMode() == EVE_MODE_DOCKED; }
+
+const char* stateMachineGetStateName(void) { return eveControlModeName(eveControlMode()); }
 
 void stateMachineSetDockMimic(bool enabled, bool fakeCharging) {
 #if EVE_ENABLE_DOCK_MIMIC_TEST
-  s_dockMimic = enabled;
-  s_dockMimicCharging = enabled && fakeCharging;
-  if (enabled) {
-    s_sessionId = 0xE0E0E0E0u;
-    s_lastRxMs = millis();
-    s_lastEveHbMs = 0;
-    strncpy(s_peerLabel, "dock_test", sizeof(s_peerLabel) - 1);
-    s_peerLabel[sizeof(s_peerLabel) - 1] = '\0';
-    s_state = EveState::DOCKED;
-    eyesNotifyDockingState(true, s_dockMimicCharging);
-    Serial.println(F("[EVE][SM] DOCK MIMIC ON"));
-  } else if (s_dockMimic || s_state == EveState::DOCKED) {
-    s_dockMimic = false;
-    s_dockMimicCharging = false;
-    s_sessionId = 0;
-    strncpy(s_peerLabel, "none", sizeof(s_peerLabel) - 1);
-    s_peerLabel[sizeof(s_peerLabel) - 1] = '\0';
-    s_state = EveState::WAIT_ATTACH;
-    s_lastHelloMs = 0;
-    eyesNotifyDockingState(false, false);
-    Serial.println(F("[EVE][SM] DOCK MIMIC OFF"));
-  }
+  eveControlSetDockMimic(enabled, fakeCharging, millis());
 #else
   (void)enabled;
   (void)fakeCharging;
@@ -420,44 +349,55 @@ void stateMachineSetDockMimic(bool enabled, bool fakeCharging) {
 #endif
 }
 
-bool stateMachineIsDockMimic(void) {
-  return s_dockMimic;
-}
+bool stateMachineIsDockMimic(void) { return eveControlDockMimic(); }
 
-const char* stateMachineGetStateName(void) {
-  switch (s_state) {
-    case EveState::BOOT: return "BOOT";
-    case EveState::WAIT_ATTACH: return "WAIT_ATTACH";
-    case EveState::HANDSHAKE: return "HANDSHAKE";
-    case EveState::IDLE: return "IDLE";
-    case EveState::ATTACHED: return "ATTACHED";
-    case EveState::ESCORT: return "ESCORT";
-    case EveState::INTERACT: return "INTERACT";
-    case EveState::LOW_POWER: return "LOW_POWER";
-    case EveState::DOCKED: return "DOCKED";
-    case EveState::ERROR: return "ERROR";
-    case EveState::SLEEP: return "SLEEP";
-    default: return "UNKNOWN";
-  }
-}
+bool stateMachineAllowsCompanionUart(void) { return eveControlAllowsCompanionUart(); }
 
-bool stateMachineAllowsCompanionUart(void) {
-  if (s_sessionId == 0) {
+const char* stateMachineGetPeerLabel(void) { return eveControlPeer(); }
+
+void stateMachineLocalStop(EveStopSource src) { eveControlLocalStop(src, millis()); }
+
+bool stateMachineLocalClearStop(EveStopSource src) { return eveControlLocalClearStop(src, millis()); }
+
+void stateMachineLocalReset(void) { eveControlLocalReset(millis()); }
+
+bool stateMachineLocalRoutine(const char* name, const char** whyNot) {
+  const EveRoutineId id = eveRoutineFromName(name);
+  if (id == EVE_ROUTINE_NONE) {
+    if (whyNot) *whyNot = "unknown routine";
     return false;
   }
-  switch (s_state) {
-    case EveState::IDLE:
-    case EveState::ATTACHED:
-    case EveState::ESCORT:
-    case EveState::INTERACT:
-    case EveState::DOCKED:
-    case EveState::LOW_POWER:
-      return true;
-    default:
-      return false;
-  }
+  return eveControlLocalRoutine(id, millis(), whyNot);
 }
 
-const char* stateMachineGetPeerLabel(void) {
-  return s_peerLabel;
+bool stateMachineLocalStandby(bool on, const char** whyNot) { return eveControlLocalStandby(on, millis(), whyNot); }
+
+size_t stateMachineStatusJson(char* out, size_t cap) { return eveControlStatusJson(out, cap, millis()); }
+
+void stateMachinePrintDiagnostics(void) {
+  const uint32_t now = millis();
+  const EveControlStats* st = eveControlStats();
+  const EveFrameDecoder::Stats& ds = uartLinkStats();
+  Serial.printf("[EVE][DIAG] mode=%s req=%s linked=%s peer=%s session=%lu link_age=%lums supervision=%s\n",
+                eveControlModeName(eveControlMode()), eveControlModeName(eveControlRequestedMode()),
+                eveControlLinked() ? "yes" : "no", eveControlPeer(), (unsigned long)eveControlSession(),
+                (unsigned long)eveControlLinkAgeMs(now), eveControlPeerHeartbeats() ? "heartbeat" : "legacy");
+  Serial.printf("[EVE][DIAG] stop=%s (src=%s, latched %lu times) faults=0x%04x power_inhibit=%s routine=%s\n",
+                eveSafetyStopLatched() ? "LATCHED" : "clear", eveSafetyStopSourceName(eveSafetyStopSource()),
+                (unsigned long)eveSafetyStopCount(), (unsigned)eveSafetyFaults(), eveSafetyPowerInhibit() ? "yes" : "no",
+                eveRoutineName(eveRoutineActive()));
+  Serial.printf("[EVE][DIAG] frames ok=%lu crc_err=%lu ver_err=%lu len_err=%lu echo=%lu | cmds ok=%lu rejected=%lu (last: %s)\n",
+                (unsigned long)ds.ok, (unsigned long)ds.crcErr, (unsigned long)ds.versionErr, (unsigned long)ds.lengthErr,
+                (unsigned long)st->echoIgnored, (unsigned long)st->accepted, (unsigned long)st->rejected, st->lastReject);
+  Serial.printf("[EVE][DIAG] battery %s %.2fV %+.2fA %d%% charging=%d full=%s (%s)\n",
+                eveBatteryHardwareEnabled() ? "sensor" : "no-sensor", (double)eveBatteryVoltage(),
+                (double)eveBatteryCurrentA(), eveBatteryPercent(), (int)eveBatteryCharging(),
+                eveBatteryFull() ? "yes" : "no", eveBatteryInvalidReason());
+  Serial.printf("[EVE][DIAG] servos: head cmd=%d tgt=%d %s | arm cmd=%d tgt=%d %s (cmd -1 = never commanded)\n",
+                servoGetCommandedDeg(EVE_SERVO_HEAD_PAN), servoGetTargetDeg(EVE_SERVO_HEAD_PAN),
+                servoAvailable(EVE_SERVO_HEAD_PAN) ? (servoOutputActive(EVE_SERVO_HEAD_PAN) ? "pulsing" : "silent") : "off",
+                servoGetCommandedDeg(EVE_SERVO_RIGHT_ARM), servoGetTargetDeg(EVE_SERVO_RIGHT_ARM),
+                servoAvailable(EVE_SERVO_RIGHT_ARM) ? (servoOutputActive(EVE_SERVO_RIGHT_ARM) ? "pulsing" : "silent") : "off");
+  Serial.printf("[EVE][DIAG] glow=%s audio=%s presence=%d outputs=0x%02x\n", eveGlowName(neopixelCurrentPattern()),
+                audioIsReady() ? "ready" : "off", (int)eveAttachmentPresence(), (unsigned)hookOutputs());
 }

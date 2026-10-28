@@ -34,11 +34,29 @@ arduino_ide/
 
 4. **Port:** pick the COM port for your USB cable.
 
-## Library
+## Libraries
 
-Install **ArduinoJson** version **6.x**:
+Install with *Sketch → Include Library → Manage Libraries…*:
 
-- *Sketch → Include Library → Manage Libraries…* → search **ArduinoJson** → install **ArduinoJson** by **Benoit Blanchon** (v6.21.x or newer).
+| Library | Version | Needed for |
+|---|---|---|
+| ArduinoJson (Benoit Blanchon) | 6.21.x (not 7) | UART protocol, status JSON |
+| Adafruit NeoPixel | 1.12+ | onboard RGB LED (GPIO48) and the optional strip |
+| Adafruit INA219 + Adafruit BusIO | 1.2.3+ / 1.14+ | battery voltage / current |
+| lvgl | 9.2.x | eye face (only compiled when `EVE_ENABLE_EYES` is 1) |
+| GFX Library for Arduino (moononournation) | **1.6.9+** | eye panels. Older releases do not compile on Arduino-ESP32 3.3.x |
+| Pololu VL53L1X | 1.3+ | only when `EVE_ENABLE_TOF` is 1 |
+
+Also install the repo's shared audio library: copy (or symlink) `lib/walle_i2s_audio` into your
+Arduino `libraries` folder.
+
+With the eyes enabled, LVGL needs `lv_conf.h`. Copy `EVE_Companion/lv_conf.h` to your Arduino
+`libraries` folder, next to the `lvgl` folder. It keeps C headers away from LVGL's assembler
+files, so it is safe for the IDE to compile them.
+
+**Partition:** the current build (eyes off) fits the default 1.2 MB app partition (about 80 %).
+With the eyes and the other drivers enabled it is about 1.4 MB, so choose
+*Tools → Partition Scheme → 16M Flash (3MB APP/9.9MB FATFS)* (Flash Size 16 MB).
 
 ## Compile & upload
 
@@ -46,8 +64,13 @@ Install **ArduinoJson** version **6.x**:
 2. Click **Verify** then **Upload**.
 3. Open **Serial Monitor** at **115200** baud.
 
-You should see `[EVE][UART]` and periodic `EVE_HELLO` until WALL-E answers with a framed `WALL_E_ACK`.
+You should see `[EVE][CONFIG]`, `[EVE][UART]` and `BOOT -> WAIT_ATTACH`. Once WALL-E answers,
+expect `UART link up …` and `WAIT_ATTACH -> IDLE`. Type `help` in the Serial Monitor for the
+console (`diag`, `stop`, `clearstop`, `routine scan`, …). See `../EVE_LINK_SAFETY_AND_BENCH_TEST.md`.
 
-## Keeping in sync with PlatformIO
+## One source for both builds
 
-The files under `EVE_Companion/` are meant to stay **logically identical** to `eve/src/` + `eve/include/` from the repo root. After editing one tree, copy changes to the other if you use both tools.
+PlatformIO compiles this same folder (`eve/platformio.ini` sets `src_dir` and `include_dir` to
+`arduino_ide/EVE_Companion`). There is nothing to copy between trees any more. The UART message
+IDs come from `firmware_common/include/eve_link_protocol.h` (via `eve_protocol.h`), which WALL-E's
+base uses too.

@@ -100,7 +100,7 @@ void eveEyeDisplayInit(void) {
   s_gfxLeft = new Arduino_ST7789(s_busLeft, eveGfxRstPin(), 0, true, (int16_t)EVE_FACE_LCD_HOR_RES,
                                  (int16_t)EVE_FACE_LCD_VER_RES, 0, 0);
   if (s_gfxLeft->begin()) {
-    s_gfxLeft->fillScreen(BLACK);
+    s_gfxLeft->fillScreen(0x0000); /* RGB565 black (GFX 1.6 renamed BLACK to RGB565_BLACK) */
   }
 
   if (s_dual) {
@@ -109,7 +109,7 @@ void eveEyeDisplayInit(void) {
     s_gfxRight = new Arduino_ST7789(s_busRight, eveGfxRstPin(), 0, true, (int16_t)EVE_FACE_LCD_HOR_RES,
                                     (int16_t)EVE_FACE_LCD_VER_RES, 0, 0);
     if (s_gfxRight->begin()) {
-      s_gfxRight->fillScreen(BLACK);
+      s_gfxRight->fillScreen(0x0000); /* RGB565 black (GFX 1.6 renamed BLACK to RGB565_BLACK) */
     }
     Serial.println(F("[EVE_EYE] Dual physical panels (left + right CS)"));
   } else {

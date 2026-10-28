@@ -37,7 +37,7 @@
 - **Modifiers:** lower on `LOW_BATTERY` / `ATTACHED`; higher on `ALERT` (ESCORT/INTERACT) and when `stableStrong` (long hold + confidence).
 - **Blocked:** `SLEEP`, `CONFUSED` (expression or flag), `NONE` / `UNCERTAIN`, low confidence.
 
-## 4. Modules (EVE `eve/src`)
+## 4. Modules (EVE `eve/arduino_ide/EVE_Companion`)
 
 | File | Role |
 |------|------|

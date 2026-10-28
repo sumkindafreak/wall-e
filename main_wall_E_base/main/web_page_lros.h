@@ -4644,6 +4644,38 @@ body.lros-app-revealed #app {
         </div>
       </header>
       <div class="subpage-deck subpage-deck--2col">
+        <div class="card more-deck-card subpage-card-span">
+          <div class="card-header">EVE state &amp; safety</div>
+          <div class="card-body">
+            <p class="stat-sub" style="margin:0 0 10px">A UART link means WALL-E and EVE are talking. It is not proof EVE is in WALL-E's hand &mdash; only EVE's presence input can report contact.</p>
+            <div class="status-row"><span class="label">Link</span><span class="value mono" id="eve-st-link">—</span></div>
+            <div class="status-row"><span class="label">Contact</span><span class="value" id="eve-st-contact">—</span></div>
+            <div class="status-row"><span class="label">EVE mode (requested)</span><span class="value mono" id="eve-st-mode">—</span></div>
+            <div class="status-row"><span class="label">Stop</span><span class="value" id="eve-st-stop">—</span></div>
+            <div class="status-row"><span class="label">Faults / routine</span><span class="value mono" id="eve-st-faults">—</span></div>
+            <div class="status-row"><span class="label">EVE battery</span><span class="value mono" id="eve-st-bat">—</span></div>
+            <div class="status-row"><span class="label">Last command</span><span class="value mono" id="eve-st-result">—</span></div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px">
+              <button class="btn btn-stop" onclick="eveCmd('/api/eve/stop')">STOP EVE</button>
+              <button class="btn ghost" onclick="eveCmd('/api/eve/clear_stop')">Clear EVE stop</button>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
+              <button class="btn ghost" onclick="eveCmd('/api/eve/mode?name=idle')">Idle</button>
+              <button class="btn ghost" onclick="eveCmd('/api/eve/mode?name=escort')">Escort</button>
+              <button class="btn ghost" onclick="eveCmd('/api/eve/mode?name=interact')">Interact</button>
+              <button class="btn ghost" onclick="eveCmd('/api/eve/mode?name=standby')">Standby</button>
+              <button class="btn ghost" onclick="eveCmd('/api/eve/mode?name=dock')">Dock</button>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
+              <button class="btn ghost" onclick="eveCmd('/api/eve/routine?name=greet')">Greet</button>
+              <button class="btn ghost" onclick="eveCmd('/api/eve/routine?name=scan')">Scan (animation)</button>
+              <button class="btn ghost" onclick="eveCmd('/api/eve/routine?name=play')">Playful</button>
+              <button class="btn ghost" onclick="eveCmd('/api/eve/routine?name=protect')">Protective</button>
+              <button class="btn ghost" onclick="eveCmd('/api/eve/routine?name=wake')">Wake</button>
+            </div>
+            <p class="stat-sub" id="eve-st-cmd" style="margin:8px 0 0">Commands go over the UART link; EVE's verdict appears under "Last command".</p>
+          </div>
+        </div>
         <div class="card more-deck-card">
           <div class="card-header">UART bridge</div>
           <div class="card-body">
@@ -8256,6 +8288,22 @@ function applyLivingEveUI(liv, uart, panel, learning, monitor) {
       if (t.length > 400) t = t.slice(0, 400) + '…';
       setById('eve-uart-payload', t);
     }
+    var es = uart.eve || {};
+    setById('eve-st-link', (uart.link || (uart.link_ok ? 'linked' : 'waiting')) + (uart.supervision ? ' · ' + uart.supervision : ''));
+    setById('eve-st-contact', uart.contact === 'present' ? 'Present (EVE presence input)' : (uart.contact === 'absent' ? 'Not present (EVE presence input)' : 'Unknown (no presence input)'));
+    if (es.status_valid) {
+      setById('eve-st-mode', String(es.state) + (es.requested && es.requested !== es.state ? ' (' + es.requested + ')' : ''));
+      setById('eve-st-stop', es.stop ? 'LATCHED (' + es.stop_src + ')' : 'clear');
+      setById('eve-st-faults', (es.faults ? '0x' + Number(es.faults).toString(16) : 'none') + (es.power_inhibit ? ' · battery inhibit' : '') + ' · ' + (es.routine || 'none'));
+      setById('eve-st-bat', es.bat_hw ? (es.bat_ok ? Number(es.bat_v).toFixed(2) + ' V ' + es.bat_pct + '% · charging ' + (es.bat_charging < 0 ? 'unknown' : (es.bat_charging ? 'yes' : 'no')) + (es.bat_full ? ' · full' : '') : 'invalid reading') : 'no sensor');
+    } else {
+      setById('eve-st-mode', uart.link_ok ? 'waiting for EVE heartbeat' : '—');
+      setById('eve-st-stop', '—');
+      setById('eve-st-faults', '—');
+      setById('eve-st-bat', '—');
+    }
+    var lr = uart.last_result || {};
+    setById('eve-st-result', lr.valid ? (lr.type + ' ' + (lr.ok ? 'accepted' : 'refused: ' + lr.err)) : '—');
   } else {
     setById('eve-uart-link', '—');
     setById('eve-uart-age', '—');
@@ -8367,6 +8415,18 @@ function testEveMicReaction() {
       setById('eve-mic-status', j && j.ok ? 'Mic test sent over UART' : 'EVE mic test failed');
     }).catch(function () {
       setById('eve-mic-status', 'EVE mic test failed');
+    });
+}
+
+/** EVE command over WALL-E's UART bridge; EVE's verdict shows up in /api/eve/status last_result. */
+function eveCmd(path) {
+  fetch(api(path), { cache: 'no-store', headers: apiAuthHeaders() })
+    .then(function (res) { return res.json(); })
+    .then(function (j) {
+      setById('eve-st-cmd', j && j.sent ? 'Sent ' + j.command + ' — waiting for EVE\'s reply' : 'Not sent (' + ((j && (j.error || j.err)) || 'no UART link / token') + ')');
+      setTimeout(pollLivingTelemetry, 400);
+    }).catch(function () {
+      setById('eve-st-cmd', 'Request failed: ' + path);
     });
 }
 
@@ -9205,6 +9265,10 @@ async function doEStop(fromHold) {
   }, 3500);
   try {
     await fetch(api('/stop'));
+  } catch (_) {}
+  try {
+    /* Also latch EVE's stop (no token needed; cleared only from the EVE page). */
+    await fetch(api('/api/eve/stop'), { cache: 'no-store' });
   } catch (_) {}
   showFeedbackToast(true, 'E-STOP \u00B7 motors released');
   showToast('\u26D4', 'Emergency stop');

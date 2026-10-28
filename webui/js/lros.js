@@ -504,6 +504,22 @@ function applyLivingEveUI(liv, uart) {
       if (t.length > 400) t = t.slice(0, 400) + '…';
       setById('eve-uart-payload', t);
     }
+    var es = uart.eve || {};
+    setById('eve-st-link', (uart.link || (uart.link_ok ? 'linked' : 'waiting')) + (uart.supervision ? ' · ' + uart.supervision : ''));
+    setById('eve-st-contact', uart.contact === 'present' ? 'Present (EVE presence input)' : (uart.contact === 'absent' ? 'Not present (EVE presence input)' : 'Unknown (no presence input)'));
+    if (es.status_valid) {
+      setById('eve-st-mode', String(es.state) + (es.requested && es.requested !== es.state ? ' (' + es.requested + ')' : ''));
+      setById('eve-st-stop', es.stop ? 'LATCHED (' + es.stop_src + ')' : 'clear');
+      setById('eve-st-faults', (es.faults ? '0x' + Number(es.faults).toString(16) : 'none') + (es.power_inhibit ? ' · battery inhibit' : '') + ' · ' + (es.routine || 'none'));
+      setById('eve-st-bat', es.bat_hw ? (es.bat_ok ? Number(es.bat_v).toFixed(2) + ' V ' + es.bat_pct + '% · charging ' + (es.bat_charging < 0 ? 'unknown' : (es.bat_charging ? 'yes' : 'no')) + (es.bat_full ? ' · full' : '') : 'invalid reading') : 'no sensor');
+    } else {
+      setById('eve-st-mode', uart.link_ok ? 'waiting for EVE heartbeat' : '—');
+      setById('eve-st-stop', '—');
+      setById('eve-st-faults', '—');
+      setById('eve-st-bat', '—');
+    }
+    var lr = uart.last_result || {};
+    setById('eve-st-result', lr.valid ? (lr.type + ' ' + (lr.ok ? 'accepted' : 'refused: ' + lr.err)) : '—');
   } else {
     setById('eve-uart-link', '—');
     setById('eve-uart-age', '—');
@@ -534,6 +550,18 @@ function applyLivingEveUI(liv, uart) {
       setById('eve-as-stale', '—');
     }
   }
+}
+
+/** EVE command over WALL-E's UART bridge; EVE's verdict shows up in /api/eve/status last_result. */
+function eveCmd(path) {
+  fetch(api(path), { cache: 'no-store', headers: apiAuthHeaders() })
+    .then(function (res) { return res.json(); })
+    .then(function (j) {
+      setById('eve-st-cmd', j && j.sent ? 'Sent ' + j.command + ' — waiting for EVE\'s reply' : 'Not sent (' + ((j && (j.error || j.err)) || 'no UART link / token') + ')');
+      setTimeout(pollLivingTelemetry, 400);
+    }).catch(function () {
+      setById('eve-st-cmd', 'Request failed: ' + path);
+    });
 }
 
 function pollLivingTelemetry() {
@@ -1368,6 +1396,10 @@ async function doEStop(fromHold) {
   }, 3500);
   try {
     await fetch(api('/stop'));
+  } catch (_) {}
+  try {
+    /* Also latch EVE's stop (no token needed; cleared only from the EVE page). */
+    await fetch(api('/api/eve/stop'), { cache: 'no-store' });
   } catch (_) {}
   showFeedbackToast(true, 'E-STOP \u00B7 motors released');
   showToast('\u26D4', 'Emergency stop');

@@ -32,6 +32,9 @@ typedef enum {
   EVE_EXPR_SEARCHING_FOR_WALLE,
 } EveExpressionId;
 
+/* MSG_SET_EYES name table (eve_output_ids.h) must stay in step with this enum. */
+static_assert(EVE_EXPR_SEARCHING_FOR_WALLE == 21, "update eveExprNameLower() in eve_output_ids.h");
+
 /** Scalar layout targets consumed by the renderer / animator (normalized where noted). */
 typedef struct {
   float eyeSep;     /* inter-eye spacing scale ~0.85–1.15 */
