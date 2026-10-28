@@ -275,6 +275,16 @@ static void onRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len
       Serial.println("[E-STOP]");
       audioEspNowSendEvent(WALLE_AUDIO_EVT_ESTOP, WALLE_AUDIO_PRIORITY_ESTOP);
     }
+    /* E-STOP also latches EVE's stop: on the press, then once a second while it is held (covers a
+     * UART link that comes up mid-press). EVE stays latched until an explicit clear. */
+    {
+      static uint32_t s_lastEveStopMs = 0;
+      const uint32_t nowMs = millis();
+      if (!s_estopLast || (uint32_t)(nowMs - s_lastEveStopMs) >= 1000u) {
+        s_lastEveStopMs = nowMs;
+        (void)eveUartBridgeSendStop("cyd_estop");
+      }
+    }
     s_estopLast = true;
     return;
   }
@@ -302,7 +312,12 @@ static void onRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len
     motorStop();
     laserOff();
     displaySetCommand(CMD_IDLE);
-    Serial.println(F("[Action] STOP_ALL"));
+    static uint32_t s_lastStopAllEveMs = 0;
+    if (s_lastStopAllEveMs == 0 || (uint32_t)(millis() - s_lastStopAllEveMs) >= 1000u) {
+      s_lastStopAllEveMs = millis() | 1u;
+      (void)eveUartBridgeSendStop("cyd_stop_all");
+      Serial.println(F("[Action] STOP_ALL (EVE stop latched too)"));
+    }
   } else if (p->action == ACTION_AUTONOMY_REMOTE && len >= 19) {
     autonomyApplyRemoteConfig(p->aux0, p->aux1);
   } else if (p->action == ACTION_MOTION_POLICY && len >= 19) {

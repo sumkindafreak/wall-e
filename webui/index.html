@@ -1028,6 +1028,38 @@
         </div>
       </header>
       <div class="subpage-deck subpage-deck--2col">
+        <div class="card more-deck-card subpage-card-span">
+          <div class="card-header">EVE state &amp; safety</div>
+          <div class="card-body">
+            <p class="stat-sub" style="margin:0 0 10px">A UART link means WALL-E and EVE are talking. It is not proof EVE is in WALL-E's hand &mdash; only EVE's presence input can report contact.</p>
+            <div class="status-row"><span class="label">Link</span><span class="value mono" id="eve-st-link">—</span></div>
+            <div class="status-row"><span class="label">Contact</span><span class="value" id="eve-st-contact">—</span></div>
+            <div class="status-row"><span class="label">EVE mode (requested)</span><span class="value mono" id="eve-st-mode">—</span></div>
+            <div class="status-row"><span class="label">Stop</span><span class="value" id="eve-st-stop">—</span></div>
+            <div class="status-row"><span class="label">Faults / routine</span><span class="value mono" id="eve-st-faults">—</span></div>
+            <div class="status-row"><span class="label">EVE battery</span><span class="value mono" id="eve-st-bat">—</span></div>
+            <div class="status-row"><span class="label">Last command</span><span class="value mono" id="eve-st-result">—</span></div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px">
+              <button class="btn btn-stop" onclick="eveCmd('/api/eve/stop')">STOP EVE</button>
+              <button class="btn ghost" onclick="eveCmd('/api/eve/clear_stop')">Clear EVE stop</button>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
+              <button class="btn ghost" onclick="eveCmd('/api/eve/mode?name=idle')">Idle</button>
+              <button class="btn ghost" onclick="eveCmd('/api/eve/mode?name=escort')">Escort</button>
+              <button class="btn ghost" onclick="eveCmd('/api/eve/mode?name=interact')">Interact</button>
+              <button class="btn ghost" onclick="eveCmd('/api/eve/mode?name=standby')">Standby</button>
+              <button class="btn ghost" onclick="eveCmd('/api/eve/mode?name=dock')">Dock</button>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
+              <button class="btn ghost" onclick="eveCmd('/api/eve/routine?name=greet')">Greet</button>
+              <button class="btn ghost" onclick="eveCmd('/api/eve/routine?name=scan')">Scan (animation)</button>
+              <button class="btn ghost" onclick="eveCmd('/api/eve/routine?name=play')">Playful</button>
+              <button class="btn ghost" onclick="eveCmd('/api/eve/routine?name=protect')">Protective</button>
+              <button class="btn ghost" onclick="eveCmd('/api/eve/routine?name=wake')">Wake</button>
+            </div>
+            <p class="stat-sub" id="eve-st-cmd" style="margin:8px 0 0">Commands go over the UART link; EVE's verdict appears under "Last command".</p>
+          </div>
+        </div>
         <div class="card more-deck-card">
           <div class="card-header">UART bridge</div>
           <div class="card-body">
