@@ -2,11 +2,12 @@
 #include "config.h"
 #include <string.h>
 
-#if EVE_ENABLE_TOF && (EVE_I2C_SDA >= 0) && defined(__has_include)
-#if __has_include("VL53L1X.h")
+/* With ToF enabled (and not simulated) the Pololu VL53L1X library is REQUIRED. A plain #include
+ * (not __has_include) lets the Arduino IDE find and link the library, and a missing library is a
+ * clear build error instead of ToF silently doing nothing. */
+#if EVE_ENABLE_TOF && (EVE_I2C_SDA >= 0) && !EVE_TOF_SIMULATE
 #include <VL53L1X.h>
 #define EVE_TOF_HAVE_VL53 1
-#endif
 #endif
 
 #ifndef EVE_TOF_HAVE_VL53
@@ -65,6 +66,9 @@ void eveTofManagerInit(void) {
   s_hw_single = false;
   s_vl_left.setBus(&Wire);
   s_vl_right.setBus(&Wire);
+  /* Bound every I2C wait: a sensor that stops answering must never freeze EVE's loop. */
+  s_vl_left.setTimeout(60);
+  s_vl_right.setTimeout(60);
 
 #if EVE_TOF_XSHUT_SECOND >= 0
   pinMode(EVE_TOF_XSHUT_SECOND, OUTPUT);
@@ -111,6 +115,10 @@ void eveTofManagerInit(void) {
 #if EVE_TOF_HAVE_VL53
 static bool goodReading(VL53L1X& s, uint16_t mm) {
   if (s.timeoutOccurred()) {
+    return false;
+  }
+  /* Only measurements the sensor itself marks valid (signal/sigma/wrap checks passed). */
+  if (s.ranging_data.range_status != VL53L1X::RangeValid) {
     return false;
   }
   if (mm == 0 || mm >= EVE_TOF_FAR_IGNORE_MM) {
@@ -163,21 +171,42 @@ void eveTofManagerPoll(uint32_t nowMs) {
 #endif
 
 #if EVE_TOF_HAVE_VL53
+  /* A sensor with no new sample this poll keeps its previous value for at most one more poll;
+   * after that it reads as invalid (9999) instead of showing stale data. */
+  static uint8_t s_staleLeft = 0, s_staleRight = 0;
   if (s_hw_dual) {
-    uint16_t dl = s_vl_left.read();
-    if (goodReading(s_vl_left, dl) && (int32_t)dl <= EVE_TOF_FAR_IGNORE_MM) {
-      f.left_mm = dl;
+    if (s_vl_left.dataReady()) {
+      s_staleLeft = 0;
+      uint16_t dl = s_vl_left.read(false);
+      if (goodReading(s_vl_left, dl) && (int32_t)dl <= EVE_TOF_FAR_IGNORE_MM) {
+        f.left_mm = dl;
+        f.valid_mask |= 1u;
+      }
+    } else if ((s_last.valid_mask & 1u) && s_staleLeft++ < 1) {
+      f.left_mm = s_last.left_mm;
       f.valid_mask |= 1u;
     }
-    uint16_t dr = s_vl_right.read();
-    if (goodReading(s_vl_right, dr) && (int32_t)dr <= EVE_TOF_FAR_IGNORE_MM) {
-      f.right_mm = dr;
+    if (s_vl_right.dataReady()) {
+      s_staleRight = 0;
+      uint16_t dr = s_vl_right.read(false);
+      if (goodReading(s_vl_right, dr) && (int32_t)dr <= EVE_TOF_FAR_IGNORE_MM) {
+        f.right_mm = dr;
+        f.valid_mask |= 2u;
+      }
+    } else if ((s_last.valid_mask & 2u) && s_staleRight++ < 1) {
+      f.right_mm = s_last.right_mm;
       f.valid_mask |= 2u;
     }
   } else if (s_hw_single) {
-    uint16_t dc = s_vl_left.read();
-    if (goodReading(s_vl_left, dc) && (int32_t)dc <= EVE_TOF_FAR_IGNORE_MM) {
-      f.center_mm = dc;
+    if (s_vl_left.dataReady()) {
+      s_staleLeft = 0;
+      uint16_t dc = s_vl_left.read(false);
+      if (goodReading(s_vl_left, dc) && (int32_t)dc <= EVE_TOF_FAR_IGNORE_MM) {
+        f.center_mm = dc;
+        f.valid_mask |= 4u;
+      }
+    } else if ((s_last.valid_mask & 4u) && s_staleLeft++ < 1) {
+      f.center_mm = s_last.center_mm;
       f.valid_mask |= 4u;
     }
   }

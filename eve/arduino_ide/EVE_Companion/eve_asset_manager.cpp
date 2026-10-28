@@ -13,7 +13,7 @@ static uint8_t s_volume = 80;
 static char s_trackMap[32][48];
 
 static bool sdPinsConfigured(void) {
-  return EVE_SD_SPI_CS >= 0 && EVE_SD_SPI_MOSI >= 0 && EVE_SD_SPI_SCK >= 0;
+  return EVE_SD_SPI_CS >= 0 && EVE_SD_SPI_MOSI >= 0 && EVE_SD_SPI_MISO >= 0 && EVE_SD_SPI_SCK >= 0;
 }
 
 static bool loadJsonFromSd(const char* path, DynamicJsonDocument& doc) {
@@ -109,8 +109,12 @@ bool eveAssetReloadConfigs(void) {
     if (!tracks.isNull()) {
       for (JsonPair kv : tracks) {
         int idx = atoi(kv.key().c_str());
-        if (idx >= 0 && idx < 32) {
-          strncpy(s_trackMap[idx], kv.value().as<const char*>(), sizeof(s_trackMap[0]) - 1);
+        const char* file = kv.value().as<const char*>();
+        if (idx >= 0 && idx < 32 && file != nullptr) {
+          strncpy(s_trackMap[idx], file, sizeof(s_trackMap[0]) - 1);
+        } else {
+          Serial.printf("[EVE][ASSET] audio.json: ignored track entry \"%s\" (index 0-31 and a file name)\n",
+                        kv.key().c_str());
         }
       }
     }

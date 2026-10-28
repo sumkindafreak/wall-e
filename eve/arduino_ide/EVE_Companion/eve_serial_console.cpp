@@ -1,6 +1,9 @@
 #include "eve_serial_console.h"
 #include "audio_control.h"
 #include "config.h"
+#include "eve_expression_state.h"
+#include "eve_output_ids.h"
+#include "eve_routines.h"
 #include "eve_desktop_companion.h"
 #include "eve_status_manager.h"
 #include "mic_input.h"
@@ -20,17 +23,23 @@ static bool isOn_(const char* s) {
 static void printHelp_() {
   Serial.println(F("[EVE][CLI] commands:"));
   Serial.println(F("  help | ?"));
-  Serial.println(F("  status"));
-  Serial.println(F("  dock on|off|status"));
-  Serial.println(F("  pose <head 45-135> <arm 0-180>"));
+  Serial.println(F("  status                 state + status JSON"));
+  Serial.println(F("  diag                   link / stop / faults / battery / servo summary"));
+  Serial.println(F("  stop                   latch STOP (cancels gestures, halts servos, stops audio)"));
+  Serial.println(F("  clearstop              explicit clear of a latched stop (nothing resumes by itself)"));
+  Serial.println(F("  standby on|off"));
+  Serial.println(F("  routine wake|greet|scan|play|protect   (scan = animation only)"));
+  Serial.println(F("  eyes <name> [ms]       e.g. eyes happy 2000 (names: neutral soft happy curious alert ...)"));
+  Serial.println(F("  dock on|off|status     bench dock simulation"));
+  Serial.println(F("  pose <head> <arm>      degrees, clamped to the calibrated limits in config.h"));
   Serial.println(F("  head <deg> | arm <deg>"));
-  Serial.println(F("  glow <pattern>"));
-  Serial.println(F("  audio <track>"));
+  Serial.println(F("  glow <name|number|auto>"));
+  Serial.println(F("  audio <track> | audio stop"));
   Serial.println(F("  personality <curiosity> <responsiveness> <activity> [comfort] [excitement] [sleepiness]"));
   Serial.println(F("  mic on|off|status"));
   Serial.println(F("  mic set <spike> <clap> <quiet> [cooldown_ms]"));
   Serial.println(F("  mic test"));
-  Serial.println(F("  reset"));
+  Serial.println(F("  reset                  restart the WALL-E handshake (a latched stop stays latched)"));
 }
 
 static void printStatus_() {
@@ -43,11 +52,17 @@ static void printStatus_() {
   Serial.print(F(" peer="));
   Serial.print(stateMachineGetPeerLabel());
   Serial.print(F(" session="));
-  Serial.println((unsigned long)stateMachineGetSessionId());
+  Serial.print((unsigned long)stateMachineGetSessionId());
+  Serial.print(F(" stop="));
+  Serial.println(eveSafetyStopLatched() ? F("LATCHED") : F("clear"));
   Serial.print(F("[EVE][CLI] status json="));
   Serial.println(eveStatusManagerGetJSON());
   Serial.print(F("[EVE][CLI] mic json="));
   Serial.println(getMicStatusJson());
+}
+
+static void reportMove_(const char* what, bool ok) {
+  Serial.printf("[EVE][CLI] %s %s\n", what, ok ? "ok" : "refused (servo off, stopped, fault or low power - see diag)");
 }
 
 static int readInt_(const char* s, int fallback) {
@@ -122,24 +137,69 @@ static void executeLine_(char* line) {
     printStatus_();
   } else if (strcmp(cmd, "dock") == 0 || strcmp(cmd, "docktest") == 0) {
     handleDock_(strtok(nullptr, " "));
+  } else if (strcmp(cmd, "stop") == 0) {
+    stateMachineLocalStop(EVE_STOP_SRC_SERIAL);
+    Serial.println(F("[EVE][CLI] STOP latched - type clearstop to release"));
+  } else if (strcmp(cmd, "clearstop") == 0) {
+    Serial.println(stateMachineLocalClearStop(EVE_STOP_SRC_SERIAL) ? F("[EVE][CLI] stop cleared")
+                                                                  : F("[EVE][CLI] no stop was latched"));
+  } else if (strcmp(cmd, "diag") == 0) {
+    stateMachinePrintDiagnostics();
+  } else if (strcmp(cmd, "standby") == 0) {
+    const char* arg = strtok(nullptr, " ");
+    const char* why = nullptr;
+    const bool on = !(arg && (strcmp(arg, "off") == 0 || strcmp(arg, "0") == 0));
+    const bool ok = stateMachineLocalStandby(on, &why);
+    Serial.printf("[EVE][CLI] standby %s: %s\n", on ? "on" : "off", ok ? "ok" : (why ? why : "refused"));
+  } else if (strcmp(cmd, "routine") == 0) {
+    const char* name = strtok(nullptr, " ");
+    const char* why = nullptr;
+    const bool ok = name && stateMachineLocalRoutine(name, &why);
+    Serial.printf("[EVE][CLI] routine %s: %s%s\n", name ? name : "?", ok ? "started" : (why ? why : "usage: routine <name>"),
+                  (ok && name && strcmp(name, "scan") == 0) ? " (animation only - no detection)" : "");
+  } else if (strcmp(cmd, "eyes") == 0) {
+    const char* name = strtok(nullptr, " ");
+    const int id = eveExprFromName(name);
+    const int ms = readInt_(strtok(nullptr, " "), 2000);
+    if (id < 0) {
+      Serial.println(F("[EVE][CLI] unknown expression; e.g. neutral soft happy curious alert sleepy affection"));
+    } else if (eveSafetyStopLatched()) {
+      Serial.println(F("[EVE][CLI] refused: stop latched"));
+    } else {
+      eveExpressionRequest((EveExpressionId)id, (uint32_t)constrain(ms, 100, 30000));
+      Serial.println(F("[EVE][CLI] eyes ok"));
+    }
   } else if (strcmp(cmd, "pose") == 0) {
-    int head = constrain(readInt_(strtok(nullptr, " "), 90), 45, 135);
-    int arm = constrain(readInt_(strtok(nullptr, " "), 90), 0, 180);
-    servoSetHeadPanTarget(head);
-    servoSetRightArmTarget(arm);
-    Serial.println(F("[EVE][CLI] pose ok"));
+    const int head = readInt_(strtok(nullptr, " "), EVE_SERVO_HEAD_REST_DEG);
+    const int arm = readInt_(strtok(nullptr, " "), EVE_SERVO_ARM_REST_DEG);
+    const bool okH = servoMoveTo(EVE_SERVO_HEAD_PAN, (int16_t)constrain(head, -360, 360), EVE_SERVO_DEFAULT_DPS);
+    const bool okA = servoMoveTo(EVE_SERVO_RIGHT_ARM, (int16_t)constrain(arm, -360, 360), EVE_SERVO_DEFAULT_DPS);
+    reportMove_("pose", okH || okA);
   } else if (strcmp(cmd, "head") == 0) {
-    servoSetHeadPanTarget(constrain(readInt_(strtok(nullptr, " "), 90), 45, 135));
-    Serial.println(F("[EVE][CLI] head ok"));
+    const int d = readInt_(strtok(nullptr, " "), EVE_SERVO_HEAD_REST_DEG);
+    reportMove_("head", servoMoveTo(EVE_SERVO_HEAD_PAN, (int16_t)constrain(d, -360, 360), EVE_SERVO_DEFAULT_DPS));
   } else if (strcmp(cmd, "arm") == 0) {
-    servoSetRightArmTarget(constrain(readInt_(strtok(nullptr, " "), 90), 0, 180));
-    Serial.println(F("[EVE][CLI] arm ok"));
+    const int d = readInt_(strtok(nullptr, " "), EVE_SERVO_ARM_REST_DEG);
+    reportMove_("arm", servoMoveTo(EVE_SERVO_RIGHT_ARM, (int16_t)constrain(d, -360, 360), EVE_SERVO_DEFAULT_DPS));
   } else if (strcmp(cmd, "glow") == 0) {
-    neopixelSetPattern((uint8_t)constrain(readInt_(strtok(nullptr, " "), 1), 0, 255));
-    Serial.println(F("[EVE][CLI] glow ok"));
+    const char* arg = strtok(nullptr, " ");
+    int p = -1;
+    if (arg && strcmp(arg, "auto") != 0) p = (arg[0] >= '0' && arg[0] <= '9') ? atoi(arg) : eveGlowFromName(arg);
+    if (arg && strcmp(arg, "auto") != 0 && (p < 0 || p >= EVE_GLOW_COUNT)) {
+      Serial.println(F("[EVE][CLI] unknown glow; names: idle linked waiting critical standby interact escort low_power charging full fault stopped scan play protect off auto"));
+    } else {
+      neopixelSetOperator((int8_t)p);
+      Serial.printf("[EVE][CLI] glow %s\n", p < 0 ? "auto" : eveGlowName((uint8_t)p));
+    }
   } else if (strcmp(cmd, "audio") == 0) {
-    audioPlayTrack((uint8_t)constrain(readInt_(strtok(nullptr, " "), 1), 0, 255));
-    Serial.println(F("[EVE][CLI] audio ok"));
+    const char* arg = strtok(nullptr, " ");
+    if (arg && strcmp(arg, "stop") == 0) {
+      audioStop();
+      Serial.println(F("[EVE][CLI] audio stopped"));
+    } else {
+      const bool ok = audioPlayTrack((uint8_t)constrain(readInt_(arg, 1), 0, 255));
+      Serial.println(ok ? F("[EVE][CLI] audio playing") : F("[EVE][CLI] audio not played (disabled, missing file or stopped)"));
+    }
   } else if (strcmp(cmd, "personality") == 0) {
     handlePersonality_(strtok(nullptr, " "), strtok(nullptr, " "), strtok(nullptr, " "),
                        strtok(nullptr, " "), strtok(nullptr, " "), strtok(nullptr, " "));
@@ -147,8 +207,9 @@ static void executeLine_(char* line) {
     handleMic_(strtok(nullptr, " "), strtok(nullptr, " "), strtok(nullptr, " "),
                strtok(nullptr, " "), strtok(nullptr, " "));
   } else if (strcmp(cmd, "reset") == 0) {
-    stateMachineInit();
-    Serial.println(F("[EVE][CLI] state reset"));
+    stateMachineLocalReset();
+    Serial.println(eveSafetyStopLatched() ? F("[EVE][CLI] handshake restarted (stop still latched)")
+                                          : F("[EVE][CLI] handshake restarted"));
   } else {
     Serial.println(F("[EVE][CLI] unknown command; type help"));
   }

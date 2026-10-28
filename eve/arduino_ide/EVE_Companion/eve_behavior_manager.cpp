@@ -11,7 +11,7 @@ void eveBehaviorManagerInit(void) {
 
 void eveBehaviorManagerTick(void) {}
 
-void eveBehaviorOnRemoteSound(uint8_t track) {
+bool eveBehaviorOnRemoteSound(uint8_t track) {
   Serial.printf("[AUTO][EVE] remote sound track=%u\n", (unsigned)track);
   /* Eyes-only voice reaction: widen / soften lids / blink — no mouth animation. */
   if (track == 5u || track == 6u)
@@ -29,5 +29,5 @@ void eveBehaviorOnRemoteSound(uint8_t track) {
     eveExpressionRequest(EVE_EXPR_SOFT_IDLE, 2200);
   }
 #endif
-  audioPlayTrack(track);
+  return audioPlayTrack(track);
 }
